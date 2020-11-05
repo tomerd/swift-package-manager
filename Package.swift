@@ -101,53 +101,58 @@ let package = Package(
 
         .target(
             /** The llbuild manifest model */
-            name: "LLBuildManifest",
+            name: "Core",
             dependencies: ["SwiftToolsSupport-auto"]),
+        
+        .target(
+            /** The llbuild manifest model */
+            name: "LLBuildManifest",
+            dependencies: ["Core"]),
 
         .target(
             /** Source control operations */
             name: "SourceControl",
-            dependencies: ["SwiftToolsSupport-auto"]),
+            dependencies: ["Core"]),
         .target(
             /** Shim for llbuild library */
             name: "SPMLLBuild",
-            dependencies: ["SwiftToolsSupport-auto"]),
+            dependencies: ["Core"]),
 
         // MARK: Project Model
 
         .target(
             /** Primitive Package model objects */
             name: "PackageModel",
-            dependencies: ["SwiftToolsSupport-auto"]),
+            dependencies: ["Core"]),
         .target(
             /** Package model conventions and loading support */
             name: "PackageLoading",
-            dependencies: ["SwiftToolsSupport-auto", "PackageModel"]),
+            dependencies: ["Core", "PackageModel"]),
 
         // MARK: Package Dependency Resolution
 
         .target(
             /** Data structures and support for complete package graphs */
             name: "PackageGraph",
-            dependencies: ["SwiftToolsSupport-auto", "PackageLoading", "PackageModel", "SourceControl"]),
+            dependencies: ["Core", "PackageLoading", "PackageModel", "SourceControl"]),
         
         // MARK: Package Collections
 
         .target(
             /** Data structures and support for package collections */
             name: "PackageCollections",
-            dependencies: ["SwiftToolsSupport-auto", "PackageModel", "SourceControl"]),
+            dependencies: ["Core", "PackageModel", "SourceControl"]),
 
         // MARK: Package Manager Functionality
 
         .target(
             /** Builds Modules and Products */
             name: "SPMBuildCore",
-            dependencies: ["SwiftToolsSupport-auto", "PackageGraph"]),
+            dependencies: ["Core", "PackageGraph"]),
         .target(
             /** Builds Modules and Products */
             name: "Build",
-            dependencies: ["SwiftToolsSupport-auto", "SPMBuildCore", "PackageGraph", "LLBuildManifest", "SwiftDriver", "SPMLLBuild"]),
+            dependencies: ["Core", "SPMBuildCore", "PackageGraph", "LLBuildManifest", "SwiftDriver", "SPMLLBuild"]),
         .target(
             /** Support for building using Xcode's build system */
             name: "XCBuildSupport",
@@ -156,18 +161,18 @@ let package = Package(
         .target(
             /** Generates Xcode projects */
             name: "Xcodeproj",
-            dependencies: ["SwiftToolsSupport-auto", "PackageGraph"]),
+            dependencies: ["Core", "PackageGraph"]),
         .target(
             /** High level functionality */
             name: "Workspace",
-            dependencies: ["SwiftToolsSupport-auto", "SPMBuildCore", "PackageGraph", "PackageModel", "SourceControl", "Xcodeproj"]),
+            dependencies: ["Core", "SPMBuildCore", "PackageGraph", "PackageModel", "SourceControl", "Xcodeproj"]),
 
         // MARK: Commands
 
         .target(
             /** High-level commands */
             name: "Commands",
-            dependencies: ["SwiftToolsSupport-auto", "Build", "PackageGraph", "SourceControl", "Xcodeproj", "Workspace", "XCBuildSupport", "ArgumentParser"]),
+            dependencies: ["Core", "Build", "PackageGraph", "SourceControl", "Xcodeproj", "Workspace", "XCBuildSupport", "ArgumentParser"]),
         .target(
             /** The main executable provided by SwiftPM */
             name: "swift-package",
@@ -197,7 +202,7 @@ let package = Package(
         .target(
             /** SwiftPM test support library */
             name: "SPMTestSupport",
-            dependencies: ["SwiftToolsSupport-auto", "TSCTestSupport", "PackageGraph", "PackageLoading", "SourceControl", "Commands", "XCBuildSupport"]),
+            dependencies: ["Core", "TSCTestSupport", "PackageGraph", "PackageLoading", "SourceControl", "Commands", "XCBuildSupport"]),
 
         // MARK: SwiftPM tests
 
