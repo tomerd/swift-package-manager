@@ -217,6 +217,10 @@ extension InMemoryGitRepository: FileSystem {
     public var homeDirectory: AbsolutePath {
         fatalError("Unsupported")
     }
+    
+    public var cachesDirectory: AbsolutePath? {
+        fatalError("Unsupported")
+    }
 
     public func getDirectoryContents(_ path: AbsolutePath) throws -> [String] {
         return try head.fileSystem.getDirectoryContents(path)

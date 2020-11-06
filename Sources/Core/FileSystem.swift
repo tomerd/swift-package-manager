@@ -6,6 +6,24 @@
 
  See http://swift.org/LICENSE.txt for license information
  See http://swift.org/CONTRIBUTORS.txt for Swift project authors
-*/
+ */
 
-import Foundation
+import TSCBasic
+
+extension FileSystem {
+    /// SwiftPM directory under user's home directory (~/.swiftpm)
+    var dotSwiftPM: AbsolutePath {
+        return self.homeDirectory.appending(component: ".swiftpm")
+    }
+}
+
+extension FileSystem {
+    /// SwiftPM cache directory under usre's caches directory (if exists)
+    var swiftPMCacheDirectory: AbsolutePath {
+        if let cachesDirectory = self.cachesDirectory {
+            return cachesDirectory.appending(component: "org.swift.swiftpm")
+        } else {
+            return self.dotSwiftPM.appending(component: "cache")
+        }
+    }
+}
