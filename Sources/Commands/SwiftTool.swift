@@ -18,6 +18,7 @@ import TSCLibc
 import TSCBasic
 import TSCUtility
 
+import Basics
 import PackageModel
 import PackageGraph
 import SourceControl
@@ -60,7 +61,14 @@ private class ToolWorkspaceDelegate: WorkspaceDelegate {
         self.diagnostics = diagnostics
     }
 
+    var fetchingTimer = [String: Timer]()
+    var repositoryUpdateTimer = [String: Timer]()
+    var cloneTimer = [String: Timer]()
+    var checkoutTimer = [String: Timer]()
+    
     func fetchingWillBegin(repository: String, fetchDetails: RepositoryManager.FetchDetails?) {
+        self.fetchingTimer[repository] = Timer(label: "fetch", logMessage: "fetch %{public}", logArgs: [repository])
+        self.fetchingTimer[repository]?.start()
         stdoutStream <<< "Fetching \(repository)"
         if let fetchDetails = fetchDetails {
             if fetchDetails.fromCache {
@@ -71,16 +79,20 @@ private class ToolWorkspaceDelegate: WorkspaceDelegate {
         stdoutStream.flush()
     }
 
-    func fetchingDidFinish(repository: String, fetchDetails: RepositoryManager.FetchDetails?, diagnostic: Diagnostic?) {
+    func fetchingDidFinish(repository: String, diagnostic: Diagnostic?) {
+        self.fetchingTimer[repository]?.end()
     }
 
-    func repositoryWillUpdate(_ repository: String) {
+    func repositoryWillUpdate(_ repository: String) {    
+        self.repositoryUpdateTimer[repository] = Timer(label: "update", logMessage: "update %{public}", logArgs: [repository])
+        self.repositoryUpdateTimer[repository]?.start()
         stdoutStream <<< "Updating \(repository)"
         stdoutStream <<< "\n"
         stdoutStream.flush()
     }
 
     func repositoryDidUpdate(_ repository: String) {
+        self.repositoryUpdateTimer[repository]?.end()
     }
 
     func dependenciesUpToDate() {
@@ -89,18 +101,30 @@ private class ToolWorkspaceDelegate: WorkspaceDelegate {
         stdoutStream.flush()
     }
 
-    func cloning(repository: String) {
-        stdoutStream <<< "Cloning \(repository)"
+    func willClone(repository url: String, to path: AbsolutePath) {
+        self.cloneTimer[url] = Timer(label: "clone", logMessage: "clone %{public}", logArgs: [url])
+        self.cloneTimer[url]?.start()
+        stdoutStream <<< "Cloning \(url)"
         stdoutStream <<< "\n"
         stdoutStream.flush()
     }
 
-    func checkingOut(repository: String, atReference reference: String, to path: AbsolutePath) {
-        stdoutStream <<< "Resolving \(repository) at \(reference)"
+    func didClone(repository url: String, to path: AbsolutePath, error: Diagnostic?) {
+        self.cloneTimer[url]?.end()
+    }
+
+    func willCheckOut(repository url: String, revision: String, at path: AbsolutePath) {
+        self.checkoutTimer[url] = Timer(label: "checkout", logMessage: "checkout %{public}", logArgs: [url])
+        self.checkoutTimer[url]?.start()
+        stdoutStream <<< "Resolving \(url) at \(revision)"
         stdoutStream <<< "\n"
         stdoutStream.flush()
     }
 
+    func didCheckOut(repository url: String, revision: String, at path: AbsolutePath, error: Diagnostic?) {
+        self.checkoutTimer[url]?.end()
+    }
+    
     func removing(repository: String) {
         stdoutStream <<< "Removing \(repository)"
         stdoutStream <<< "\n"

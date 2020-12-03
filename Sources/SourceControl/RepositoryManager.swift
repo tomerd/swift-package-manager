@@ -11,6 +11,7 @@
 import Dispatch
 import class Foundation.OperationQueue
 
+import Basics
 import TSCBasic
 import TSCUtility
 import Basics

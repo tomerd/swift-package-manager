@@ -88,7 +88,7 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
 
     /// The cached dependency information.
     private var dependenciesCache: [String: [ProductFilter: (Manifest, [RepositoryPackageConstraint])]] = [:]
-    private var dependenciesCacheLock = Lock()
+    private let dependenciesCacheLock = Lock()
 
     init(
         identifier: PackageReference,
@@ -136,30 +136,70 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
     public func getTag(for version: Version) -> String? {
         return knownVersions[version]
     }
+    
+    // FIXME
+    private var revisionsCache: [String: Revision] = [:]
+    private let revisionsCacheLock = Lock()
 
     /// Returns revision for the given tag.
     public func getRevision(forTag tag: String) throws -> Revision {
-        return try repository.resolveRevision(tag: tag)
+        if let revision = (revisionsCacheLock.withLock { revisionsCache[tag] }) {
+            //print("getRevision \(tag) (cached)")
+            return revision
+        }
+        
+        //print("getRevision \(tag)")
+        
+        let revision = try repository.resolveRevision(tag: tag)
+        revisionsCacheLock.withLock {
+            revisionsCache[tag] = revision
+        }
+        return revision
     }
 
     /// Returns revision for the given identifier.
     public func getRevision(forIdentifier identifier: String) throws -> Revision {
-        return try repository.resolveRevision(identifier: identifier)
+        if let revision = (revisionsCacheLock.withLock { revisionsCache[identifier] }) {
+            //print("getRevision \(identifier) (cached)")
+            return revision
+        }
+        
+        //print("getRevision \(identifier)")
+        
+        let revision = try repository.resolveRevision(identifier: identifier)
+        revisionsCacheLock.withLock {
+            revisionsCache[identifier] = revision
+        }
+        return revision
     }
 
+    // FIXME
+    private var toolsVersionCache: [Version: ToolsVersion] = [:]
+    private let toolsVersionCacheLock = Lock()
+    
     /// Returns the tools version of the given version of the package.
     public override func toolsVersion(for version: Version) throws -> ToolsVersion {
+        if let toolsVersion = (toolsVersionCacheLock.withLock { toolsVersionCache[version] }) {
+            //print("toolsVersion \(version) (cached)")
+            return toolsVersion
+        }
+        
+        //print("toolsVersion \(version)")
         let tag = knownVersions[version]!
-        let revision = try repository.resolveRevision(tag: tag)
+        let revision = try self.getRevision(forTag: tag)
         let fs = try repository.openFileView(revision: revision)
-        return try toolsVersionLoader.load(at: .root, fileSystem: fs)
+        let toolsVersion =  try toolsVersionLoader.load(at: .root, fileSystem: fs)
+        toolsVersionCacheLock.withLock {
+            toolsVersionCache[version] = toolsVersion
+        }
+        return toolsVersion
     }
 
     public override func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [RepositoryPackageConstraint] {
         do {
             return try cachedDependencies(forIdentifier: version.description, productFilter: productFilter) {
                 let tag = knownVersions[version]!
-                let revision = try repository.resolveRevision(tag: tag)
+                let revision = try self.getRevision(forTag: tag)
                 return try getDependencies(at: revision, version: version, productFilter: productFilter)
             }.1
         } catch {
@@ -172,14 +212,14 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
         do {
             return try cachedDependencies(forIdentifier: revision, productFilter: productFilter) {
                 // resolve the revision identifier and return its dependencies.
-                let revision = try repository.resolveRevision(identifier: revision)
+                let revision = try self.getRevision(forIdentifier: revision)
                 return try getDependencies(at: revision, productFilter: productFilter)
             }.1
         } catch {
             // Examine the error to see if we can come up with a more informative and actionable error message.  We know that the revision is expected to be a branch name or a hash (tags are handled through a different code path).
             if let error = error as? GitRepositoryError, error.description.contains("Needed a single revision") {
                 // It was a Git process invocation error.  Take a look at the repository to see if we can come up with a reasonable diagnostic.
-                if let rev = try? repository.resolveRevision(identifier: revision), repository.exists(revision: rev) {
+                if let rev = try? self.getRevision(forIdentifier: revision), repository.exists(revision: rev) {
                     // Revision does exist, so something else must be wrong.
                     throw GetDependenciesError(
                         containerIdentifier: identifier.repository.url, reference: revision, underlyingError: error, suggestion: nil)
@@ -189,7 +229,7 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
                     let sha1RegEx = try! RegEx(pattern: #"\A[:xdigit:]{40}\Z"#)
                     let isBranchRev = sha1RegEx.matchGroups(in: revision).compactMap{ $0 }.isEmpty
                     let errorMessage = "could not find " + (isBranchRev ? "a branch named ‘\(revision)’" : "the commit \(revision)")
-                    let mainBranchExists = (try? repository.resolveRevision(identifier: "main")) != nil
+                    let mainBranchExists = (try? self.getRevision(forIdentifier: "main")) != nil
                     let suggestion = (revision == "master" && mainBranchExists) ? "did you mean ‘main’?" : nil
                     throw GetDependenciesError(
                         containerIdentifier: identifier.repository.url, reference: revision,
@@ -238,9 +278,9 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
         case .version(let v):
             let tag = knownVersions[v]!
             version = v
-            revision = try repository.resolveRevision(tag: tag)
+            revision = try self.getRevision(forTag: tag)
         case .revision(let identifier):
-            revision = try repository.resolveRevision(identifier: identifier)
+            revision = try self.getRevision(forIdentifier: identifier)
         case .unversioned, .excluded:
             assertionFailure("Unexpected type requirement \(boundVersion)")
             return self.identifier
@@ -264,8 +304,19 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
     public override func isToolsVersionCompatible(at version: Version) -> Bool {
         return (try? self.toolsVersion(for: version)).flatMap(self.isValidToolsVersion(_:)) ?? false
     }
-   
+        
+    // FIXME
+    private var manifestCache: [Revision: Manifest] = [:]
+    private let manifestCacheLock = Lock()
+
     private func loadManifest(at revision: Revision, version: Version?) throws -> Manifest {
+        if let manifest = (manifestCacheLock.withLock { manifestCache[revision] }) {
+            //print("loadManifest \(revision) \(version) (cached)")
+            return manifest
+        }
+        
+        //print("loadManifest \(revision) \(version)")
+        
         let fs = try repository.openFileView(revision: revision)
         let packageURL = identifier.repository.url
 
@@ -277,13 +328,19 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
             self.currentToolsVersion, version: revision.identifier, packagePath: packageURL)
 
         // Load the manifest.
-        return try manifestLoader.load(
+        let manifest =  try manifestLoader.load(
             package: AbsolutePath.root,
             baseURL: packageURL,
             version: version,
             toolsVersion: toolsVersion,
             packageKind: identifier.kind,
             fileSystem: fs)
+        
+        manifestCacheLock.withLock {
+            manifestCache[revision] = manifest
+        }
+        
+        return manifest
     }
 }
 

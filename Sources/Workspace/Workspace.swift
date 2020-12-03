@@ -8,6 +8,7 @@
  See http://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
+import Basics
 import TSCBasic
 import TSCUtility
 import Foundation
@@ -2147,11 +2148,10 @@ extension Workspace {
         pinsMap: PinsStore.PinsMap,
         diagnostics: DiagnosticsEngine
     ) -> [(container: PackageReference, binding: BoundVersion, products: ProductFilter)] {
-
-        os_signpost(.begin, log: .swiftpm, name: SignpostName.resolution)
-        let result = resolver.solve(dependencies: dependencies, pinsMap: pinsMap)
-        os_signpost(.end, log: .swiftpm, name: SignpostName.resolution)
-
+        
+        let result = Timer.measure("Dependencies resolution") {
+            resolver.solve(dependencies: dependencies, pinsMap: pinsMap)
+        }
         // Take an action based on the result.
         switch result {
         case .success(let bindings):

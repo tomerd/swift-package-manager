@@ -9,6 +9,7 @@
  */
 
 import struct TSCUtility.Version
+import Basics
 import TSCBasic
 import PackageModel
 import Dispatch
@@ -219,6 +220,11 @@ public final class PubgrubDependencyResolver {
     ) {
         let root = self.root!
 
+                
+        let sync = DispatchGroup()
+        let lock = Lock()
+        var containerResults = [Result<(DependencyResolutionNode, PubGrubPackageContainer), Error>]()
+        
         // The list of constraints that we'll be working with. We start with the input constraints
         // and process them in two phases. The first phase finds all unversioned constraints and
         // the second phase discovers all branch-based constraints.
@@ -256,19 +262,33 @@ public final class PubgrubDependencyResolver {
                 // We collect all version-based dependencies in a separate structure so they can
                 // be process at the end. This allows us to override them when there is a non-version
                 // based (unversioned/branch-based) constraint present in the graph.
-                let container = try provider.getContainer(for: node.package)
-                for dependency in try container.packageContainer.getUnversionedDependencies(
-                    productFilter: node.productFilter
-                ) {
-                    if let versionedBasedConstraints = VersionBasedConstraint.constraints(dependency) {
-                        for constraint in versionedBasedConstraints {
-                            versionBasedDependencies[node, default: []].append(constraint)
-                        }
-                    } else if !overriddenPackages.keys.contains(dependency.identifier) {
-                        // Add the constraint if its not already present. This will ensure we don't
-                        // end up looping infinitely due to a cycle (which are diagnosed seperately).
-                        constraints.append(dependency)
+                
+                sync.enter()
+                
+                provider.getContainer(for: node.package) { result in
+                    defer { sync.leave() }
+                    lock.withLock {
+                        containerResults.append(result.map{(node, $0)})
                     }
+                    
+                    
+                }
+            }
+        }
+        
+        sync.wait()
+        
+        let containers = try containerResults.map{ try $0.get() }
+        try containers.forEach { pair in
+            for dependency in try pair.1.packageContainer.getUnversionedDependencies(productFilter: pair.0.productFilter) {
+                if let versionedBasedConstraints = VersionBasedConstraint.constraints(dependency) {
+                    for constraint in versionedBasedConstraints {
+                        versionBasedDependencies[pair.0, default: []].append(constraint)
+                    }
+                } else if !overriddenPackages.keys.contains(dependency.identifier) {
+                    // Add the constraint if its not already present. This will ensure we don't
+                    // end up looping infinitely due to a cycle (which are diagnosed seperately).
+                    constraints.append(dependency)
                 }
             }
         }
@@ -308,7 +328,7 @@ public final class PubgrubDependencyResolver {
 
             // Process dependencies of this package, similar to the first phase but branch-based dependencies
             // are not allowed to contain local/unversioned packages.
-            let container = try provider.getContainer(for: package)
+            let container = try provider.getCachedContainer(for: package)
 
             // If there is a pin for this revision-based dependency, get
             // the dependencies at the pinned revision instead of using
@@ -412,6 +432,8 @@ public final class PubgrubDependencyResolver {
         )
         add(rootIncompatibility, location: .topLevel)
 
+        // TOMER: this fetches before pre-fetching
+        // need to dig on why / maybe reverse the order
         let inputs = try processInputs(with: constraints)
         self.overriddenPackages = inputs.overriddenPackages
 
@@ -453,7 +475,7 @@ public final class PubgrubDependencyResolver {
 
             let products = assignment.term.node.productFilter
 
-            let container = try provider.getContainer(for: assignment.term.node.package)
+            let container = try provider.getCachedContainer(for: assignment.term.node.package)
             let identifier = try container.packageContainer.getUpdatedIdentifier(at: boundVersion)
 
             if var existing = flattenedAssignments[identifier] {
@@ -472,7 +494,7 @@ public final class PubgrubDependencyResolver {
 
         // Add overriden packages to the result.
         for (package, override) in overriddenPackages {
-            let container = try provider.getContainer(for: package)
+            let container = try provider.getCachedContainer(for: package)
             let identifier = try container.packageContainer.getUpdatedIdentifier(at: override.version)
             finalAssignments.append((identifier, override.version, override.products))
         }
@@ -660,19 +682,34 @@ public final class PubgrubDependencyResolver {
         guard !undecided.isEmpty else {
             return nil
         }
-
+        
         // Prefer packages with least number of versions that fit the current requirements so we
         // get conflicts (if any) sooner.
-        let pkgTerm = try undecided.min {
-            let count1 = try provider.getContainer(for: $0.node.package).versionCount($0.requirement)
-            let count2 = try provider.getContainer(for: $1.node.package).versionCount($1.requirement)
-            return count1 < count2
+        var counts = [Term: Int]()
+        let countsLock = Lock()
+        let countsSync = DispatchGroup()
+        undecided.forEach { term in
+            countsSync.enter()
+            provider.getContainer(for: term.node.package) { result in
+                defer { countsSync.leave() }
+                if case .success(let container) = result {
+                    countsLock.withLock {
+                        counts[term] = container.versionCount(term.requirement)
+                    }
+                }
+            }
+        }
+        countsSync.wait()
+                        
+        let pkgTerm = undecided.min {
+            return counts[$0] ?? Int.max < counts[$1] ?? Int.max
         }!
 
-        let container = try provider.getContainer(for: pkgTerm.node.package)
+        let container = try provider.getCachedContainer(for: pkgTerm.node.package)
+
         // Get the best available version for this package.
         guard let version = try container.getBestAvailableVersion(for: pkgTerm) else {
-            add(Incompatibility(pkgTerm, root: root!, cause: .noAvailableVersion), location: .decisionMaking)
+            self.add(Incompatibility(pkgTerm, root: self.root!, cause: .noAvailableVersion), location: .decisionMaking)
             return pkgTerm.node
         }
 
@@ -680,13 +717,13 @@ public final class PubgrubDependencyResolver {
         let depIncompatibilities = try container.incompatibilites(
             at: version,
             node: pkgTerm.node,
-            overriddenPackages: overriddenPackages,
-            root: root!)
+            overriddenPackages: self.overriddenPackages,
+            root: self.root!)
 
         var haveConflict = false
         for incompatibility in depIncompatibilities {
             // Add the incompatibility to our partial solution.
-            add(incompatibility, location: .decisionMaking)
+            self.add(incompatibility, location: .decisionMaking)
 
             // Check if this incompatibility will statisfy the solution.
             haveConflict = haveConflict || incompatibility.terms.allSatisfy {
@@ -694,16 +731,17 @@ public final class PubgrubDependencyResolver {
                 // are satisfied because we _know_ that the terms matching
                 // this package will be satisfied if we make this version
                 // as a decision.
-                $0.node == pkgTerm.node || solution.satisfies($0)
+                $0.node == pkgTerm.node || self.solution.satisfies($0)
             }
         }
 
         // Decide this version if there was no conflict with its dependencies.
         if !haveConflict {
-            log("decision: \(pkgTerm.node.package)@\(version)")
-            decide(pkgTerm.node, version: version)
+            self.log("decision: \(pkgTerm.node.package)@\(version)")
+            self.decide(pkgTerm.node, version: version)
         }
 
+        //return pkgTerm.node
         return pkgTerm.node
     }
 }
@@ -944,7 +982,7 @@ private final class DiagnosticReportBuilder {
         case .empty, .exact, .ranges:
             return false
         case .range(let range):
-            guard let container = try? provider.getContainer(for: term.node.package) else {
+            guard let container = try? provider.getCachedContainer(for: term.node.package) else {
                 return false
             }
             let bounds = container.computeBounds(for: range)
@@ -992,7 +1030,7 @@ private final class DiagnosticReportBuilder {
             }
             return "\(name) \(version)"
         case .range(let range):
-            guard normalizeRange, let container = try? provider.getContainer(for: term.node.package) else {
+            guard normalizeRange, let container = try? provider.getCachedContainer(for: term.node.package) else {
                 return "\(name) \(range.description)"
             }
 
@@ -1258,12 +1296,80 @@ private final class PubGrubPackageContainer {
     /// If a dependency is absent in the dictionary, it is present in all versions of the package
     /// above or below the given version. As with regular version ranges, the lower bound is
     /// inclusive and the upper bound is exclusive.
+    let computeBoundsQueue = DispatchQueue(label: "computeBounds", attributes: .concurrent)
+    
     private func computeBounds(
         _ dependencies: [PackageContainerConstraint],
         from fromVersion: Version,
         products: ProductFilter
     ) -> (lowerBounds: [PackageReference: Version], upperBounds: [PackageReference: Version]) {
-        func computeBounds(with versionsToIterate: AnyCollection<Version>, upperBound: Bool) -> [PackageReference: Version] {
+        
+        if dependencies.isEmpty {
+            return ([:], [:])
+        }
+            
+        func computeBoundsNew(with versionsToIterate: AnyCollection<Version>, upperBound: Bool) -> [PackageReference: Version] {
+            let lock = Lock()
+            let sync2 = DispatchGroup()
+            var result: [PackageReference: Version] = [:]
+            var finished = false
+            
+            let compute = { (version: Version, previous: Version) -> Void in
+                if (lock.withLock { finished }) {
+                    return
+                }
+                
+                let bound = upperBound ? version : previous
+                                
+                // If we hit a version which doesn't have a compatible tools version then that's the boundary.
+                let isToolsVersionCompatible = self.packageContainer.isToolsVersionCompatible(at: version)
+                if (lock.withLock { finished }) {
+                    return
+                }
+
+                // Get the dependencies at this version.
+                
+                let currentDependencies = (try? self.packageContainer.getDependencies(at: version, productFilter: products)) ?? []
+                if (lock.withLock { finished }) {
+                    return
+                }
+
+                // Record this version as the bound for our list of dependencies, if appropriate.
+                lock.withLock {
+                    if finished {
+                        return
+                    }
+                    for dependency in dependencies where !result.keys.contains(dependency.identifier) {
+                        // Record the bound if the tools version isn't compatible at the current version.
+                        if !isToolsVersionCompatible {
+                            result[dependency.identifier] = bound
+                        } else if currentDependencies.first(where: { $0.identifier == dependency.identifier }) != dependency {
+                            // Record this version as the bound if we're finding upper bounds since
+                            // upper bound is exclusive and record the previous version if we're
+                            // finding the lower bound since that is inclusive.
+                            result[dependency.identifier] = bound
+                        }
+                    }
+                    finished = finished || result.count == dependencies.count
+                }
+            }
+            
+            var previous = fromVersion
+            for version in versionsToIterate {
+                let prev = previous
+                computeBoundsQueue.async(group: sync2) {
+                    //print("\(version) \(prev)")
+                    compute(version, prev)
+                }
+                previous = version
+            }
+                        
+            sync2.wait()
+
+            return result
+        }
+
+        func computeBoundsOld(with versionsToIterate: AnyCollection<Version>, upperBound: Bool) -> [PackageReference: Version] {
             var result: [PackageReference: Version] = [:]
             var prev = fromVersion
 
@@ -1306,8 +1412,20 @@ private final class PubGrubPackageContainer {
         let idx = versions.firstIndex(of: fromVersion)!
 
         // Compute upper and lower bounds for the dependencies.
-        let upperBounds = computeBounds(with: AnyCollection(versions.dropFirst(idx + 1)), upperBound: true)
-        let lowerBounds = computeBounds(with: AnyCollection(versions.dropLast(versions.count - idx).reversed()), upperBound: false)
+
+        let sync = DispatchGroup()
+
+        var upperBounds: [PackageReference: Version]!
+        computeBoundsQueue.async(group: sync) {
+            upperBounds = computeBoundsNew(with: AnyCollection(versions.dropFirst(idx + 1)), upperBound: true)
+        }
+
+        var lowerBounds: [PackageReference: Version]!
+        computeBoundsQueue.async(group: sync) {
+            lowerBounds = computeBoundsNew(with: AnyCollection(versions.dropLast(versions.count - idx).reversed()), upperBound: false)
+        }
+
+        sync.wait()
 
         return (lowerBounds, upperBounds)
     }
@@ -1333,70 +1451,98 @@ private final class ContainerProvider {
     }
 
     /// Condition for container management structures.
-    private let fetchCondition = Condition()
+    //private let fetchCondition = Condition()
+    private let prefetchSync = DispatchGroup()
 
     /// The list of fetched containers.
-    private var _fetchedContainers: [PackageReference: Result<PubGrubPackageContainer, Error>] = [:]
+    private let resultsLock = Lock()
+    private var results: [PackageReference: Result<PubGrubPackageContainer, Error>] = [:]
 
     /// The set of containers requested so far.
-    private var _prefetchingContainers: Set<PackageReference> = []
+    //private var _prefetchingContainers: Set<PackageReference> = []
 
+    /// Get a container a cached for the given identifier, or throw if not cached
+    func getCachedContainer(for identifier: PackageReference) throws -> PubGrubPackageContainer {
+        guard let result = (self.resultsLock.withLock { self.results[identifier] }) else {
+            preconditionFailure("\(identifier) expected to be cached")
+        }
+        return try result.get()
+    }
+    
     /// Get the container for the given identifier, loading it if necessary.
-    func getContainer(for identifier: PackageReference) throws -> PubGrubPackageContainer {
-        return try fetchCondition.whileLocked {
+    func getContainer(for identifier: PackageReference, completion: @escaping (Result<PubGrubPackageContainer, Swift.Error>) -> Void) {
+        //return try fetchCondition.whileLocked {
             // Return the cached container, if available.
-            if let container = _fetchedContainers[identifier] {
-                return try container.get()
+            if let result = (self.resultsLock.withLock { self.results[identifier] }) {
+                //return try container.get()
+                return completion(result)
             }
 
             // If this container is being prefetched, wait for that to complete.
-            while _prefetchingContainers.contains(identifier) {
-                fetchCondition.wait()
-            }
+            //while _prefetchingContainers.contains(identifier) {
+                print("waiting for prefetching to complete")
+                //fetchCondition.wait()
+                prefetchSync.wait()
+            //}
 
             // The container may now be available in our cache if it was prefetched.
-            if let container = _fetchedContainers[identifier] {
-                return try container.get()
+            if let result = (self.resultsLock.withLock { self.results[identifier] }) {
+                //return try container.get()
+                return completion(result)
             }
 
             // Otherwise, fetch the container synchronously.
-            let container = try tsc_await { provider.getContainer(for: identifier, skipUpdate: skipUpdate, completion: $0) }
-            let pubGrubContainer = PubGrubPackageContainer(container, pinsMap: pinsMap)
-            self._fetchedContainers[identifier] = .success(pubGrubContainer)
-            return pubGrubContainer
-        }
+            print("fetching \(identifier) sync")
+            provider.getContainer(for: identifier, skipUpdate: skipUpdate) { result in
+                switch result {
+                case .failure(let error):
+                    return  completion(.failure(error))
+                case .success(let container):
+                    let pubGrubContainer = PubGrubPackageContainer(container, pinsMap: self.pinsMap)
+                    self.resultsLock.withLock {
+                        self.results[identifier] = .success(pubGrubContainer)
+                    }
+                    return completion(.success(pubGrubContainer))
+                }
+            }
+        //}
     }
 
     /// Starts prefetching the given containers.
     func prefetch(containers identifiers: [PackageReference]) {
-        fetchCondition.whileLocked {
+        print("prefetching \(identifiers)")
+        //fetchCondition.whileLocked {
             // Process each container.
             for identifier in identifiers {
+                self.prefetchSync.enter()
                 // Skip if we're already have this container or are pre-fetching it.
-                guard _fetchedContainers[identifier] == nil,
-                    !_prefetchingContainers.contains(identifier) else {
-                        continue
-                }
+                //guard _fetchedContainers[identifier] == nil,
+                  //  !_prefetchingContainers.contains(identifier) else {
+                    //    continue
+                //}
 
                 // Otherwise, record that we're prefetching this container.
-                _prefetchingContainers.insert(identifier)
+                //_prefetchingContainers.insert(identifier)
 
-                provider.getContainer(for: identifier, skipUpdate: skipUpdate) { container in
-                    DispatchQueue.global().async {
-                        self.fetchCondition.whileLocked {
+                provider.getContainer(for: identifier, skipUpdate: skipUpdate) { result in
+                    defer { self.prefetchSync.leave() }
+                    //DispatchQueue.global().async {
+                        //self.fetchCondition.whileLocked {
                             // Update the structures and signal any thread waiting
                             // on prefetching to finish.
-                            let pubGrubContainer = container.map {
+                            let pubgrubResult = result.map {
                                 PubGrubPackageContainer($0, pinsMap: self.pinsMap)
                             }
-                            self._fetchedContainers[identifier] = pubGrubContainer
-                            self._prefetchingContainers.remove(identifier)
-                            self.fetchCondition.signal()
-                        }
-                    }
+                            self.resultsLock.withLock {
+                                self.results[identifier] = pubgrubResult
+                            }
+                            //self._prefetchingContainers.remove(identifier)
+                            //self.fetchCondition.signal()
+                        //}
+                    //}
                 }
             }
-        }
+        //}
     }
 }
 
