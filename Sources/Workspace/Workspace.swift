@@ -842,8 +842,9 @@ extension Workspace {
             // Otherwise, create a checkout at the destination from our repository store.
             //
             // Get handle to the repository.
+            // FIXME: this should not be blocking
             let handle = try tsc_await {
-                repositoryManager.lookup(repository: dependency.packageRef.repository, skipUpdate: true, completion: $0)
+                repositoryManager.lookup(repository: dependency.packageRef.repository, skipUpdate: true, callbackQueue: .global(), completion: $0)
             }
             let repo = try handle.open()
 
@@ -1630,10 +1631,11 @@ extension Workspace {
         //
         // We just request the packages here, repository manager will
         // automatically manage the parallelism.
+        // FIXME: this should not block
         let pins = pinsStore.pins.map({ $0 })
         DispatchQueue.concurrentPerform(iterations: pins.count) { idx in
             _ = try? tsc_await {
-                containerProvider.getContainer(for: pins[idx].packageRef, skipUpdate: true, completion: $0)
+                containerProvider.getContainer(for: pins[idx].packageRef, skipUpdate: true, callbackQueue: .global(), completion: $0)
             }
         }
 
@@ -2075,8 +2077,9 @@ extension Workspace {
 
             case .revision(let identifier):
                 // Get the latest revision from the container.
+                // FIXME: this should not block
                 let container = try tsc_await {
-                    containerProvider.getContainer(for: packageRef, skipUpdate: true, completion: $0)
+                    containerProvider.getContainer(for: packageRef, skipUpdate: true, callbackQueue: .global(), completion: $0)
                 } as! RepositoryPackageContainer
                 var revision = try container.getRevision(forIdentifier: identifier)
                 let branch = identifier == revision.identifier ? nil : identifier
@@ -2149,7 +2152,7 @@ extension Workspace {
         diagnostics: DiagnosticsEngine
     ) -> [(container: PackageReference, binding: BoundVersion, products: ProductFilter)] {
         
-        let result = Timer.measure("Dependencies resolution") {
+        let result = Timer.measure("dependencies-resolution", logMessage: "dependencies resolution") {
             resolver.solve(dependencies: dependencies, pinsMap: pinsMap)
         }
         // Take an action based on the result.
@@ -2301,8 +2304,9 @@ extension Workspace {
         }
 
         // If not, we need to get the repository from the checkouts.
+        // FIXME: this should not block
         let handle = try tsc_await {
-            repositoryManager.lookup(repository: package.repository, skipUpdate: true, completion: $0)
+            repositoryManager.lookup(repository: package.repository, skipUpdate: true, callbackQueue: .global(), completion: $0)
         }
 
         // Clone the repository into the checkouts.
@@ -2372,7 +2376,8 @@ extension Workspace {
             // way to get it back out of the resolver which is very
             // annoying. Maybe we should make an SPI on the provider for
             // this?
-            let container = try tsc_await { containerProvider.getContainer(for: package, skipUpdate: true, completion: $0) } as! RepositoryPackageContainer
+            // FIXME: this should not block
+            let container = try tsc_await { containerProvider.getContainer(for: package, skipUpdate: true, callbackQueue: .global(), completion: $0) } as! RepositoryPackageContainer
             guard let tag = container.getTag(for: version) else {
                 throw StringError("Internal error: please file a bug at https://bugs.swift.org with this info -- unable to get tag for \(package) \(version); available versions \(container.reversedVersions)")
             }

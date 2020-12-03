@@ -2062,9 +2062,10 @@ public struct MockProvider: PackageContainerProvider {
     public func getContainer(
         for identifier: PackageReference,
         skipUpdate: Bool,
+        callbackQueue: DispatchQueue,
         completion: @escaping (Result<PackageContainer, Error>
     ) -> Void) {
-        DispatchQueue.global().async {
+        callbackQueue.async {
             completion(self.containersByIdentifier[identifier].map{ .success($0) } ??
                 .failure(_MockLoadingError.unknownModule))
         }

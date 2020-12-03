@@ -116,10 +116,11 @@ public struct MockPackageContainerProvider: PackageContainerProvider {
     public func getContainer(
         for identifier: PackageReference,
         skipUpdate: Bool,
+        callbackQueue: DispatchQueue,
         completion: @escaping (Result<PackageContainer, Swift.Error>
         ) -> Void
     ) {
-        DispatchQueue.global().async {
+        callbackQueue.async {
             completion(self.containersByIdentifier[identifier].map { .success($0) } ??
                 .failure(StringError("unknown module \(identifier)")))
         }

@@ -61,14 +61,25 @@ private class ToolWorkspaceDelegate: WorkspaceDelegate {
         self.diagnostics = diagnostics
     }
 
-    var fetchingTimer = [String: Timer]()
-    var repositoryUpdateTimer = [String: Timer]()
-    var cloneTimer = [String: Timer]()
-    var checkoutTimer = [String: Timer]()
+    private var timers = [String: Timer]()
+    private let timersLock = Lock()
+    
+    func startTimer(type: StaticString, repository: String) {
+        var timer = Timer(label: type, logMessage: "\(type) \(repository)")
+        timer.start()
+        timersLock.withLock {
+            self.timers["\(type)::\(repository)"] = timer
+        }
+    }
+    
+    func stopTimer(type: StaticString, repository: String) {
+        timersLock.withLock {
+            self.timers["\(type)::\(repository)"]?.end()
+        }
+    }
     
     func fetchingWillBegin(repository: String, fetchDetails: RepositoryManager.FetchDetails?) {
-        self.fetchingTimer[repository] = Timer(label: "fetch", logMessage: "fetch %{public}", logArgs: [repository])
-        self.fetchingTimer[repository]?.start()
+        self.startTimer(type: "fetch", repository: repository)
         stdoutStream <<< "Fetching \(repository)"
         if let fetchDetails = fetchDetails {
             if fetchDetails.fromCache {
@@ -80,19 +91,18 @@ private class ToolWorkspaceDelegate: WorkspaceDelegate {
     }
 
     func fetchingDidFinish(repository: String, diagnostic: Diagnostic?) {
-        self.fetchingTimer[repository]?.end()
+        self.stopTimer(type: "fetch", repository: repository)        
     }
 
     func repositoryWillUpdate(_ repository: String) {    
-        self.repositoryUpdateTimer[repository] = Timer(label: "update", logMessage: "update %{public}", logArgs: [repository])
-        self.repositoryUpdateTimer[repository]?.start()
+        self.startTimer(type: "update", repository: repository)
         stdoutStream <<< "Updating \(repository)"
         stdoutStream <<< "\n"
         stdoutStream.flush()
     }
 
     func repositoryDidUpdate(_ repository: String) {
-        self.repositoryUpdateTimer[repository]?.end()
+        self.stopTimer(type: "update", repository: repository)
     }
 
     func dependenciesUpToDate() {
@@ -102,27 +112,25 @@ private class ToolWorkspaceDelegate: WorkspaceDelegate {
     }
 
     func willClone(repository url: String, to path: AbsolutePath) {
-        self.cloneTimer[url] = Timer(label: "clone", logMessage: "clone %{public}", logArgs: [url])
-        self.cloneTimer[url]?.start()
+        self.startTimer(type: "clone", repository: url)
         stdoutStream <<< "Cloning \(url)"
         stdoutStream <<< "\n"
         stdoutStream.flush()
     }
 
     func didClone(repository url: String, to path: AbsolutePath, error: Diagnostic?) {
-        self.cloneTimer[url]?.end()
+        self.stopTimer(type: "clone", repository: url)
     }
 
     func willCheckOut(repository url: String, revision: String, at path: AbsolutePath) {
-        self.checkoutTimer[url] = Timer(label: "checkout", logMessage: "checkout %{public}", logArgs: [url])
-        self.checkoutTimer[url]?.start()
+        self.startTimer(type: "checkout", repository: url)
         stdoutStream <<< "Resolving \(url) at \(revision)"
         stdoutStream <<< "\n"
         stdoutStream.flush()
     }
 
     func didCheckOut(repository url: String, revision: String, at path: AbsolutePath, error: Diagnostic?) {
-        self.checkoutTimer[url]?.end()
+        self.stopTimer(type: "checkout", repository: url)
     }
     
     func removing(repository: String) {

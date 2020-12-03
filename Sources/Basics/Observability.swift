@@ -6,48 +6,55 @@
 
  See http://swift.org/LICENSE.txt for license information
  See http://swift.org/CONTRIBUTORS.txt for Swift project authors
-*/
+ */
 
-import TSCBasic
 import Dispatch
+import TSCBasic
 
 extension OSLog {
     /// Log for SwiftPM.
     public static let swiftpm = OSLog(subsystem: "org.swift.swiftpm", category: "default")
 }
 
-
 public struct Timer {
+    #if DEBUG
     let label: StaticString
-    let logMessage: StaticString
-    let logArgs: [Any]
-    
-    var startTime: DispatchTime? = nil
-    
-    public init(label: StaticString, logMessage: StaticString? = nil, logArgs: [Any]? = nil) {
-        self.label = label
-        self.logMessage = logMessage ?? label
-        self.logArgs = logArgs ?? []
+    let logMessage: String?
+
+    var startTime: DispatchTime?
+    #endif
+
+    public init(label: @autoclosure () -> StaticString, logMessage: @autoclosure () -> String?) {
+        #if DEBUG
+        self.label = label()
+        self.logMessage = logMessage()
+        #endif
     }
-    
-    mutating public func start() {
+
+    public mutating func start() {
+        #if DEBUG
         self.startTime = .now()
-        os_signpost(.begin, log: .swiftpm, name: self.label, self.logMessage, self.logArgs)
+        os_signpost(.begin, log: .swiftpm, name: self.label)
+        #endif
     }
-    
+
     public func end() {
-        os_signpost(.end, log: .swiftpm, name: self.label, self.logMessage, self.logArgs)
-        if #available(OSX 10.15, *), let duration = self.startTime?.distance(to: .now()).milliseconds() {
-            print("  \(self.logMessage) \(logArgs): \(duration) ms")
+        #if DEBUG
+        os_signpost(.end, log: .swiftpm, name: self.label)
+        if let message = self.logMessage, #available(OSX 10.15, *), let duration = self.startTime?.distance(to: .now()).milliseconds() {
+            print("  \(message): \(duration) ms")
         }
+        #endif
     }
-    
+
+    @inlinable
     @discardableResult
-    public static func measure<T>(_ label: StaticString, logMessage: StaticString? = nil, logArgs: [Any]? = nil, body: () throws -> T) rethrows -> T {
-        var timer = Timer(label: label, logMessage: logMessage, logArgs: logArgs)
+    public static func measure<T>(_ label: @autoclosure () -> StaticString, logMessage: @autoclosure () -> String?, body: () throws -> T) rethrows -> T {
+        #if DEBUG
+        var timer = Timer(label: label(), logMessage: logMessage())
         timer.start()
         defer { timer.end() }
+        #endif
         return try body()
     }
 }
-

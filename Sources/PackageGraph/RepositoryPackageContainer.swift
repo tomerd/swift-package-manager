@@ -86,10 +86,19 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
     /// The versions in the repository sorted by latest first.
     let _reversedVersions: [Version]
 
-    /// The cached dependency information.
+    /// Caches
     private var dependenciesCache: [String: [ProductFilter: (Manifest, [RepositoryPackageConstraint])]] = [:]
     private let dependenciesCacheLock = Lock()
-
+    
+    private var revisionsCache: [String: Revision] = [:]
+    private let revisionsCacheLock = Lock()
+    
+    private var toolsVersionCache: [Version: ToolsVersion] = [:]
+    private let toolsVersionCacheLock = Lock()
+    
+    private var manifestCache: [Revision: Manifest] = [:]
+    private let manifestCacheLock = Lock()
+    
     init(
         identifier: PackageReference,
         mirrors: DependencyMirrors,
@@ -136,63 +145,29 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
     public func getTag(for version: Version) -> String? {
         return knownVersions[version]
     }
-    
-    // FIXME
-    private var revisionsCache: [String: Revision] = [:]
-    private let revisionsCacheLock = Lock()
 
     /// Returns revision for the given tag.
     public func getRevision(forTag tag: String) throws -> Revision {
-        if let revision = (revisionsCacheLock.withLock { revisionsCache[tag] }) {
-            //print("getRevision \(tag) (cached)")
-            return revision
+        return try self.revisionsCache.memo(key: tag, lock: self.revisionsCacheLock) {
+            try repository.resolveRevision(tag: tag)
         }
-        
-        //print("getRevision \(tag)")
-        
-        let revision = try repository.resolveRevision(tag: tag)
-        revisionsCacheLock.withLock {
-            revisionsCache[tag] = revision
-        }
-        return revision
     }
 
     /// Returns revision for the given identifier.
     public func getRevision(forIdentifier identifier: String) throws -> Revision {
-        if let revision = (revisionsCacheLock.withLock { revisionsCache[identifier] }) {
-            //print("getRevision \(identifier) (cached)")
-            return revision
+        return try self.revisionsCache.memo(key: identifier, lock: self.revisionsCacheLock) {
+            try repository.resolveRevision(identifier: identifier)
         }
-        
-        //print("getRevision \(identifier)")
-        
-        let revision = try repository.resolveRevision(identifier: identifier)
-        revisionsCacheLock.withLock {
-            revisionsCache[identifier] = revision
-        }
-        return revision
     }
 
-    // FIXME
-    private var toolsVersionCache: [Version: ToolsVersion] = [:]
-    private let toolsVersionCacheLock = Lock()
-    
     /// Returns the tools version of the given version of the package.
     public override func toolsVersion(for version: Version) throws -> ToolsVersion {
-        if let toolsVersion = (toolsVersionCacheLock.withLock { toolsVersionCache[version] }) {
-            //print("toolsVersion \(version) (cached)")
-            return toolsVersion
+        return try self.toolsVersionCache.memo(key: version, lock: self.toolsVersionCacheLock) {
+            let tag = knownVersions[version]!
+            let revision = try self.getRevision(forTag: tag)
+            let fs = try repository.openFileView(revision: revision)
+            return try toolsVersionLoader.load(at: .root, fileSystem: fs)
         }
-        
-        //print("toolsVersion \(version)")
-        let tag = knownVersions[version]!
-        let revision = try self.getRevision(forTag: tag)
-        let fs = try repository.openFileView(revision: revision)
-        let toolsVersion =  try toolsVersionLoader.load(at: .root, fileSystem: fs)
-        toolsVersionCacheLock.withLock {
-            toolsVersionCache[version] = toolsVersion
-        }
-        return toolsVersion
     }
 
     public override func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [RepositoryPackageConstraint] {
@@ -304,43 +279,28 @@ public class RepositoryPackageContainer: BasePackageContainer, CustomStringConve
     public override func isToolsVersionCompatible(at version: Version) -> Bool {
         return (try? self.toolsVersion(for: version)).flatMap(self.isValidToolsVersion(_:)) ?? false
     }
-        
-    // FIXME
-    private var manifestCache: [Revision: Manifest] = [:]
-    private let manifestCacheLock = Lock()
 
     private func loadManifest(at revision: Revision, version: Version?) throws -> Manifest {
-        if let manifest = (manifestCacheLock.withLock { manifestCache[revision] }) {
-            //print("loadManifest \(revision) \(version) (cached)")
-            return manifest
+        return try self.manifestCache.memo(key: revision, lock: self.manifestCacheLock) {
+            let fs = try repository.openFileView(revision: revision)
+            let packageURL = identifier.repository.url
+
+            // Load the tools version.
+            let toolsVersion = try toolsVersionLoader.load(at: .root, fileSystem: fs)
+
+            // Validate the tools version.
+            try toolsVersion.validateToolsVersion(
+                self.currentToolsVersion, version: revision.identifier, packagePath: packageURL)
+
+            // Load the manifest.
+            return try manifestLoader.load(
+                package: AbsolutePath.root,
+                baseURL: packageURL,
+                version: version,
+                toolsVersion: toolsVersion,
+                packageKind: identifier.kind,
+                fileSystem: fs)
         }
-        
-        //print("loadManifest \(revision) \(version)")
-        
-        let fs = try repository.openFileView(revision: revision)
-        let packageURL = identifier.repository.url
-
-        // Load the tools version.
-        let toolsVersion = try toolsVersionLoader.load(at: .root, fileSystem: fs)
-
-        // Validate the tools version.
-        try toolsVersion.validateToolsVersion(
-            self.currentToolsVersion, version: revision.identifier, packagePath: packageURL)
-
-        // Load the manifest.
-        let manifest =  try manifestLoader.load(
-            package: AbsolutePath.root,
-            baseURL: packageURL,
-            version: version,
-            toolsVersion: toolsVersion,
-            packageKind: identifier.kind,
-            fileSystem: fs)
-        
-        manifestCacheLock.withLock {
-            manifestCache[revision] = manifest
-        }
-        
-        return manifest
     }
 }
 
@@ -361,7 +321,7 @@ public class RepositoryPackageContainerProvider: PackageContainerProvider {
     let toolsVersionLoader: ToolsVersionLoaderProtocol
 
     /// Queue for callbacks.
-    private let callbacksQueue = DispatchQueue(label: "org.swift.swiftpm.container-provider")
+    //private let callbacksQueue = DispatchQueue(label: "org.swift.swiftpm.container-provider")
 
     /// Create a repository-based package provider.
     ///
@@ -387,11 +347,12 @@ public class RepositoryPackageContainerProvider: PackageContainerProvider {
     public func getContainer(
         for identifier: PackageReference,
         skipUpdate: Bool,
+        callbackQueue: DispatchQueue,
         completion: @escaping (Result<PackageContainer, Swift.Error>) -> Void
     ) {
         // If the container is local, just create and return a local package container.
         if identifier.kind != .remote {
-            callbacksQueue.async {
+            callbackQueue.async {
                 let container = LocalPackageContainer(identifier,
                     mirrors: self.mirrors,
                     manifestLoader: self.manifestLoader,
@@ -404,7 +365,7 @@ public class RepositoryPackageContainerProvider: PackageContainerProvider {
         }
 
         // Resolve the container using the repository manager.
-        repositoryManager.lookup(repository: identifier.repository, skipUpdate: skipUpdate) { result in
+        repositoryManager.lookup(repository: identifier.repository, skipUpdate: skipUpdate, callbackQueue: callbackQueue) { result in
             // Create the container wrapper.
             let container = result.tryMap { handle -> PackageContainer in
                 // Open the repository.

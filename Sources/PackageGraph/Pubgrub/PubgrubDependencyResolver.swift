@@ -46,7 +46,7 @@ public final class PubgrubDependencyResolver {
 
     /// The container provider used to load package containers.
     private lazy var provider: ContainerProvider = {
-        ContainerProvider(self.packageContainerProvider, skipUpdate: self.skipUpdate, pinsMap: self.pinsMap)
+        ContainerProvider(self.packageContainerProvider, skipUpdate: self.skipUpdate, pinsMap: self.pinsMap, queue: self.queue)
     }()
 
     /// Skip updating containers while fetching them.
@@ -60,6 +60,9 @@ public final class PubgrubDependencyResolver {
 
     /// Path to the trace file.
     fileprivate let traceFile: AbsolutePath?
+    
+    /// Queue to run async operations on
+    private let queue = DispatchQueue(label: "org.swift.swiftpm.pubgrub", attributes: .concurrent)
 
     fileprivate lazy var traceStream: OutputByteStream? = {
         if let stream = self._traceStream { return stream }
@@ -328,8 +331,7 @@ public final class PubgrubDependencyResolver {
 
             // Process dependencies of this package, similar to the first phase but branch-based dependencies
             // are not allowed to contain local/unversioned packages.
-            let container = try provider.getCachedContainer(for: package)
-
+            
             // If there is a pin for this revision-based dependency, get
             // the dependencies at the pinned revision instead of using
             // latest commit on that branch. Note that if this revision-based dependency is
@@ -341,11 +343,18 @@ public final class PubgrubDependencyResolver {
                 revisionForDependencies = revision
             }
 
+            let container = try tsc_await { provider.getContainer(for: package, completion: $0) }
+            let _unprocessedDependencies = try container.packageContainer.getDependencies(
+                at: revisionForDependencies,
+                productFilter: constraint.products
+            )
+            
             for node in constraint.nodes() {
-                var unprocessedDependencies = try container.packageContainer.getDependencies(
+                /*var unprocessedDependencies = try container.packageContainer.getDependencies(
                     at: revisionForDependencies,
                     productFilter: constraint.products
-                )
+                )*/
+                var unprocessedDependencies = _unprocessedDependencies
                 if let sharedRevision = node.revisionLock(revision: revision) {
                     unprocessedDependencies.append(sharedRevision)
                 }
@@ -511,11 +520,13 @@ public final class PubgrubDependencyResolver {
     func run() throws {
         var next: DependencyResolutionNode? = root
         while let nxt = next {
-            try propagate(nxt)
+            try Timer.measure("pubgrub", logMessage: "pubgrub \(nxt)") {
+                try propagate(nxt)
 
-            // If decision making determines that no more decisions are to be
-            // made, it returns nil to signal that version solving is done.
-            next = try makeDecision()
+                // If decision making determines that no more decisions are to be
+                // made, it returns nil to signal that version solving is done.
+                next = try makeDecision()
+            }
         }
     }
 
@@ -1090,13 +1101,23 @@ private final class PubGrubPackageContainer {
     /// Reference to the pins map.
     let pinsMap: PinsStore.PinsMap
 
-    var package: PackageReference {
-        packageContainer.identifier
-    }
+    /// The map of dependencies to version set that indicates the versions that have had their
+    /// incompatibilities emitted.
+    private var emittedIncompatibilities: [PackageReference: VersionSetSpecifier] = [:]
 
-    init(_ container: PackageContainer, pinsMap: PinsStore.PinsMap) {
+    /// Whether we've emitted the incompatibilities for the pinned versions.
+    private var emittedPinnedVersionIncompatibilities: Bool = false
+    
+    private let queue: DispatchQueue
+    
+    init(_ container: PackageContainer, pinsMap: PinsStore.PinsMap, queue: DispatchQueue) {
         self.packageContainer = container
         self.pinsMap = pinsMap
+        self.queue = queue
+    }
+
+    var package: PackageReference {
+        packageContainer.identifier
     }
 
     /// Returns the pinned version for this package, if any.
@@ -1283,21 +1304,12 @@ private final class PubGrubPackageContainer {
         }
     }
 
-    /// The map of dependencies to version set that indicates the versions that have had their
-    /// incompatibilities emitted.
-    private var emittedIncompatibilities: [PackageReference: VersionSetSpecifier] = [:]
-
-    /// Whether we've emitted the incompatibilities for the pinned versions.
-    private var emittedPinnedVersionIncompatibilities: Bool = false
-
     /// Method for computing bounds of the given dependencies.
     ///
     /// This will return a dictionary which contains mapping of a package dependency to its bound.
     /// If a dependency is absent in the dictionary, it is present in all versions of the package
     /// above or below the given version. As with regular version ranges, the lower bound is
     /// inclusive and the upper bound is exclusive.
-    let computeBoundsQueue = DispatchQueue(label: "computeBounds", attributes: .concurrent)
-    
     private func computeBounds(
         _ dependencies: [PackageContainerConstraint],
         from fromVersion: Version,
@@ -1357,7 +1369,7 @@ private final class PubGrubPackageContainer {
             var previous = fromVersion
             for version in versionsToIterate {
                 let prev = previous
-                computeBoundsQueue.async(group: sync2) {
+                self.queue.async(group: sync2) {
                     //print("\(version) \(prev)")
                     compute(version, prev)
                 }
@@ -1416,12 +1428,12 @@ private final class PubGrubPackageContainer {
         let sync = DispatchGroup()
 
         var upperBounds: [PackageReference: Version]!
-        computeBoundsQueue.async(group: sync) {
+        self.queue.async(group: sync) {
             upperBounds = computeBoundsNew(with: AnyCollection(versions.dropFirst(idx + 1)), upperBound: true)
         }
 
         var lowerBounds: [PackageReference: Version]!
-        computeBoundsQueue.async(group: sync) {
+        self.queue.async(group: sync) {
             lowerBounds = computeBoundsNew(with: AnyCollection(versions.dropLast(versions.count - idx).reversed()), upperBound: false)
         }
 
@@ -1443,106 +1455,88 @@ private final class ContainerProvider {
 
     /// Reference to the pins store.
     let pinsMap: PinsStore.PinsMap
+    
+    let queue: DispatchQueue
 
-    init(_ provider: PackageContainerProvider, skipUpdate: Bool, pinsMap: PinsStore.PinsMap) {
+    init(_ provider: PackageContainerProvider, skipUpdate: Bool, pinsMap: PinsStore.PinsMap, queue: DispatchQueue) {
         self.provider = provider
         self.skipUpdate = skipUpdate
         self.pinsMap = pinsMap
+        self.queue = queue
     }
 
-    /// Condition for container management structures.
-    //private let fetchCondition = Condition()
-    private let prefetchSync = DispatchGroup()
-
     /// The list of fetched containers.
-    private let resultsLock = Lock()
-    private var results: [PackageReference: Result<PubGrubPackageContainer, Error>] = [:]
+    private var containers: [PackageReference: PubGrubPackageContainer] = [:]
+    private let containersLock = Lock()
 
-    /// The set of containers requested so far.
-    //private var _prefetchingContainers: Set<PackageReference> = []
-
+    private var prefetches = [PackageReference: DispatchGroup]()
+    private let prefetchesLock = Lock()
+    
     /// Get a container a cached for the given identifier, or throw if not cached
     func getCachedContainer(for identifier: PackageReference) throws -> PubGrubPackageContainer {
-        guard let result = (self.resultsLock.withLock { self.results[identifier] }) else {
+        guard let container = (self.containersLock.withLock { self.containers[identifier] }) else {
             preconditionFailure("\(identifier) expected to be cached")
         }
-        return try result.get()
+        return container
     }
     
     /// Get the container for the given identifier, loading it if necessary.
-    func getContainer(for identifier: PackageReference, completion: @escaping (Result<PubGrubPackageContainer, Swift.Error>) -> Void) {
-        //return try fetchCondition.whileLocked {
-            // Return the cached container, if available.
-            if let result = (self.resultsLock.withLock { self.results[identifier] }) {
-                //return try container.get()
-                return completion(result)
-            }
-
+    func getContainer(for identifier: PackageReference, usePrefetched: Bool = true, completion: @escaping (Result<PubGrubPackageContainer, Swift.Error>) -> Void) {
+        // Return the cached container, if available.
+        if let result = (self.containersLock.withLock { self.containers[identifier] }) {
+            return completion(.success(result))
+        }
+        
+        if usePrefetched, let prefetchSync = (self.prefetchesLock.withLock { self.prefetches[identifier] }) {
             // If this container is being prefetched, wait for that to complete.
-            //while _prefetchingContainers.contains(identifier) {
-                print("waiting for prefetching to complete")
-                //fetchCondition.wait()
+            self.queue.async {
+                print("waiting for prefetching of \(identifier) to complete")
                 prefetchSync.wait()
-            //}
-
-            // The container may now be available in our cache if it was prefetched.
-            if let result = (self.resultsLock.withLock { self.results[identifier] }) {
-                //return try container.get()
-                return completion(result)
+                
+                if let result = (self.containersLock.withLock { self.containers[identifier] }) {
+                    return completion(.success(result))
+                } else {
+                    // prefetch failed, lets try again
+                    self.getContainer(for: identifier, usePrefetched: false, completion: completion)
+                }
             }
-
+        } else {
             // Otherwise, fetch the container synchronously.
-            print("fetching \(identifier) sync")
-            provider.getContainer(for: identifier, skipUpdate: skipUpdate) { result in
+            provider.getContainer(for: identifier, skipUpdate: skipUpdate, callbackQueue: self.queue) { result in
                 switch result {
                 case .failure(let error):
-                    return  completion(.failure(error))
+                    return completion(.failure(error))
                 case .success(let container):
-                    let pubGrubContainer = PubGrubPackageContainer(container, pinsMap: self.pinsMap)
-                    self.resultsLock.withLock {
-                        self.results[identifier] = .success(pubGrubContainer)
+                    // only cache positive results
+                    let pubGrubContainer = PubGrubPackageContainer(container, pinsMap: self.pinsMap, queue: self.queue)
+                    self.containersLock.withLock {
+                        self.containers[identifier] = pubGrubContainer
                     }
                     return completion(.success(pubGrubContainer))
                 }
             }
-        //}
+        }
     }
-
+    
     /// Starts prefetching the given containers.
     func prefetch(containers identifiers: [PackageReference]) {
-        print("prefetching \(identifiers)")
-        //fetchCondition.whileLocked {
-            // Process each container.
-            for identifier in identifiers {
-                self.prefetchSync.enter()
-                // Skip if we're already have this container or are pre-fetching it.
-                //guard _fetchedContainers[identifier] == nil,
-                  //  !_prefetchingContainers.contains(identifier) else {
-                    //    continue
-                //}
-
-                // Otherwise, record that we're prefetching this container.
-                //_prefetchingContainers.insert(identifier)
-
-                provider.getContainer(for: identifier, skipUpdate: skipUpdate) { result in
-                    defer { self.prefetchSync.leave() }
-                    //DispatchQueue.global().async {
-                        //self.fetchCondition.whileLocked {
-                            // Update the structures and signal any thread waiting
-                            // on prefetching to finish.
-                            let pubgrubResult = result.map {
-                                PubGrubPackageContainer($0, pinsMap: self.pinsMap)
-                            }
-                            self.resultsLock.withLock {
-                                self.results[identifier] = pubgrubResult
-                            }
-                            //self._prefetchingContainers.remove(identifier)
-                            //self.fetchCondition.signal()
-                        //}
-                    //}
+        // Process each container.
+        for identifier in identifiers {
+            let group = DispatchGroup()
+            self.prefetchesLock.withLock {
+                prefetches[identifier] = group
+            }
+            group.enter()
+            self.provider.getContainer(for: identifier, skipUpdate: skipUpdate, callbackQueue: self.queue) { result in
+                defer { group.leave() }
+                // only cache positive results
+                if case .success(let container) = result {
+                    self.containersLock.withLock {
+                        self.containers[identifier] = PubGrubPackageContainer(container, pinsMap: self.pinsMap, queue: self.queue)
+                    }
                 }
             }
-        //}
+        }
     }
 }
 

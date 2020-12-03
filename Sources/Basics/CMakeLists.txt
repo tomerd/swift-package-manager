@@ -8,10 +8,12 @@
 
 add_library(Basics
   DispatchTimeInterval+Extensions.swift
+  Dictionary+Extensions.swift
   FileSystem+Extensions.swift
   HTPClient+URLSession.swift
   HTTPClient.swift
-  JSON+Extensions.swift)
+  JSON+Extensions.swift
+  Observability.swift)
 target_link_libraries(Basics PUBLIC
   TSCBasic
   TSCUtility)

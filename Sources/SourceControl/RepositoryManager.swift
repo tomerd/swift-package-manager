@@ -186,7 +186,7 @@ public class RepositoryManager {
     private let serialQueue = DispatchQueue(label: "org.swift.swiftpm.repomanagerqueue-serial")
 
     /// Queue for dispatching callbacks like delegate and completion block.
-    private let callbacksQueue = DispatchQueue(label: "org.swift.swiftpm.repomanagerqueue-callback")
+    //private let callbacksQueue = DispatchQueue(label: "org.swift.swiftpm.repomanagerqueue-callback")
 
     /// Operation queue to do concurrent operations on manager.
     ///
@@ -224,7 +224,7 @@ public class RepositoryManager {
 
         self.operationQueue = OperationQueue()
         self.operationQueue.name = "org.swift.swiftpm.repomanagerqueue-concurrent"
-        self.operationQueue.maxConcurrentOperationCount = 10
+        self.operationQueue.maxConcurrentOperationCount = 50
 
         self.persistence = SimplePersistence(
             fileSystem: fileSystem,
@@ -259,6 +259,7 @@ public class RepositoryManager {
     public func lookup(
         repository: RepositorySpecifier,
         skipUpdate: Bool = false,
+        callbackQueue: DispatchQueue,
         completion: @escaping LookupCompletion
     ) {
         operationQueue.addOperation {
@@ -279,13 +280,13 @@ public class RepositoryManager {
                             return handle
                         }
 
-                        self.callbacksQueue.async {
+                        callbackQueue.async {
                             self.delegate?.handleWillUpdate(handle: handle)
                         }
 
                         try repo.fetch()
 
-                        self.callbacksQueue.async {
+                        callbackQueue.async {
                             self.delegate?.handleDidUpdate(handle: handle)
                         }
 
@@ -300,7 +301,7 @@ public class RepositoryManager {
                     try? self.fileSystem.removeFileTree(repositoryPath)
 
                     // Inform delegate.
-                    self.callbacksQueue.async {
+                    callbackQueue.async {
                         let details = FetchDetails(fromCache: isCached, updatedCache: false)
                         self.delegate?.fetchingWillBegin(handle: handle, fetchDetails: details)
                     }
@@ -322,7 +323,7 @@ public class RepositoryManager {
                     }
 
                     // Inform delegate.
-                    self.callbacksQueue.async {
+                    callbackQueue.async {
                         self.delegate?.fetchingDidFinish(handle: handle, fetchDetails: fetchDetails, error: fetchError)
                     }
 
@@ -342,7 +343,7 @@ public class RepositoryManager {
                     }
                 }
                 // Call the completion handler.
-                self.callbacksQueue.async {
+                callbackQueue.async {
                     completion(result)
                 }
             }

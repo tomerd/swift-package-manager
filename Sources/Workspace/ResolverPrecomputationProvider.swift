@@ -8,6 +8,7 @@
  See http://swift.org/CONTRIBUTORS.txt for Swift project authors
  */
 
+import Dispatch
 import PackageModel
 import PackageGraph
 import TSCBasic
@@ -58,6 +59,7 @@ struct ResolverPrecomputationProvider: PackageContainerProvider {
     func getContainer(
         for identifier: PackageReference,
         skipUpdate: Bool,
+        callbackQueue: DispatchQueue,
         completion: @escaping (Result<PackageContainer, Error>) -> Void
     ) {
         // Start by searching manifests from the Workspace's resolved dependencies.
@@ -69,8 +71,9 @@ struct ResolverPrecomputationProvider: PackageContainerProvider {
                 mirrors: mirrors,
                 currentToolsVersion: currentToolsVersion
             )
-
-            return completion(.success(container))
+            return callbackQueue.async {
+                completion(.success(container))
+            }
         }
 
         // Continue searching from the Workspace's root manifests.
@@ -84,11 +87,15 @@ struct ResolverPrecomputationProvider: PackageContainerProvider {
                 currentToolsVersion: currentToolsVersion
             )
 
-            return completion(.success(container))
+            return callbackQueue.async {
+                completion(.success(container))
+            }
         }
 
         // As we don't have anything else locally, error out.
-        completion(.failure(ResolverPrecomputationError.missingPackage(package: identifier)))
+        return callbackQueue.async {
+            completion(.failure(ResolverPrecomputationError.missingPackage(package: identifier)))
+        }
     }
 }
 
