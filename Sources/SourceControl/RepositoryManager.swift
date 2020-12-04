@@ -224,7 +224,7 @@ public class RepositoryManager {
 
         self.operationQueue = OperationQueue()
         self.operationQueue.name = "org.swift.swiftpm.repomanagerqueue-concurrent"
-        self.operationQueue.maxConcurrentOperationCount = 50
+        self.operationQueue.maxConcurrentOperationCount = 100
 
         self.persistence = SimplePersistence(
             fileSystem: fileSystem,
@@ -245,6 +245,11 @@ public class RepositoryManager {
         }
     }
 
+    @available(*, deprecated, message: "use non-blocking lookup instead")
+    public func lookupSync(repository: RepositorySpecifier, skipUpdate: Bool = false) throws -> RepositoryHandle {
+        try tsc_await { self.lookup(repository: repository, skipUpdate: skipUpdate, callbackQueue: .global(), completion: $0) }
+    }
+    
     /// Get a handle to a repository.
     ///
     /// This will initiate a clone of the repository automatically, if necessary.

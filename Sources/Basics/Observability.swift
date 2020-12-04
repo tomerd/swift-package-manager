@@ -42,7 +42,7 @@ public struct Timer {
         #if DEBUG
         os_signpost(.end, log: .swiftpm, name: self.label)
         if let message = self.logMessage, #available(OSX 10.15, *), let duration = self.startTime?.distance(to: .now()).milliseconds() {
-            print("  \(message): \(duration) ms")
+           print("  \(message): \(duration) ms")
         }
         #endif
     }

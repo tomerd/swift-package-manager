@@ -64,7 +64,7 @@ private class ToolWorkspaceDelegate: WorkspaceDelegate {
     private var timers = [String: Timer]()
     private let timersLock = Lock()
     
-    func startTimer(type: StaticString, repository: String) {
+    private func startTimer(type: StaticString, repository: String) {
         var timer = Timer(label: type, logMessage: "\(type) \(repository)")
         timer.start()
         timersLock.withLock {
@@ -72,7 +72,7 @@ private class ToolWorkspaceDelegate: WorkspaceDelegate {
         }
     }
     
-    func stopTimer(type: StaticString, repository: String) {
+    private func stopTimer(type: StaticString, repository: String) {
         timersLock.withLock {
             self.timers["\(type)::\(repository)"]?.end()
         }

@@ -15,7 +15,7 @@ import PackageLoading
 @testable import PackageModel
 import SourceControl
 
-import PackageGraph
+@testable import PackageGraph
 
 // There's some useful helper utilities defined below for easier testing:
 //
@@ -285,14 +285,14 @@ final class PubgrubTests: XCTestCase {
     }
 
     func testResolverAddIncompatibility() {
-        let solver = PubgrubDependencyResolver(emptyProvider)
+        let state = PubgrubDependencyResolver.State(root: rootNode)
 
         let a = Incompatibility(Term("a@1.0.0"), root: rootNode)
-        solver.add(a, location: .topLevel)
+        state.add(a, location: .topLevel)
         let ab = Incompatibility(Term("a@1.0.0"), Term("b@2.0.0"), root: rootNode)
-        solver.add(ab, location: .topLevel)
+        state.add(ab, location: .topLevel)
 
-        XCTAssertEqual(solver.incompatibilities, [
+        XCTAssertEqual(state.incompatibilities, [
             .product("a", package: "a"): [a, ab],
             .product("b", package: "b"): [ab],
         ])
@@ -323,43 +323,45 @@ final class PubgrubTests: XCTestCase {
     }
 
     func testResolverConflictResolution() {
-        let solver1 = PubgrubDependencyResolver(emptyProvider)
-        solver1.set(rootNode)
+        let state1 = PubgrubDependencyResolver.State(root: rootNode)
 
         let notRoot = Incompatibility(Term(not: rootNode, .any),
                                       root: rootNode,
                                       cause: .root)
-        solver1.add(notRoot, location: .topLevel)
-        XCTAssertThrowsError(try solver1._resolve(conflict: notRoot))
+        state1.add(notRoot, location: .topLevel)
+        
+        let solver1 = PubgrubDependencyResolver(emptyProvider)
+        XCTAssertThrowsError(try solver1.resolve(state: state1, conflict: notRoot))
     }
 
     func testResolverDecisionMaking() {
+        let state1 = PubgrubDependencyResolver.State(root: rootNode)
         let solver1 = PubgrubDependencyResolver(emptyProvider)
-        solver1.set(rootNode)
 
         // No decision can be made if no unsatisfied terms are available.
-        XCTAssertNil(try solver1.makeDecision())
+        XCTAssertNil(try solver1.makeDecision(state: state1))
 
         let a = MockContainer(name: aRef, dependenciesByVersion: [
             "0.0.0": [:],
             v1: ["a": [(package: bRef, requirement: v1Range, productFilter: .specific(["b"]))]]
         ])
 
+        
         let provider = MockProvider(containers: [a])
         let solver2 = PubgrubDependencyResolver(provider)
         let solution = PartialSolution(assignments: [
             .derivation("a^1.0.0", cause: rootCause, decisionLevel: 0)
         ])
-        solver2.solution = solution
-        solver2.set(rootNode)
+        let state2 = PubgrubDependencyResolver.State(root: rootNode)
+        state2.solution = solution
 
-        XCTAssertEqual(solver2.incompatibilities.count, 0)
+        XCTAssertEqual(state2.incompatibilities.count, 0)
 
-        let decision = try! solver2.makeDecision()
+        let decision = try! solver2.makeDecision(state: state2)
         XCTAssertEqual(decision, .product("a", package: "a"))
 
-        XCTAssertEqual(solver2.incompatibilities.count, 3)
-        XCTAssertEqual(solver2.incompatibilities[.product("a", package: "a")], [
+        XCTAssertEqual(state2.incompatibilities.count, 3)
+        XCTAssertEqual(state2.incompatibilities[.product("a", package: "a")], [
             Incompatibility("a^1.0.0", Term(not: .product("b", package: "b"), v1Range),
                                               root: rootNode,
                                               cause: .dependency(node: .product("a", package: "a"))),
@@ -370,31 +372,33 @@ final class PubgrubTests: XCTestCase {
     }
 
     func testResolverUnitPropagation() throws {
+        let state1 = PubgrubDependencyResolver.State(root: rootNode)
         let solver1 = PubgrubDependencyResolver(emptyProvider)
 
         // no known incompatibilities should result in no satisfaction checks
-        try solver1.propagate(.root(package: "root"))
+        try solver1.propagate(state: state1, .root(package: "root"))
 
         // even if incompatibilities are present
-        solver1.add(Incompatibility(Term("a@1.0.0"), root: rootNode), location: .topLevel)
-        try solver1.propagate(.empty(package: "a"))
-        try solver1.propagate(.empty(package: "a"))
-        try solver1.propagate(.empty(package: "a"))
+        state1.add(Incompatibility(Term("a@1.0.0"), root: rootNode), location: .topLevel)
+        try solver1.propagate(state: state1, .empty(package: "a"))
+        try solver1.propagate(state: state1, .empty(package: "a"))
+        try solver1.propagate(state: state1, .empty(package: "a"))
 
         // adding a satisfying term should result in a conflict
-        solver1.solution.decide(.empty(package: aRef), at: v1)
+        state1.solution.decide(.empty(package: aRef), at: v1)
         // FIXME: This leads to fatal error.
         // try solver1.propagate(aRef)
 
         // Unit propagation should derive a new assignment from almost satisfied incompatibilities.
+        let state2 = PubgrubDependencyResolver.State(root: rootNode)
         let solver2 = PubgrubDependencyResolver(emptyProvider)
-        solver2.add(Incompatibility(Term(.root(package: "root"), .any),
+        state2.add(Incompatibility(Term(.root(package: "root"), .any),
                                     Term("¬a@1.0.0"),
                                     root: rootNode), location: .topLevel)
-        solver2.solution.decide(rootNode, at: v1)
-        XCTAssertEqual(solver2.solution.assignments.count, 1)
-        try solver2.propagate(.root(package: PackageReference(identity: PackageIdentity("root"), path: "")))
-        XCTAssertEqual(solver2.solution.assignments.count, 2)
+        state2.solution.decide(rootNode, at: v1)
+        XCTAssertEqual(state2.solution.assignments.count, 1)
+        try solver2.propagate(state: state2, .root(package: PackageReference(identity: PackageIdentity("root"), path: "")))
+        XCTAssertEqual(state2.solution.assignments.count, 2)
     }
 
     func testSolutionFindSatisfiers() {
@@ -958,14 +962,13 @@ final class PubgrubTests: XCTestCase {
         ])
     }
 
-    func testTrivialPinStore() {
+    func testTrivialPinStore() throws {
         builder.serve("a", at: v1, with: ["a": ["b": (.versionSet(v1Range), .specific(["b"]))]])
         builder.serve("a", at: v1_1)
         builder.serve("b", at: v1)
         builder.serve("b", at: v1_1)
         builder.serve("b", at: v2)
-
-        let resolver = builder.create()
+        
         let dependencies = builder.create(dependencies: [
             "a": (.versionSet(v1Range), .specific(["a"])),
         ])
@@ -975,10 +978,12 @@ final class PubgrubTests: XCTestCase {
             "b": (.version(v1), .specific(["b"])),
         ])
 
-        let result = resolver.solve(dependencies: dependencies, pinsMap: pinsStore.pinsMap)
+        let state = PubgrubDependencyResolver.State(root: rootNode)
+        let resolver = builder.create(pinsMap: pinsStore.pinsMap)
+        let result = Result<[DependencyResolver.Binding], Error>.success(try resolver.solve(state: state, constraints: dependencies))
 
         // Since a was pinned, we shouldn't have computed bounds for its incomaptibilities.
-        let aIncompat = resolver.positiveIncompatibilities(for: .product("a", package: builder.reference(for: "a")))![0]
+        let aIncompat = state.positiveIncompatibilities(for: .product("a", package: builder.reference(for: "a")))![0]
         XCTAssertEqual(aIncompat.terms[0].requirement, .exact("1.0.0"))
 
         AssertResult(result, [
@@ -995,8 +1000,7 @@ final class PubgrubTests: XCTestCase {
         builder.serve("b", at: v1)
         builder.serve("b", at: v1_1)
         builder.serve("c", at: v1, with: ["c": ["b": (.versionSet(.range(v1_1..<v2)), .specific(["b"]))]])
-
-        let resolver = builder.create()
+        
         let dependencies = builder.create(dependencies: [
             "c": (.versionSet(v1Range), .specific(["c"])),
             "a": (.versionSet(v1Range), .specific(["a"])),
@@ -1009,7 +1013,8 @@ final class PubgrubTests: XCTestCase {
             "b": (.version(v1), .specific(["b"])),
         ])
 
-        let result = resolver.solve(dependencies: dependencies, pinsMap: pinsStore.pinsMap)
+        let resolver = builder.create(pinsMap: pinsStore.pinsMap)
+        let result = resolver.solve(dependencies: dependencies)
 
         AssertResult(result, [
             ("a", .version(v1)),
@@ -1023,8 +1028,7 @@ final class PubgrubTests: XCTestCase {
         // dependencies.
         builder.serve("a", at: .revision("develop-sha-1"))
         builder.serve("b", at: .revision("master-sha-2"))
-
-        let resolver = builder.create()
+        
         let dependencies = builder.create(dependencies: [
             "a": (.revision("develop"), .specific(["a"])),
             "b": (.revision("master"), .specific(["b"])),
@@ -1034,8 +1038,9 @@ final class PubgrubTests: XCTestCase {
             "a": (.branch("develop", revision: "develop-sha-1"), .specific(["a"])),
             "b": (.branch("master", revision: "master-sha-2"), .specific(["b"])),
         ])
-
-        let result = resolver.solve(dependencies: dependencies, pinsMap: pinsStore.pinsMap)
+        
+        let resolver = builder.create(pinsMap: pinsStore.pinsMap)
+        let result = resolver.solve(dependencies: dependencies)
 
         AssertResult(result, [
             ("a", .revision("develop")),
@@ -1916,7 +1921,7 @@ public class MockContainer: PackageContainer {
     public var unversionedDeps: [PackageContainerConstraint] = []
 
     /// Contains the versions for which the dependencies were requested by resolver using getDependencies().
-    public var requestedVersions: Set<Version> = []
+    //public var requestedVersions: Set<Version> = []
 
     public var identifier: PackageReference {
         return name
@@ -1967,7 +1972,7 @@ public class MockContainer: PackageContainer {
     }
 
     public func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
-        requestedVersions.insert(version)
+        //requestedVersions.insert(version)
         return try getDependencies(at: version.description, productFilter: productFilter)
     }
 
@@ -2150,13 +2155,13 @@ class DependencyGraphBuilder {
         return store
     }
 
-    func create(log: Bool = false) -> PubgrubDependencyResolver {
+    func create(pinsMap: PinsStore.PinsMap = [:], log: Bool = false) -> PubgrubDependencyResolver {
         defer {
             self.containers = [:]
             self.references = [:]
         }
         let provider = MockProvider(containers: self.containers.values.map { $0 })
-        return PubgrubDependencyResolver(provider, traceStream: log ? stdoutStream : nil)
+        return PubgrubDependencyResolver(provider, traceStream: log ? stdoutStream : nil, pinsMap: pinsMap)
     }
 }
 

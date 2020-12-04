@@ -571,9 +571,7 @@ extension Workspace {
         // Create constraints based on root manifest and pins for the update resolution.
         updateConstraints += graphRoot.constraints(mirrors: config.mirrors)
 
-        // Resolve the dependencies.
-        let resolver = createResolver()
-        activeResolver = resolver
+        
 
         let pinsMap: PinsStore.PinsMap
         if packages.isEmpty {
@@ -584,11 +582,14 @@ extension Workspace {
             // the pins for the input packages so only those packages are updated.
             pinsMap = pinsStore.pinsMap.filter{ !packages.contains($0.value.packageRef.name) }
         }
+        
+        // Resolve the dependencies.
+        let resolver = createResolver(pinsMap: pinsMap)
+        activeResolver = resolver
 
         let updateResults = resolveDependencies(
             resolver: resolver,
             dependencies: updateConstraints,
-            pinsMap: pinsMap,
             diagnostics: diagnostics
         )
 
@@ -842,10 +843,7 @@ extension Workspace {
             // Otherwise, create a checkout at the destination from our repository store.
             //
             // Get handle to the repository.
-            // FIXME: this should not be blocking
-            let handle = try tsc_await {
-                repositoryManager.lookup(repository: dependency.packageRef.repository, skipUpdate: true, callbackQueue: .global(), completion: $0)
-            }
+            let handle = try repositoryManager.lookupSync(repository: dependency.packageRef.repository, skipUpdate: true)
             let repo = try handle.open()
 
             // Do preliminary checks on branch and revision, if provided.
@@ -1631,12 +1629,9 @@ extension Workspace {
         //
         // We just request the packages here, repository manager will
         // automatically manage the parallelism.
-        // FIXME: this should not block
         let pins = pinsStore.pins.map({ $0 })
         DispatchQueue.concurrentPerform(iterations: pins.count) { idx in
-            _ = try? tsc_await {
-                containerProvider.getContainer(for: pins[idx].packageRef, skipUpdate: true, callbackQueue: .global(), completion: $0)
-            }
+            _ = try? containerProvider.getContainerSync(for: pins[idx].packageRef, skipUpdate: true)
         }
 
         // Compute the pins that we need to actually clone.
@@ -1763,13 +1758,12 @@ extension Workspace {
         constraints += graphRoot.constraints(mirrors: config.mirrors) + extraConstraints
 
         // Perform dependency resolution.
-        let resolver = createResolver()
+        let resolver = createResolver(pinsMap: pinsStore.pinsMap)
         activeResolver = resolver
 
         let result = resolveDependencies(
             resolver: resolver,
-            dependencies: constraints,
-            pinsMap: pinsStore.pinsMap,
+            dependencies: constraints,            
             diagnostics: diagnostics)
         activeResolver = nil
 
@@ -1886,8 +1880,8 @@ extension Workspace {
             mirrors: config.mirrors
         )
 
-        let resolver = PubgrubDependencyResolver(precomputationProvider)
-        let result = resolver.solve(dependencies: constraints, pinsMap: pinsStore.pinsMap)
+        let resolver = PubgrubDependencyResolver(precomputationProvider, pinsMap: pinsStore.pinsMap)
+        let result = resolver.solve(dependencies: constraints)
 
         switch result {
         case .success:
@@ -2077,10 +2071,8 @@ extension Workspace {
 
             case .revision(let identifier):
                 // Get the latest revision from the container.
-                // FIXME: this should not block
-                let container = try tsc_await {
-                    containerProvider.getContainer(for: packageRef, skipUpdate: true, callbackQueue: .global(), completion: $0)
-                } as! RepositoryPackageContainer
+                // FIXME: hard cast!
+                let container = try containerProvider.getContainerSync(for: packageRef, skipUpdate: true) as! RepositoryPackageContainer
                 var revision = try container.getRevision(forIdentifier: identifier)
                 let branch = identifier == revision.identifier ? nil : identifier
 
@@ -2134,13 +2126,14 @@ extension Workspace {
     }
 
     /// Creates resolver for the workspace.
-    fileprivate func createResolver() -> PubgrubDependencyResolver {
+    fileprivate func createResolver(pinsMap: PinsStore.PinsMap) -> PubgrubDependencyResolver {
         let traceFile = enableResolverTrace ? self.dataPath.appending(components: "resolver.trace") : nil
 
         return PubgrubDependencyResolver(
             containerProvider,
             isPrefetchingEnabled: isResolverPrefetchingEnabled,
-            skipUpdate: skipUpdate, traceFile: traceFile
+            skipUpdate: skipUpdate, traceFile: traceFile,
+            pinsMap: pinsMap
         )
     }
 
@@ -2148,12 +2141,12 @@ extension Workspace {
     fileprivate func resolveDependencies(
         resolver: PubgrubDependencyResolver,
         dependencies: [RepositoryPackageConstraint],
-        pinsMap: PinsStore.PinsMap,
+       
         diagnostics: DiagnosticsEngine
     ) -> [(container: PackageReference, binding: BoundVersion, products: ProductFilter)] {
         
         let result = Timer.measure("dependencies-resolution", logMessage: "dependencies resolution") {
-            resolver.solve(dependencies: dependencies, pinsMap: pinsMap)
+            resolver.solve(dependencies: dependencies)
         }
         // Take an action based on the result.
         switch result {
@@ -2304,10 +2297,7 @@ extension Workspace {
         }
 
         // If not, we need to get the repository from the checkouts.
-        // FIXME: this should not block
-        let handle = try tsc_await {
-            repositoryManager.lookup(repository: package.repository, skipUpdate: true, callbackQueue: .global(), completion: $0)
-        }
+        let handle = try repositoryManager.lookupSync(repository: package.repository, skipUpdate: true)
 
         // Clone the repository into the checkouts.
         let path = checkoutsPath.appending(component: package.repository.basename)
@@ -2376,8 +2366,8 @@ extension Workspace {
             // way to get it back out of the resolver which is very
             // annoying. Maybe we should make an SPI on the provider for
             // this?
-            // FIXME: this should not block
-            let container = try tsc_await { containerProvider.getContainer(for: package, skipUpdate: true, callbackQueue: .global(), completion: $0) } as! RepositoryPackageContainer
+            // FIXME: hard cast
+            let container = try containerProvider.getContainerSync(for: package, skipUpdate: true) as! RepositoryPackageContainer
             guard let tag = container.getTag(for: version) else {
                 throw StringError("Internal error: please file a bug at https://bugs.swift.org with this info -- unable to get tag for \(package) \(version); available versions \(container.reversedVersions)")
             }
@@ -2474,5 +2464,14 @@ public final class LoadableResult<Value> {
     /// Load and return the value.
     public func load() throws -> Value {
         return try loadResult().get()
+    }
+}
+
+
+extension PackageContainerProvider {
+    /// Get the container for the given identifier, loading it if necessary.
+    @available(*, deprecated, message: "use non-blocking getContainer instead")
+    fileprivate func getContainerSync(for identifier: PackageReference, skipUpdate: Bool = false) throws -> PackageContainer {
+        try tsc_await { self.getContainer(for: identifier, skipUpdate: skipUpdate, callbackQueue: .global(), completion: $0) }
     }
 }

@@ -54,7 +54,7 @@ class DependencyResolverRealWorldPerfTests: XCTestCasePerf {
 
         measure {
             for _ in 0 ..< N {
-                let resolver = PubgrubDependencyResolver(provider)
+                let resolver = PubgrubDependencyResolver(provider, pinsMap: [:])
                 switch resolver.solve(dependencies: graph.constraints) {
                 case .success(let result):
                     let result: [(container: PackageReference, version: Version)] = result.compactMap {

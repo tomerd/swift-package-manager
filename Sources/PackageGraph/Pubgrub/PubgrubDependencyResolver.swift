@@ -16,19 +16,20 @@ import Dispatch
 
 /// The solver that is able to transitively resolve a set of package constraints
 /// specified by a root package.
-public final class PubgrubDependencyResolver {
+public struct PubgrubDependencyResolver {
 
     /// The type of the constraints the resolver operates on.
     public typealias Constraint = PackageContainerConstraint
 
     /// The current best guess for a solution satisfying all requirements.
-    public var solution = PartialSolution()
+    //public var solution = PartialSolution()
 
     /// A collection of all known incompatibilities matched to the packages they
     /// refer to. This means an incompatibility can occur several times.
-    public var incompatibilities: [DependencyResolutionNode: [Incompatibility]] = [:]
+    //public var incompatibilities: [DependencyResolutionNode: [Incompatibility]] = [:]
 
     /// Find all incompatibilities containing a positive term for a given package.
+    /*
     public func positiveIncompatibilities(for node: DependencyResolutionNode) -> [Incompatibility]? {
         guard let all = incompatibilities[node] else {
             return nil
@@ -36,18 +37,16 @@ public final class PubgrubDependencyResolver {
         return all.filter {
             $0.terms.first { $0.node == node }!.isPositive
         }
-    }
+    }*/
 
     /// The root package reference.
-    private(set) var root: DependencyResolutionNode?
+    //private let root: DependencyResolutionNode?
 
     /// Reference to the pins store, if provided.
-    private var pinsMap: PinsStore.PinsMap = [:]
+    private let pinsMap: PinsStore.PinsMap
 
     /// The container provider used to load package containers.
-    private lazy var provider: ContainerProvider = {
-        ContainerProvider(self.packageContainerProvider, skipUpdate: self.skipUpdate, pinsMap: self.pinsMap, queue: self.queue)
-    }()
+    private let provider: ContainerProvider
 
     /// Skip updating containers while fetching them.
     private let skipUpdate: Bool
@@ -59,11 +58,12 @@ public final class PubgrubDependencyResolver {
     private let isPrefetchingEnabled: Bool
 
     /// Path to the trace file.
-    fileprivate let traceFile: AbsolutePath?
+    //fileprivate let traceFile: AbsolutePath?
     
     /// Queue to run async operations on
     private let queue = DispatchQueue(label: "org.swift.swiftpm.pubgrub", attributes: .concurrent)
 
+    /*
     fileprivate lazy var traceStream: OutputByteStream? = {
         if let stream = self._traceStream { return stream }
         guard let traceFile = self.traceFile else { return nil }
@@ -71,12 +71,16 @@ public final class PubgrubDependencyResolver {
         return try? LocalFileOutputByteStream(traceFile, closeOnDeinit: true, buffered: false)
     }()
     private var _traceStream: OutputByteStream?
+    */
 
+    private let traceStream: OutputByteStream?
+    
     /// Set the package root.
+    /*
     public func set(_ root: DependencyResolutionNode) {
         self.root = root
-        self.solution.root = root
-    }
+        //self.solution.root = root
+    }*/
 
     public enum LogLocation: String {
         case topLevel = "top level"
@@ -99,16 +103,29 @@ public final class PubgrubDependencyResolver {
         }
     }
 
-    public func decide(_ node: DependencyResolutionNode, version: Version) {
-        let term = Term(node, .exact(version))
-        // FIXME: Shouldn't we check this _before_ making a decision?
-        assert(term.isValidDecision(for: solution))
-
-        solution.decide(node, at: version)
-    }
-
-    func derive(_ term: Term, cause: Incompatibility) {
-        solution.derive(term, cause: cause)
+    public init(
+        _ provider: PackageContainerProvider,
+        isPrefetchingEnabled: Bool = false,
+        skipUpdate: Bool = false,
+        traceFile: AbsolutePath? = nil,
+        traceStream: OutputByteStream? = nil,
+        pinsMap: PinsStore.PinsMap = [:]
+    ) {
+        self.packageContainerProvider = provider
+        self.isPrefetchingEnabled = isPrefetchingEnabled
+        self.skipUpdate = skipUpdate
+        //self.traceFile = traceFile
+        //self._traceStream = traceStream
+        if let stream = traceStream {
+            self.traceStream = stream
+        } else {
+            self.traceStream = traceFile.flatMap { file in
+                // FIXME: Emit a warning if this fails.
+                return try? LocalFileOutputByteStream(file, closeOnDeinit: true, buffered: false)
+            }
+        }
+        self.pinsMap = pinsMap
+        self.provider = ContainerProvider(self.packageContainerProvider, skipUpdate: self.skipUpdate, pinsMap: pinsMap, queue: self.queue)
     }
 
     public init(
@@ -116,25 +133,13 @@ public final class PubgrubDependencyResolver {
         isPrefetchingEnabled: Bool = false,
         skipUpdate: Bool = false,
         traceFile: AbsolutePath? = nil,
-        traceStream: OutputByteStream? = nil
+        pinsMap: PinsStore.PinsMap = [:]
     ) {
-        self.packageContainerProvider = provider
-        self.isPrefetchingEnabled = isPrefetchingEnabled
-        self.skipUpdate = skipUpdate
-        self.traceFile = traceFile
-        self._traceStream = traceStream
-    }
-
-    public convenience init(
-        _ provider: PackageContainerProvider,
-        isPrefetchingEnabled: Bool = false,
-        skipUpdate: Bool = false,
-        traceFile: AbsolutePath? = nil
-    ) {
-        self.init(provider, isPrefetchingEnabled: isPrefetchingEnabled, skipUpdate: skipUpdate, traceFile: traceFile, traceStream: nil)
+        self.init(provider, isPrefetchingEnabled: isPrefetchingEnabled, skipUpdate: skipUpdate, traceFile: traceFile, traceStream: nil, pinsMap: pinsMap)
     }
 
     /// Add a new incompatibility to the list of known incompatibilities.
+    /*
     public func add(_ incompatibility: Incompatibility, location: LogLocation) {
         log("incompat: \(incompatibility) \(location)")
         for package in incompatibility.terms.map({ $0.node }) {
@@ -146,7 +151,7 @@ public final class PubgrubDependencyResolver {
                 incompatibilities[package] = [incompatibility]
             }
         }
-    }
+    }*/
 
     public enum PubgrubError: Swift.Error, Equatable, CustomStringConvertible {
         case _unresolvable(Incompatibility)
@@ -170,19 +175,81 @@ public final class PubgrubDependencyResolver {
             }
         }
     }
+    
+    internal class State {
+        let root: DependencyResolutionNode
+        
+        /// The current best guess for a solution satisfying all requirements.
+        var solution = PartialSolution()
+
+        var overriddenPackages: [PackageReference: (version: BoundVersion, products: ProductFilter)] = [:]
+        
+        /// A collection of all known incompatibilities matched to the packages they
+        /// refer to. This means an incompatibility can occur several times.
+        var incompatibilities: [DependencyResolutionNode: [Incompatibility]] = [:]
+
+        /// Find all incompatibilities containing a positive term for a given package.
+       func positiveIncompatibilities(for node: DependencyResolutionNode) -> [Incompatibility]? {
+            guard let all = incompatibilities[node] else {
+                return nil
+            }
+            return all.filter {
+                $0.terms.first { $0.node == node }!.isPositive
+            }
+        }
+        
+        func add(_ incompatibility: Incompatibility, location: LogLocation) {
+            //log("incompat: \(incompatibility) \(location)")
+            for package in incompatibility.terms.map({ $0.node }) {
+                if let incompats = incompatibilities[package] {
+                    if !incompats.contains(incompatibility) {
+                        incompatibilities[package]!.append(incompatibility)
+                    }
+                } else {
+                    incompatibilities[package] = [incompatibility]
+                }
+            }
+        }
+        
+        func decide(_ node: DependencyResolutionNode, version: Version) {
+            let term = Term(node, .exact(version))
+            // FIXME: Shouldn't we check this _before_ making a decision?
+            assert(term.isValidDecision(for: solution))
+
+            self.solution.decide(node, at: version)
+        }
+
+        func derive(_ term: Term, cause: Incompatibility) {
+            self.solution.derive(term, cause: cause)
+        }
+        
+        init(root: DependencyResolutionNode) {
+            self.root = root
+        }
+    }
 
     /// Execute the resolution algorithm to find a valid assignment of versions.
-    public func solve(dependencies: [Constraint], pinsMap: PinsStore.PinsMap = [:]) -> Result<[DependencyResolver.Binding], Error> {
-        do {
-            return try .success(solve(constraints: dependencies, pinsMap: pinsMap))
+    public func solve(dependencies: [Constraint]) -> Result<[DependencyResolver.Binding], Error> {
+        let root = DependencyResolutionNode.root(package: PackageReference(
+            identity: PackageIdentity(url: "<synthesized-root>"),
+            path: "<synthesized-root-path>",
+            name: nil,
+            kind: .root
+        ))
+
+        let state = State(root: root)
+        
+        do {            
+            let result = try self.solve(state: state, constraints: dependencies)
+            return .success(result)
         } catch {
             var error = error
 
             // If version solving failing, build the user-facing diagnostic.
             if let pubGrubError = error as? PubgrubError, let rootCause = pubGrubError.rootCause {
                 let builder = DiagnosticReportBuilder(
-                    root: root!,
-                    incompatibilities: incompatibilities,
+                    root: state.root,
+                    incompatibilities: state.incompatibilities,
                     provider: provider
                 )
 
@@ -214,20 +281,16 @@ public final class PubgrubDependencyResolver {
             }
         }
     }
-
+    
     private func processInputs(
+        state: State,
         with constraints: [Constraint]
     ) throws -> (
         overriddenPackages: [PackageReference: (version: BoundVersion, products: ProductFilter)],
         rootIncompatibilities: [Incompatibility]
     ) {
-        let root = self.root!
+        //let root = self.root!
 
-                
-        let sync = DispatchGroup()
-        let lock = Lock()
-        var containerResults = [Result<(DependencyResolutionNode, PubGrubPackageContainer), Error>]()
-        
         // The list of constraints that we'll be working with. We start with the input constraints
         // and process them in two phases. The first phase finds all unversioned constraints and
         // the second phase discovers all branch-based constraints.
@@ -242,7 +305,35 @@ public final class PubgrubDependencyResolver {
         // These are added as top-level incompatibilities since they always need to be statisfied.
         // Some of these might be overridden as we discover local and branch-based references.
         var versionBasedDependencies: [DependencyResolutionNode: [VersionBasedConstraint]] = [:]
-
+        
+        let fetchConstraints = { () throws -> Void in
+            // start by prefetching all the known constraints
+            let sync = DispatchGroup()
+            let lock = Lock()
+            var errors = [Error]()
+            
+            for node in (constraints.flatMap{ $0.nodes() }) {
+                sync.enter()
+                self.provider.getContainer(for: node.package){ result in
+                    defer { sync.leave() }
+                    if case .failure(let error) = result {
+                        lock.withLock {
+                            errors.append(error)
+                        }
+                    }
+                }
+            }
+            
+            sync.wait()
+            
+            // ideally we float all errors, but this is for backwards compatibility
+            if let error = errors.first {
+                throw error
+            }
+        }
+        
+        try fetchConstraints()
+            
         // Process unversioned constraints in first phase. We go through all of the unversioned packages
         // and collect them and their dependencies. This gives us the complete list of unversioned
         // packages in the graph since unversioned packages can only be refered by other
@@ -265,33 +356,19 @@ public final class PubgrubDependencyResolver {
                 // We collect all version-based dependencies in a separate structure so they can
                 // be process at the end. This allows us to override them when there is a non-version
                 // based (unversioned/branch-based) constraint present in the graph.
-                
-                sync.enter()
-                
-                provider.getContainer(for: node.package) { result in
-                    defer { sync.leave() }
-                    lock.withLock {
-                        containerResults.append(result.map{(node, $0)})
+                let container = try provider.getContainerSync(for: node.package)
+                for dependency in try container.packageContainer.getUnversionedDependencies(
+                    productFilter: node.productFilter
+                ) {
+                    if let versionedBasedConstraints = VersionBasedConstraint.constraints(dependency) {
+                        for constraint in versionedBasedConstraints {
+                            versionBasedDependencies[node, default: []].append(constraint)
+                        }
+                    } else if !overriddenPackages.keys.contains(dependency.identifier) {
+                        // Add the constraint if its not already present. This will ensure we don't
+                        // end up looping infinitely due to a cycle (which are diagnosed seperately).
+                        constraints.append(dependency)
                     }
-                    
-                    
-                }
-            }
-        }
-        
-        sync.wait()
-        
-        let containers = try containerResults.map{ try $0.get() }
-        try containers.forEach { pair in
-            for dependency in try pair.1.packageContainer.getUnversionedDependencies(productFilter: pair.0.productFilter) {
-                if let versionedBasedConstraints = VersionBasedConstraint.constraints(dependency) {
-                    for constraint in versionedBasedConstraints {
-                        versionBasedDependencies[pair.0, default: []].append(constraint)
-                    }
-                } else if !overriddenPackages.keys.contains(dependency.identifier) {
-                    // Add the constraint if its not already present. This will ensure we don't
-                    // end up looping infinitely due to a cycle (which are diagnosed seperately).
-                    constraints.append(dependency)
                 }
             }
         }
@@ -331,7 +408,8 @@ public final class PubgrubDependencyResolver {
 
             // Process dependencies of this package, similar to the first phase but branch-based dependencies
             // are not allowed to contain local/unversioned packages.
-            
+            let container = try provider.getContainerSync(for: package)
+
             // If there is a pin for this revision-based dependency, get
             // the dependencies at the pinned revision instead of using
             // latest commit on that branch. Note that if this revision-based dependency is
@@ -343,21 +421,11 @@ public final class PubgrubDependencyResolver {
                 revisionForDependencies = revision
             }
 
-            // FIXME
-            let container = try tsc_await { provider.getContainer(for: package, completion: $0) }
-            
-            // FIXME
-            /*let _unprocessedDependencies = try container.packageContainer.getDependencies(
-                at: revisionForDependencies,
-                productFilter: constraint.products
-            )*/
-            
             for node in constraint.nodes() {
                 var unprocessedDependencies = try container.packageContainer.getDependencies(
                     at: revisionForDependencies,
                     productFilter: constraint.products
                 )
-                //var unprocessedDependencies = _unprocessedDependencies
                 if let sharedRevision = node.revisionLock(revision: revision) {
                     unprocessedDependencies.append(sharedRevision)
                 }
@@ -389,11 +457,10 @@ public final class PubgrubDependencyResolver {
                     let versionedBasedConstraint = VersionBasedConstraint(node: node, req: req)
                     // FIXME: It would be better to record where this constraint came from, instead of just
                     // using root.
-                    versionBasedDependencies[root, default: []].append(versionedBasedConstraint)
+                    versionBasedDependencies[state.root, default: []].append(versionedBasedConstraint)
                 }
             case .revision, .unversioned:
-                throw StringError("Internal error: unexpected revision/unversioned requirement '\(dependency.requirement)' in the constraints list: \(constraints)")
-                //fatalError("Unexpected revision/unversioned requirement in the constraints list: \(constraints)")
+                fatalError("Unexpected revision/unversioned requirement in the constraints list: \(constraints)")
             }
         }
 
@@ -404,9 +471,9 @@ public final class PubgrubDependencyResolver {
                 if overriddenPackages.keys.contains(constraint.node.package) { continue }
 
                 let incompat = Incompatibility(
-                    Term(root, .exact("1.0.0")),
+                    Term(state.root, .exact("1.0.0")),
                     Term(not: constraint.node, constraint.requirement),
-                    root: root,
+                    root: state.root,
                     cause: .dependency(node: node))
                 rootIncompatibilities.append(incompat)
             }
@@ -418,37 +485,23 @@ public final class PubgrubDependencyResolver {
     /// The list of packages that are overridden in the graph. A local package reference will
     /// always override any other kind of package reference and branch-based reference will override
     /// version-based reference.
-    private var overriddenPackages: [PackageReference: (version: BoundVersion, products: ProductFilter)] = [:]
+    // FIXME: do we really need this state?
+    //private var overriddenPackages: [PackageReference: (version: BoundVersion, products: ProductFilter)] = [:]
 
     /// Find a set of dependencies that fit the given constraints. If dependency
     /// resolution is unable to provide a result, an error is thrown.
     /// - Warning: It is expected that the root package reference has been set
     ///            before this is called.
-    private func solve(
-        constraints: [Constraint],
-        pinsMap: PinsStore.PinsMap = [:]
-    ) throws -> [(container: PackageReference, binding: BoundVersion, products: ProductFilter)] {
-        let root = DependencyResolutionNode.root(package: PackageReference(
-            identity: PackageIdentity(url: "<synthesized-root>"),
-            path: "<synthesized-root-path>",
-            name: nil,
-            kind: .root
-        ))
-
-        self.root = root
-        self.pinsMap = pinsMap
-
+    internal func solve(state: State, constraints: [Constraint]) throws -> [DependencyResolver.Binding] {
         // Add the root incompatibility.
         let rootIncompatibility = Incompatibility(
-            terms: [Term(not: root, .exact("1.0.0"))],
+            terms: [Term(not: state.root, .exact("1.0.0"))],
             cause: .root
         )
-        add(rootIncompatibility, location: .topLevel)
+        state.add(rootIncompatibility, location: .topLevel)
 
-        // TOMER: this fetches before pre-fetching
-        // need to dig on why / maybe reverse the order
-        let inputs = try processInputs(with: constraints)
-        self.overriddenPackages = inputs.overriddenPackages
+        let inputs = try processInputs(state: state, with: constraints)
+        state.overriddenPackages = inputs.overriddenPackages
 
         // Prefetch the containers if prefetching is enabled.
         if isPrefetchingEnabled {
@@ -457,24 +510,24 @@ public final class PubgrubDependencyResolver {
             // for them.
             let pins = pinsMap.values
                 .map{ $0.packageRef }
-                .filter{ !overriddenPackages.keys.contains($0) }
+                .filter{ !state.overriddenPackages.keys.contains($0) }
             self.provider.prefetch(containers: pins)
         }
 
         // Add all the root incompatibilities.
         for incompat in inputs.rootIncompatibilities {
-            add(incompat, location: .topLevel)
+            state.add(incompat, location: .topLevel)
         }
 
         // Decide root at v1.
-        decide(root, version: "1.0.0")
+        state.decide(state.root, version: "1.0.0")
 
-        try run()
+        try run(state: state)
 
-        let decisions = solution.assignments.filter { $0.isDecision }
+        let decisions = state.solution.assignments.filter { $0.isDecision }
         var flattenedAssignments: [PackageReference: (binding: BoundVersion, products: ProductFilter)] = [:]
         for assignment in decisions {
-            if assignment.term.node == root {
+            if assignment.term.node == state.root {
                 continue
             }
 
@@ -488,7 +541,7 @@ public final class PubgrubDependencyResolver {
 
             let products = assignment.term.node.productFilter
 
-            let container = try provider.getCachedContainer(for: assignment.term.node.package)
+            let container = try provider.getContainerSync(for: assignment.term.node.package)
             let identifier = try container.packageContainer.getUpdatedIdentifier(at: boundVersion)
 
             if var existing = flattenedAssignments[identifier] {
@@ -506,8 +559,8 @@ public final class PubgrubDependencyResolver {
         }
 
         // Add overriden packages to the result.
-        for (package, override) in overriddenPackages {
-            let container = try provider.getCachedContainer(for: package)
+        for (package, override) in state.overriddenPackages {
+            let container = try provider.getContainerSync(for: package)
             let identifier = try container.packageContainer.getUpdatedIdentifier(at: override.version)
             finalAssignments.append((identifier, override.version, override.products))
         }
@@ -521,15 +574,15 @@ public final class PubgrubDependencyResolver {
     /// decisions if nothing else is left to be done.
     /// After this method returns `solution` is either populated with a list of
     /// final version assignments or an error is thrown.
-    func run() throws {
-        var next: DependencyResolutionNode? = root
+    private func run(state: State) throws {
+        var next: DependencyResolutionNode? = state.root
         while let nxt = next {
             try Timer.measure("pubgrub", logMessage: "pubgrub \(nxt)") {
-                try propagate(nxt)
+                try propagate(state: state, nxt)
 
                 // If decision making determines that no more decisions are to be
                 // made, it returns nil to signal that version solving is done.
-                next = try makeDecision()
+                next = try makeDecision(state: state)
             }
         }
     }
@@ -538,24 +591,24 @@ public final class PubgrubDependencyResolver {
     /// partial solution.
     /// If a conflict is found, the conflicting incompatibility is returned to
     /// resolve the conflict on.
-    public func propagate(_ node: DependencyResolutionNode) throws {
+    internal func propagate(state: State, _ node: DependencyResolutionNode) throws {
         var changed: OrderedSet<DependencyResolutionNode> = [node]
 
         while !changed.isEmpty {
             let package = changed.removeFirst()
-            loop: for incompatibility in positiveIncompatibilities(for: package)?.reversed() ?? [] {
-                let result = propagate(incompatibility: incompatibility)
+            loop: for incompatibility in state.positiveIncompatibilities(for: package)?.reversed() ?? [] {
+                let result = propagate(state: state, incompatibility: incompatibility)
 
                 switch result {
                 case .conflict:
-                    let rootCause = try _resolve(conflict: incompatibility)
-                    let rootCauseResult = propagate(incompatibility: rootCause)
+                    let rootCause = try self.resolve(state: state, conflict: incompatibility)
+                    let rootCauseResult = propagate(state: state, incompatibility: rootCause)
 
                     guard case .almostSatisfied(let pkg) = rootCauseResult else {
                         fatalError("""
                             Expected root cause \(rootCause) to almost satisfy the \
                             current partial solution:
-                            \(solution.assignments.map { " * \($0.description)" }.joined(separator: "\n"))\n
+                            \(state.solution.assignments.map { " * \($0.description)" }.joined(separator: "\n"))\n
                             """)
                     }
 
@@ -572,11 +625,11 @@ public final class PubgrubDependencyResolver {
         }
     }
 
-    func propagate(incompatibility: Incompatibility) -> PropagationResult {
+    private func propagate(state: State, incompatibility: Incompatibility) -> PropagationResult {
         var unsatisfied: Term?
 
         for term in incompatibility.terms {
-            let relation = solution.relation(with: term)
+            let relation = state.solution.relation(with: term)
 
             if relation == .disjoint {
                 return .none
@@ -594,18 +647,18 @@ public final class PubgrubDependencyResolver {
         }
 
         log("derived: \(unsatisfiedTerm.inverse)")
-        derive(unsatisfiedTerm.inverse, cause: incompatibility)
+        state.derive(unsatisfiedTerm.inverse, cause: incompatibility)
 
         return .almostSatisfied(node: unsatisfiedTerm.node)
     }
 
-    enum PropagationResult {
+    private enum PropagationResult {
         case conflict
         case almostSatisfied(node: DependencyResolutionNode)
         case none
     }
 
-    public func _resolve(conflict: Incompatibility) throws -> Incompatibility {
+    internal func resolve(state: State, conflict: Incompatibility) throws -> Incompatibility {
         log("conflict: \(conflict)")
         // Based on:
         // https://github.com/dart-lang/pub/tree/master/doc/solver.md#conflict-resolution
@@ -613,18 +666,18 @@ public final class PubgrubDependencyResolver {
         var incompatibility = conflict
         var createdIncompatibility = false
 
-        while !isCompleteFailure(incompatibility) {
+        while !isCompleteFailure(incompatibility, root: state.root) {
             var mostRecentTerm: Term?
             var mostRecentSatisfier: Assignment?
             var difference: Term?
             var previousSatisfierLevel = 0
 
             for term in incompatibility.terms {
-                let satisfier = solution.satisfier(for: term)
+                let satisfier = state.solution.satisfier(for: term)
 
                 if let _mostRecentSatisfier = mostRecentSatisfier {
-                    let mostRecentSatisfierIdx = solution.assignments.firstIndex(of: _mostRecentSatisfier)!
-                    let satisfierIdx = solution.assignments.firstIndex(of: satisfier)!
+                    let mostRecentSatisfierIdx = state.solution.assignments.firstIndex(of: _mostRecentSatisfier)!
+                    let satisfierIdx = state.solution.assignments.firstIndex(of: satisfier)!
 
                     if mostRecentSatisfierIdx < satisfierIdx {
                         previousSatisfierLevel = max(previousSatisfierLevel, _mostRecentSatisfier.decisionLevel)
@@ -642,7 +695,7 @@ public final class PubgrubDependencyResolver {
                 if mostRecentTerm == term {
                     difference = mostRecentSatisfier?.term.difference(with: term)
                     if let difference = difference {
-                        previousSatisfierLevel = max(previousSatisfierLevel, solution.satisfier(for: difference.inverse).decisionLevel)
+                        previousSatisfierLevel = max(previousSatisfierLevel, state.solution.satisfier(for: difference.inverse).decisionLevel)
                     }
                 }
             }
@@ -652,9 +705,9 @@ public final class PubgrubDependencyResolver {
             }
 
             if previousSatisfierLevel < _mostRecentSatisfier.decisionLevel || _mostRecentSatisfier.cause == nil {
-                solution.backtrack(toDecisionLevel: previousSatisfierLevel)
+                state.solution.backtrack(toDecisionLevel: previousSatisfierLevel)
                 if createdIncompatibility {
-                    add(incompatibility, location: .conflictResolution)
+                    state.add(incompatibility, location: .conflictResolution)
                 }
                 return incompatibility
             }
@@ -670,7 +723,7 @@ public final class PubgrubDependencyResolver {
 
             incompatibility = Incompatibility(
                 OrderedSet(newTerms),
-                root: root!,
+                root: state.root,
                 cause: .conflict(cause: .init(conflict: incompatibility, other: priorCause)))
             createdIncompatibility = true
 
@@ -686,12 +739,12 @@ public final class PubgrubDependencyResolver {
     /// Does a given incompatibility specify that version solving has entirely
     /// failed, meaning this incompatibility is either empty or only for the root
     /// package.
-    private func isCompleteFailure(_ incompatibility: Incompatibility) -> Bool {
+    private func isCompleteFailure(_ incompatibility: Incompatibility, root: DependencyResolutionNode) -> Bool {
         return incompatibility.terms.isEmpty || (incompatibility.terms.count == 1 && incompatibility.terms.first?.node == root)
     }
 
-    public func makeDecision() throws -> DependencyResolutionNode? {
-        let undecided = solution.undecided
+    internal func makeDecision(state: State) throws -> DependencyResolutionNode? {
+        let undecided = state.solution.undecided
 
         // If there are no more undecided terms, version solving is complete.
         guard !undecided.isEmpty else {
@@ -728,11 +781,11 @@ public final class PubgrubDependencyResolver {
         // forced unwraps safe since we are testing for count and errors above
         let pkgTerm = undecided.min { counts[$0]! < counts[$1]! }!
 
-        let container = try provider.getCachedContainer(for: pkgTerm.node.package)
+        let container = try provider.getContainerSync(for: pkgTerm.node.package)
 
         // Get the best available version for this package.
         guard let version = try container.getBestAvailableVersion(for: pkgTerm) else {
-            self.add(Incompatibility(pkgTerm, root: self.root!, cause: .noAvailableVersion), location: .decisionMaking)
+            state.add(Incompatibility(pkgTerm, root: state.root, cause: .noAvailableVersion), location: .decisionMaking)
             return pkgTerm.node
         }
 
@@ -740,13 +793,13 @@ public final class PubgrubDependencyResolver {
         let depIncompatibilities = try container.incompatibilites(
             at: version,
             node: pkgTerm.node,
-            overriddenPackages: self.overriddenPackages,
-            root: self.root!)
+            overriddenPackages: state.overriddenPackages,
+            root: state.root)
 
         var haveConflict = false
         for incompatibility in depIncompatibilities {
             // Add the incompatibility to our partial solution.
-            self.add(incompatibility, location: .decisionMaking)
+            state.add(incompatibility, location: .decisionMaking)
 
             // Check if this incompatibility will statisfy the solution.
             haveConflict = haveConflict || incompatibility.terms.allSatisfy {
@@ -754,14 +807,14 @@ public final class PubgrubDependencyResolver {
                 // are satisfied because we _know_ that the terms matching
                 // this package will be satisfied if we make this version
                 // as a decision.
-                $0.node == pkgTerm.node || self.solution.satisfies($0)
+                $0.node == pkgTerm.node || state.solution.satisfies($0)
             }
         }
 
         // Decide this version if there was no conflict with its dependencies.
         if !haveConflict {
             self.log("decision: \(pkgTerm.node.package)@\(version)")
-            self.decide(pkgTerm.node, version: version)
+            state.decide(pkgTerm.node, version: version)
         }
 
         //return pkgTerm.node
@@ -1005,7 +1058,7 @@ private final class DiagnosticReportBuilder {
         case .empty, .exact, .ranges:
             return false
         case .range(let range):
-            guard let container = try? provider.getCachedContainer(for: term.node.package) else {
+            guard let container = provider.getCachedContainer(for: term.node.package) else {
                 return false
             }
             let bounds = container.computeBounds(for: range)
@@ -1053,7 +1106,7 @@ private final class DiagnosticReportBuilder {
             }
             return "\(name) \(version)"
         case .range(let range):
-            guard normalizeRange, let container = try? provider.getCachedContainer(for: term.node.package) else {
+            guard normalizeRange, let container = provider.getCachedContainer(for: term.node.package) else {
                 return "\(name) \(range.description)"
             }
 
@@ -1437,7 +1490,6 @@ private final class PubGrubPackageContainer {
 
         // Compute upper and lower bounds for the dependencies.
 
-        /*
         let sync = DispatchGroup()
 
         var upperBounds: [PackageReference: Version]!
@@ -1451,10 +1503,6 @@ private final class PubGrubPackageContainer {
         }
 
         sync.wait()
-        */
-        
-        let upperBounds = computeBoundsOld(with: AnyCollection(versions.dropFirst(idx + 1)), upperBound: true)
-        let lowerBounds = computeBoundsOld(with: AnyCollection(versions.dropLast(versions.count - idx).reversed()), upperBound: false)
         
         return (lowerBounds, upperBounds)
     }
@@ -1489,36 +1537,47 @@ private final class ContainerProvider {
     private var prefetches = [PackageReference: DispatchGroup]()
     private let prefetchesLock = Lock()
     
-    /// Get a container a cached for the given identifier, or throw if not cached
-    func getCachedContainer(for identifier: PackageReference) throws -> PubGrubPackageContainer {
-        guard let container = (self.containersLock.withLock { self.containers[identifier] }) else {
-            preconditionFailure("\(identifier) expected to be cached")
+    /// Get a cached container for the given identifier
+    func getCachedContainer(for identifier: PackageReference) -> PubGrubPackageContainer? {
+        self.containersLock.withLock {
+            self.containers[identifier]
         }
-        return container
     }
     
     /// Get the container for the given identifier, loading it if necessary.
-    func getContainer(for identifier: PackageReference, usePrefetched: Bool = true, completion: @escaping (Result<PubGrubPackageContainer, Swift.Error>) -> Void) {
+    @available(*, deprecated, message: "use non-blocking getContainer instead")
+    func getContainerSync(for identifier: PackageReference) throws -> PubGrubPackageContainer {
+        try tsc_await { self.getContainer(for: identifier, completion: $0) }
+    }
+    
+    /// Get the container for the given identifier, loading it if necessary.
+    func getContainer(for identifier: PackageReference, completion: @escaping (Result<PubGrubPackageContainer, Swift.Error>) -> Void) {
+        self.getContainer(for: identifier, usePrefetched: true, completion: completion)
+    }
+        
+    private func getContainer(for identifier: PackageReference, usePrefetched: Bool, completion: @escaping (Result<PubGrubPackageContainer, Swift.Error>) -> Void) {
         // Return the cached container, if available.
-        if let result = (self.containersLock.withLock { self.containers[identifier] }) {
-            return completion(.success(result))
+        if let container = self.getCachedContainer(for: identifier) {
+            return completion(.success(container))
         }
         
         if usePrefetched, let prefetchSync = (self.prefetchesLock.withLock { self.prefetches[identifier] }) {
-            // If this container is being prefetched, wait for that to complete.
+            // If this container is already being prefetched, wait for that to complete
             self.queue.async {
-                print("waiting for prefetching of \(identifier) to complete")
+                //print("waiting for prefetching of \(identifier) to complete")
                 prefetchSync.wait()
                 
-                if let result = (self.containersLock.withLock { self.containers[identifier] }) {
-                    return completion(.success(result))
+                if let container = self.getCachedContainer(for: identifier) {
+                    // should be in the cache once prefetch completed
+                    return completion(.success(container))
                 } else {
-                    // prefetch failed, lets try again
+                    // prefetch failed, try again without it
                     self.getContainer(for: identifier, usePrefetched: false, completion: completion)
                 }
             }
         } else {
-            // Otherwise, fetch the container synchronously.
+            // Otherwise, fetch the container from the provider
+            print("---------------- fetching \(identifier) from provider")
             provider.getContainer(for: identifier, skipUpdate: skipUpdate, callbackQueue: self.queue) { result in
                 switch result {
                 case .failure(let error):
@@ -1541,15 +1600,22 @@ private final class ContainerProvider {
         for identifier in identifiers {
             let group = DispatchGroup()
             self.prefetchesLock.withLock {
-                prefetches[identifier] = group
+                self.prefetches[identifier] = group
             }
             group.enter()
+            print("---------------- prefetching \(identifier) from provider")
             self.provider.getContainer(for: identifier, skipUpdate: skipUpdate, callbackQueue: self.queue) { result in
                 defer { group.leave() }
+                switch result {
                 // only cache positive results
-                if case .success(let container) = result {
+                case .success(let container):
                     self.containersLock.withLock {
                         self.containers[identifier] = PubGrubPackageContainer(container, pinsMap: self.pinsMap, queue: self.queue)
+                    }
+                // if failed, remove from list of prefetches
+                case .failure:
+                    self.prefetchesLock.withLock {
+                        self.prefetches[identifier] = nil
                     }
                 }
             }
