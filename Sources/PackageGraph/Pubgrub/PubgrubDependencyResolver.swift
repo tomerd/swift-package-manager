@@ -343,18 +343,21 @@ public final class PubgrubDependencyResolver {
                 revisionForDependencies = revision
             }
 
+            // FIXME
             let container = try tsc_await { provider.getContainer(for: package, completion: $0) }
-            let _unprocessedDependencies = try container.packageContainer.getDependencies(
+            
+            // FIXME
+            /*let _unprocessedDependencies = try container.packageContainer.getDependencies(
                 at: revisionForDependencies,
                 productFilter: constraint.products
-            )
+            )*/
             
             for node in constraint.nodes() {
-                /*var unprocessedDependencies = try container.packageContainer.getDependencies(
+                var unprocessedDependencies = try container.packageContainer.getDependencies(
                     at: revisionForDependencies,
                     productFilter: constraint.products
-                )*/
-                var unprocessedDependencies = _unprocessedDependencies
+                )
+                //var unprocessedDependencies = _unprocessedDependencies
                 if let sharedRevision = node.revisionLock(revision: revision) {
                     unprocessedDependencies.append(sharedRevision)
                 }
@@ -389,7 +392,8 @@ public final class PubgrubDependencyResolver {
                     versionBasedDependencies[root, default: []].append(versionedBasedConstraint)
                 }
             case .revision, .unversioned:
-                fatalError("Unexpected revision/unversioned requirement in the constraints list: \(constraints)")
+                throw StringError("Internal error: unexpected revision/unversioned requirement '\(dependency.requirement)' in the constraints list: \(constraints)")
+                //fatalError("Unexpected revision/unversioned requirement in the constraints list: \(constraints)")
             }
         }
 
@@ -697,24 +701,32 @@ public final class PubgrubDependencyResolver {
         // Prefer packages with least number of versions that fit the current requirements so we
         // get conflicts (if any) sooner.
         var counts = [Term: Int]()
+        var errors = [Error]()
         let countsLock = Lock()
         let countsSync = DispatchGroup()
         undecided.forEach { term in
             countsSync.enter()
             provider.getContainer(for: term.node.package) { result in
                 defer { countsSync.leave() }
-                if case .success(let container) = result {
-                    countsLock.withLock {
+                countsLock.withLock {
+                    switch result {
+                    case .failure(let error):
+                        errors.append(error)
+                    case .success(let container):
                         counts[term] = container.versionCount(term.requirement)
                     }
                 }
             }
         }
         countsSync.wait()
+        
+        // ideally we return all errors but this is for backwards compatibility
+        if let error = errors.first {
+            throw error
+        }
                         
-        let pkgTerm = undecided.min {
-            return counts[$0] ?? Int.max < counts[$1] ?? Int.max
-        }!
+        // forced unwraps safe since we are testing for count and errors above
+        let pkgTerm = undecided.min { counts[$0]! < counts[$1]! }!
 
         let container = try provider.getCachedContainer(for: pkgTerm.node.package)
 
@@ -1425,6 +1437,7 @@ private final class PubGrubPackageContainer {
 
         // Compute upper and lower bounds for the dependencies.
 
+        /*
         let sync = DispatchGroup()
 
         var upperBounds: [PackageReference: Version]!
@@ -1438,7 +1451,11 @@ private final class PubGrubPackageContainer {
         }
 
         sync.wait()
-
+        */
+        
+        let upperBounds = computeBoundsOld(with: AnyCollection(versions.dropFirst(idx + 1)), upperBound: true)
+        let lowerBounds = computeBoundsOld(with: AnyCollection(versions.dropLast(versions.count - idx).reversed()), upperBound: false)
+        
         return (lowerBounds, upperBounds)
     }
 }
