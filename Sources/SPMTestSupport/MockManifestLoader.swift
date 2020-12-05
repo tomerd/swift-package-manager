@@ -54,12 +54,13 @@ public final class MockManifestLoader: ManifestLoaderProtocol {
         toolsVersion: ToolsVersion,
         packageKind: PackageReference.Kind,
         fileSystem: FileSystem?,
-        diagnostics: DiagnosticsEngine?
-    ) throws -> PackageModel.Manifest {
+        diagnostics: DiagnosticsEngine?,
+        completion: @escaping (Result<Manifest, Error>) -> Void
+    ) {
         let key = Key(url: baseURL, version: version)
         if let result = manifests[key] {
-            return result
+            return completion(.success(result))
         }
-        throw MockManifestLoaderError.unknownRequest("\(key)")
+        completion(.failure(MockManifestLoaderError.unknownRequest("\(key)")))
     }
 }

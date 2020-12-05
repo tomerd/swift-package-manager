@@ -17,7 +17,9 @@ import TSCBasic
 
 import struct TSCUtility.Version
 
+// FIXME: TOMER add delay
 public class MockPackageContainer: PackageContainer {
+   
     public typealias Identifier = PackageReference
 
     public typealias Constraint = PackageContainerConstraint
@@ -38,40 +40,40 @@ public class MockPackageContainer: PackageContainer {
     }
 
     public let _versions: [Version]
-    public func versions(filter isIncluded: (Version) -> Bool) -> AnySequence<Version> {
-        return AnySequence(_versions.filter(isIncluded))
+    public func versions(filter isIncluded: (Version) -> Bool, completion: @escaping (Result<AnySequence<Version>, Error>) -> Void) {
+        return completion(.success(AnySequence(_versions.filter(isIncluded))))
     }
 
     public var reversedVersions: [Version] {
         return _versions
     }
 
-    public func getDependencies(at version: Version, productFilter: ProductFilter) -> [MockPackageContainer.Constraint] {
+    public func getDependencies(at version: Version, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
         requestedVersions.insert(version)
-        return getDependencies(at: version.description, productFilter: productFilter)
+        return getDependencies(at: version.description, productFilter: productFilter, completion: completion)
     }
 
-    public func getDependencies(at revision: String, productFilter: ProductFilter) -> [MockPackageContainer.Constraint] {
-        return dependencies[revision]!.map { value in
+    public func getDependencies(at revision: String, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
+        return completion(.success(dependencies[revision]!.map { value in
             let (name, requirement) = value
             return MockPackageContainer.Constraint(container: name, requirement: requirement, products: productFilter)
-        }
+        }))
     }
 
-    public func getUnversionedDependencies(productFilter: ProductFilter) -> [MockPackageContainer.Constraint] {
-        return unversionedDeps
+    public func getUnversionedDependencies(productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
+        return completion(.success(unversionedDeps))
     }
 
-    public func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
-        return name
+    public func getUpdatedIdentifier(at boundVersion: BoundVersion, completion: @escaping (Result<PackageReference, Error>) -> Void) {
+        return completion(.success(name))
     }
 
-    public func isToolsVersionCompatible(at version: Version) -> Bool {
-        return true
+    public func isToolsVersionCompatible(at version: Version, completion: @escaping (Result<Bool, Error>) -> Void) {
+        return completion(.success(true))
     }
     
-    public func toolsVersion(for version: Version) throws -> ToolsVersion {
-        return ToolsVersion.currentToolsVersion
+    public func toolsVersion(for version: Version, completion: @escaping (Result<ToolsVersion, Error>) -> Void) {
+        return completion(.success(ToolsVersion.currentToolsVersion))
     }
 
     public var isRemoteContainer: Bool? {

@@ -58,3 +58,10 @@ public struct Timer {
         return try body()
     }
 }
+
+
+// FIXME: TOMER
+@available(*, deprecated)
+public func temp_await<T, ErrorType>(_ body: (@escaping (Result<T, ErrorType>) -> Void) -> Void) throws -> T {
+    return try tsc_await(body).get()
+}

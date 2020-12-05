@@ -844,23 +844,23 @@ extension Workspace {
             //
             // Get handle to the repository.
             let handle = try repositoryManager.lookupSync(repository: dependency.packageRef.repository, skipUpdate: true)
-            let repo = try handle.open()
+            let repo = try temp_await { handle.open(completion: $0) }
 
             // Do preliminary checks on branch and revision, if provided.
-            if let branch = checkoutBranch, repo.exists(revision: Revision(identifier: branch)) {
+            if let branch = checkoutBranch, (try temp_await { repo.exists(revision: Revision(identifier: branch), completion: $0) }) {
                 throw WorkspaceDiagnostics.BranchAlreadyExists(branch: branch)
             }
-            if let revision = revision, !repo.exists(revision: revision) {
+            if let revision = revision, !(try temp_await { repo.exists(revision: revision, completion: $0) }) {
                 throw WorkspaceDiagnostics.RevisionDoesNotExist(revision: revision.identifier)
             }
 
-            try handle.cloneCheckout(to: destination, editable: true)
-            let workingRepo = try repositoryManager.provider.openCheckout(at: destination)
-            try workingRepo.checkout(revision: revision ?? checkoutState.revision)
+            try temp_await { handle.cloneCheckout(to: destination, editable: true, completion: $0) }
+            let workingRepo = try temp_await { repositoryManager.provider.openCheckout(at: destination, completion: $0) }
+            try temp_await { workingRepo.checkout(revision: revision ?? checkoutState.revision, completion: $0) }
 
             // Checkout to the new branch if provided.
             if let branch = checkoutBranch {
-                try workingRepo.checkout(newBranch: branch)
+                try temp_await { workingRepo.checkout(newBranch: branch, completion: $0) }
             }
         }
 
@@ -924,11 +924,11 @@ extension Workspace {
         let path = editablesPath.appending(dependency.subpath)
         // Check for uncommited and unpushed changes if force removal is off.
         if !forceRemove {
-            let workingRepo = try repositoryManager.provider.openCheckout(at: path)
-            guard !workingRepo.hasUncommittedChanges() else {
+            let workingRepo = try temp_await { repositoryManager.provider.openCheckout(at: path, completion: $0) }
+            guard !(try temp_await { workingRepo.hasUncommittedChanges(completion: $0) }) else {
                 throw WorkspaceDiagnostics.UncommitedChanges(repositoryPath: path)
             }
-            guard try !workingRepo.hasUnpushedCommits() else {
+            guard !(try temp_await { workingRepo.hasUnpushedCommits(completion: $0) }) else {
                 throw WorkspaceDiagnostics.UnpushedChanges(repositoryPath: path)
             }
         }
@@ -1365,14 +1365,15 @@ extension Workspace {
 
                 // Load the manifest.
                 // FIXME: We should have a cache for this.
-                return try manifestLoader.load(
+                return try temp_await { manifestLoader.load(
                     package: packagePath,
                     baseURL: url,
                     version: version,
                     toolsVersion: toolsVersion,
                     packageKind: packageKind,
-                    diagnostics: diagnostics
-                )
+                    diagnostics: diagnostics,
+                    completion: $0
+                ) }
             }
         }
         delegate?.didLoadManifest(packagePath: packagePath, url: url, version: version, packageKind: packageKind, manifest: manifest, diagnostics: manifestDiagnostics.diagnostics)
@@ -2073,7 +2074,7 @@ extension Workspace {
                 // Get the latest revision from the container.
                 // FIXME: hard cast!
                 let container = try containerProvider.getContainerSync(for: packageRef, skipUpdate: true) as! RepositoryPackageContainer
-                var revision = try container.getRevision(forIdentifier: identifier)
+                var revision = try temp_await { container.getRevision(forIdentifier: identifier, completion: $0) }
                 let branch = identifier == revision.identifier ? nil : identifier
 
                 // If we have a branch and we shouldn't be updating the
@@ -2277,19 +2278,19 @@ extension Workspace {
             // if not).
             fetch: if fileSystem.isDirectory(path) {
                 // Fetch the checkout in case there are updates available.
-                let workingRepo = try repositoryManager.provider.openCheckout(at: path)
+                let workingRepo = try temp_await { repositoryManager.provider.openCheckout(at: path, completion: $0) }
 
                 // Ensure that the alternative object store is still valid.
                 //
                 // This can become invalid if the build directory is moved.
-                guard workingRepo.isAlternateObjectStoreValid() else {
+                guard (try temp_await { workingRepo.isAlternateObjectStoreValid(completion: $0) }) else {
                     break fetch
                 }
 
                 // The fetch operation may update contents of the checkout, so
                 // we need do mutable-immutable dance.
                 try fileSystem.chmod(.userWritable, path: path, options: [.recursive, .onlyFiles])
-                try workingRepo.fetch()
+                try temp_await { workingRepo.fetch(completion: $0) }
                 try? fileSystem.chmod(.userUnWritable, path: path, options: [.recursive, .onlyFiles])
 
                 return path
@@ -2307,7 +2308,7 @@ extension Workspace {
 
         // Inform the delegate that we're starting cloning.
         delegate?.willClone(repository: handle.repository.url, to: path)
-        try handle.cloneCheckout(to: path, editable: false)
+        try temp_await { handle.cloneCheckout(to: path, editable: false, completion: $0) }
         delegate?.didClone(repository: handle.repository.url, to: path, error: nil)
 
         return path
@@ -2331,14 +2332,14 @@ extension Workspace {
         let path = try fetch(package: package)
 
         // Check out the given revision.
-        let workingRepo = try repositoryManager.provider.openCheckout(at: path)
+        let workingRepo = try temp_await { repositoryManager.provider.openCheckout(at: path, completion: $0) }
 
         // Inform the delegate.
         delegate?.willCheckOut(repository: package.repository.url, revision: checkoutState.description, at: path)
 
         // Do mutable-immutable dance because checkout operation modifies the disk state.
         try fileSystem.chmod(.userWritable, path: path, options: [.recursive, .onlyFiles])
-        try workingRepo.checkout(revision: checkoutState.revision)
+        try temp_await { workingRepo.checkout(revision: checkoutState.revision, completion: $0) }
         try? fileSystem.chmod(.userUnWritable, path: path, options: [.recursive, .onlyFiles])
 
         // Write the state record.
@@ -2371,7 +2372,7 @@ extension Workspace {
             guard let tag = container.getTag(for: version) else {
                 throw StringError("Internal error: please file a bug at https://bugs.swift.org with this info -- unable to get tag for \(package) \(version); available versions \(container.reversedVersions)")
             }
-            let revision = try container.getRevision(forTag: tag)
+            let revision = try temp_await { container.getRevision(forTag: tag, completion: $0) }
             checkoutState = CheckoutState(revision: revision, version: version)
 
         case .revision(let revision, let branch):
@@ -2424,8 +2425,8 @@ extension Workspace {
 
         // Remove the checkout.
         let dependencyPath = checkoutsPath.appending(dependencyToRemove.subpath)
-        let checkedOutRepo = try repositoryManager.provider.openCheckout(at: dependencyPath)
-        guard !checkedOutRepo.hasUncommittedChanges() else {
+        let checkedOutRepo = try temp_await { repositoryManager.provider.openCheckout(at: dependencyPath, completion: $0) }
+        guard !(try temp_await { checkedOutRepo.hasUncommittedChanges(completion: $0) }) else {
             throw WorkspaceDiagnostics.UncommitedChanges(repositoryPath: dependencyPath)
         }
 

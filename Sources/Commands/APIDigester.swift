@@ -11,6 +11,7 @@
 import TSCBasic
 import TSCUtility
 
+import Basics
 import SPMBuildCore
 import Build
 import PackageGraph
@@ -78,15 +79,16 @@ struct APIDigesterBaselineDumper {
 
         // Clone the current package in a sandbox and checkout the baseline revision.
         let specifier = RepositorySpecifier(url: baselinePackageRoot.pathString)
-        try repositoryManager.provider.cloneCheckout(
+        try temp_await { repositoryManager.provider.cloneCheckout(
             repository: specifier,
             at: packageRoot,
             to: baselinePackageRoot,
-            editable: false
-        )
+            editable: false,
+            completion: $0
+        ) }
 
-        let workingCheckout = try repositoryManager.provider.openCheckout(at: baselinePackageRoot)
-        try workingCheckout.checkout(revision: Revision(identifier: baselineTreeish))
+        let workingCheckout = try temp_await { repositoryManager.provider.openCheckout(at: baselinePackageRoot, completion: $0) }
+        try temp_await { workingCheckout.checkout(revision: Revision(identifier: baselineTreeish), completion: $0) }
 
         // Create the workspace for this package.
         let workspace = Workspace.create(

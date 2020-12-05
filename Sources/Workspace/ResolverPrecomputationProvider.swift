@@ -129,60 +129,61 @@ private struct LocalPackageContainer: PackageContainer {
         }
     }
 
-    func isToolsVersionCompatible(at version: Version) -> Bool {
+    func isToolsVersionCompatible(at version: Version, completion: @escaping (Result<Bool, Error>) -> Void) {
         do {
             try manifest.toolsVersion.validateToolsVersion(currentToolsVersion, packagePath: "")
-            return true
+            return completion(.success(true))
         } catch {
-            return false
+            return completion(.success(false))
         }
     }
     
-    func toolsVersion(for version: Version) throws -> ToolsVersion {
-        return currentToolsVersion
+    func toolsVersion(for version: Version, completion: @escaping (Result<ToolsVersion, Error>) -> Void) {
+        return completion(.success(currentToolsVersion))
     }
 
-    func versions(filter isIncluded: (Version) -> Bool) -> AnySequence<Version> {
-        return AnySequence(reversedVersions)
+    func versions(filter isIncluded: (Version) -> Bool, completion: @escaping (Result<AnySequence<Version>, Error>) -> Void) {
+        return completion(.success(AnySequence(reversedVersions)))
     }
 
-    func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+    func getDependencies(at version: Version, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
         // Because of the implementation of `reversedVersions`, we should only get the exact same version.
         precondition(dependency?.checkoutState?.version == version)
-        return manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+        return completion(.success(manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)))
     }
 
-    func getDependencies(at revision: String, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+    func getDependencies(at revision: String, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
         // Return the dependencies if the checkout state matches the revision.
         if let checkoutState = dependency?.checkoutState,
             checkoutState.version == nil,
             checkoutState.revision.identifier == revision {
-            return manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+            return completion(.success(manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)))
         }
 
-        throw ResolverPrecomputationError.differentRequirement(
+        return completion(.failure(ResolverPrecomputationError.differentRequirement(
             package: self.package,
             state: self.dependency?.state,
             requirement: .revision(revision)
-        )
+        )))
     }
 
-    func getUnversionedDependencies(productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+    func getUnversionedDependencies(productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
         // Throw an error when the dependency is not unversioned to fail resolution.
         guard dependency?.state.isCheckout != true else {
-            throw ResolverPrecomputationError.differentRequirement(
+            return completion(.failure(ResolverPrecomputationError.differentRequirement(
                 package: package,
                 state: dependency?.state,
                 requirement: .unversioned
-            )
+            )))
         }
 
-        return manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+        return completion(.success(manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)))
     }
 
-    func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
-        return identifier
+    func getUpdatedIdentifier(at boundVersion: BoundVersion, completion: @escaping (Result<PackageReference, Error>) -> Void) {
+        return completion(.success(identifier))
     }
+
 }
 
 private extension ManagedDependency.State {

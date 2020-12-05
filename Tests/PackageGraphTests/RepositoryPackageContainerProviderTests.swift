@@ -43,24 +43,24 @@ private class MockRepository: Repository {
         return PackageReference(identity: PackageIdentity(url: self.url), path: self.url)
     }
 
-    var tags: [String] {
-        return self.versions.keys.map { String(describing: $0) }
+    func tags(completion: @escaping (Result<[String], Error>) -> Void) {
+        return completion(.success(self.versions.keys.map { String(describing: $0) }))
     }
 
-    func resolveRevision(tag: String) throws -> Revision {
+    func resolveRevision(tag: String, completion: @escaping (Result<Revision, Error>) -> Void) {
         assert(self.versions.index(forKey: Version(string: tag)!) != nil)
-        return Revision(identifier: tag)
+        return completion(.success(Revision(identifier: tag)))
     }
 
-    func resolveRevision(identifier: String) throws -> Revision {
+    func resolveRevision(identifier: String, completion: @escaping (Result<Revision, Error>) -> Void) {
         fatalError("Unexpected API call")
     }
 
-    func fetch() throws {
+    func fetch(completion: @escaping (Result<Void, Error>) -> Void) {
         fatalError("Unexpected API call")
     }
-
-    func exists(revision: Revision) -> Bool {
+    
+    func exists(revision: Revision, completion: @escaping (Result<Bool, Error>) -> Void) {
         fatalError("Unexpected API call")
     }
 
@@ -68,10 +68,10 @@ private class MockRepository: Repository {
         fatalError("Unexpected API call")
     }
 
-    func openFileView(revision: Revision) throws -> FileSystem {
+    func openFileView(revision: Revision, completion: @escaping (Result<FileSystem, Error>) -> Void) {
         assert(self.versions.index(forKey: Version(string: revision.identifier)!) != nil)
         // This is used for reading the tools version.
-        return self.fs
+        return completion(.success(self.fs))
     }
 }
 
@@ -97,34 +97,36 @@ private class MockRepositories: RepositoryProvider {
         self.manifestLoader = MockManifestLoader(manifests: allManifests)
     }
 
-    func fetch(repository: RepositorySpecifier, to path: AbsolutePath) throws {
+    func fetch(repository: RepositorySpecifier, to path: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void) {
         // No-op.
         assert(self.repositories.index(forKey: repository.url) != nil)
+        completion(.success(()))
     }
 
-    func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath) throws {
+    func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void) {
         // No-op.
+        completion(.success(()))
     }
 
-    func checkoutExists(at path: AbsolutePath) throws -> Bool {
-        return false
+    func checkoutExists(at path: AbsolutePath, completion: @escaping (Result<Bool, Error>) -> Void) {
+        return completion(.success(false))
     }
 
-    func open(repository: RepositorySpecifier, at path: AbsolutePath) throws -> Repository {
-        return self.repositories[repository.url]!
+    func open(repository: RepositorySpecifier, at path: AbsolutePath, completion: @escaping (Result<Repository, Error>) -> Void) {
+        return completion(.success(self.repositories[repository.url]!))
     }
 
-    func cloneCheckout(repository: RepositorySpecifier, at sourcePath: AbsolutePath, to destinationPath: AbsolutePath, editable: Bool) throws {
+    func cloneCheckout(repository: RepositorySpecifier, at sourcePath: AbsolutePath, to destinationPath: AbsolutePath, editable: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
         fatalError("unexpected API call")
     }
 
-    func openCheckout(at path: AbsolutePath) throws -> WorkingCheckout {
+    func openCheckout(at path: AbsolutePath, completion: @escaping (Result<WorkingCheckout, Error>) -> Void) {
         fatalError("unexpected API call")
     }
 }
 
 private class MockResolverDelegate: RepositoryManagerDelegate {
-    typealias Identifier = RepositoryPackageContainer.Identifier
+    //typealias Identifier = PackageReference
 
     var fetched = [RepositorySpecifier]()
 
@@ -181,8 +183,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         )
 
         let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString)
-        let container = try provider.getContainerSync(for: ref, skipUpdate: false)
-        let v = container.versions(filter: { _ in true }).map { $0 }
+        let container = try provider.getContainer(for: ref, skipUpdate: false)
+        let v = try container.versions(filter: { _ in true }).map { $0 }
         XCTAssertEqual(v, ["2.0.3", "1.0.3", "1.0.2", "1.0.1", "1.0.0"])
     }
 
@@ -236,17 +238,17 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         do {
             let provider = createProvider(ToolsVersion(version: "4.0.0"))
             let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url)
-            let container = try provider.getContainerSync(for: ref, skipUpdate: false)
-            let v = container.versions(filter: { _ in true }).map { $0 }
+            let container = try provider.getContainer(for: ref, skipUpdate: false)
+            let v = try container.versions(filter: { _ in true }).map { $0 }
             XCTAssertEqual(v, ["1.0.1"])
         }
 
         do {
             let provider = createProvider(ToolsVersion(version: "4.2.0"))
             let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url)
-            let container = try provider.getContainerSync(for: ref, skipUpdate: false)
+            let container = try provider.getContainer(for: ref, skipUpdate: false)
             XCTAssertEqual((container as! RepositoryPackageContainer).validToolsVersionsCache, [:])
-            let v = container.versions(filter: { _ in true }).map { $0 }
+            let v = try container.versions(filter: { _ in true }).map { $0 }
             XCTAssertEqual((container as! RepositoryPackageContainer).validToolsVersionsCache, ["1.0.1": true, "1.0.0": false, "1.0.3": true, "1.0.2": true])
             XCTAssertEqual(v, ["1.0.3", "1.0.2", "1.0.1"])
         }
@@ -254,8 +256,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         do {
             let provider = createProvider(ToolsVersion(version: "3.0.0"))
             let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url)
-            let container = try provider.getContainerSync(for: ref, skipUpdate: false)
-            let v = container.versions(filter: { _ in true }).map { $0 }
+            let container = try provider.getContainer(for: ref, skipUpdate: false)
+            let v = try container.versions(filter: { _ in true }).map { $0 }
             XCTAssertEqual(v, [])
         }
 
@@ -263,8 +265,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         do {
             let provider = createProvider(ToolsVersion(version: "4.0.0"))
             let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url)
-            let container = try provider.getContainerSync(for: ref, skipUpdate: false) as! RepositoryPackageContainer
-            let revision = try container.getRevision(forTag: "1.0.0")
+            let container = try provider.getContainer(for: ref, skipUpdate: false) as! RepositoryPackageContainer
+            let revision = try tsc_await { container.getRevision(forTag: "1.0.0", completion: $0) }
             do {
                 _ = try container.getDependencies(at: revision.identifier, productFilter: .nothing)
             } catch let error as RepositoryPackageContainer.GetDependenciesError {
@@ -310,8 +312,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             manifestLoader: MockManifestLoader(manifests: [:])
         )
         let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString)
-        let container = try provider.getContainerSync(for: ref, skipUpdate: false)
-        let v = container.versions(filter: { _ in true }).map { $0 }
+        let container = try provider.getContainer(for: ref, skipUpdate: false)
+        let v = try container.versions(filter: { _ in true }).map { $0 }
         XCTAssertEqual(v, ["1.0.4-alpha", "1.0.2-dev.2", "1.0.2-dev", "1.0.1", "1.0.0", "1.0.0-beta.1", "1.0.0-alpha.1"])
     }
 
@@ -350,8 +352,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             manifestLoader: MockManifestLoader(manifests: [:])
         )
         let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString)
-        let container = try provider.getContainerSync(for: ref, skipUpdate: false)
-        let v = container.versions(filter: { _ in true }).map { $0 }
+        let container = try provider.getContainer(for: ref, skipUpdate: false)
+        let v = try container.versions(filter: { _ in true }).map { $0 }
         XCTAssertEqual(v, ["2.0.1", "1.0.4", "1.0.2", "1.0.1", "1.0.0"])
     }
 
@@ -538,7 +540,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
             // Get a hold of the container for the test package.
             let packageRef = PackageReference(identity: PackageIdentity(path: packageDir), path: packageDir.pathString)
-            let container = try containerProvider.getContainerSync(for: packageRef, skipUpdate: false) as! RepositoryPackageContainer
+            let container = try containerProvider.getContainer(for: packageRef, skipUpdate: false) as! RepositoryPackageContainer
 
             // Simulate accessing a fictitious dependency on the `master` branch, and check that we get back the expected error.
             do { _ = try container.getDependencies(at: "master", productFilter: .everything) }
@@ -615,7 +617,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             )
 
             let packageReference = PackageReference(identity: PackageIdentity(path: packageDirectory), path: packageDirectory.pathString)
-            let container = try containerProvider.getContainerSync(for: packageReference, skipUpdate: false)
+            let container = try containerProvider.getContainer(for: packageReference, skipUpdate: false)
 
             let forNothing = try container.getDependencies(at: version, productFilter: .specific([]))
             let forProduct = try container.getDependencies(at: version, productFilter: .specific(["Product"]))
@@ -628,7 +630,37 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 }
 
 extension PackageContainerProvider {
-    fileprivate func getContainerSync(for identifier: PackageReference, skipUpdate: Bool) throws -> PackageContainer {
+    fileprivate func getContainer(for identifier: PackageReference, skipUpdate: Bool) throws -> PackageContainer {
         return try tsc_await { self.getContainer(for: identifier, skipUpdate: skipUpdate, callbackQueue: .global(), completion: $0) }
+    }
+}
+
+extension PackageContainer {
+    fileprivate func isToolsVersionCompatible(at version: Version) throws -> Bool {
+        return try tsc_await { self.isToolsVersionCompatible(at: version, completion: $0) }
+    }
+
+    fileprivate func toolsVersion(for version: Version) throws -> ToolsVersion {
+        return try tsc_await { self.toolsVersion(for: version, completion: $0) }
+    }
+        
+    fileprivate func versions(filter isIncluded: (Version) -> Bool)  throws -> AnySequence<Version> {
+        return try tsc_await { self.versions(filter: isIncluded, completion: $0) }
+    }
+
+    fileprivate func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+        return try tsc_await { self.getDependencies(at: version, productFilter: productFilter, completion: $0) }
+    }
+
+    fileprivate func getDependencies(at revision: String, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+        return try tsc_await { self.getDependencies(at: revision, productFilter: productFilter, completion: $0) }
+    }
+
+    fileprivate func getUnversionedDependencies(productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+        return try tsc_await { self.getUnversionedDependencies(productFilter: productFilter, completion: $0) }
+    }
+
+    fileprivate func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
+        return try tsc_await { self.getUpdatedIdentifier(at: boundVersion, completion: $0) }
     }
 }

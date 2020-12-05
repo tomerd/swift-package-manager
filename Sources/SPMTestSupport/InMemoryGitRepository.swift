@@ -56,11 +56,6 @@ public final class InMemoryGitRepository {
     /// The map containing tag name to revision identifier values.
     fileprivate var tagsMap: [String: RevisionIdentifier] = [:]
 
-    /// The array of current tags in the repository.
-    public var tags: [String] {
-        return Array(tagsMap.keys)
-    }
-
     /// The list of revisions in the repository.
     public var revisions: [RevisionIdentifier] {
         return Array(history.keys)
@@ -123,19 +118,6 @@ public final class InMemoryGitRepository {
         try installHead()
     }
 
-    /// Checks out a given tag.
-    public func checkout(tag: String) throws {
-        guard let hash = tagsMap[tag] else {
-            throw InMemoryGitRepositoryError.unknownTag
-        }
-        // Point the head to the revision state of the tag.
-        // It should be impossible that a tag exisits which doesnot have a state.
-        head = history[hash]!
-        isDirty = false
-        // Install this state on the passed filesystem.
-        try installHead()
-    }
-
     /// Installs (or checks out) current head on the filesystem on which this repository exists.
     fileprivate func installHead() throws {
         // Remove the old state.
@@ -173,14 +155,6 @@ public final class InMemoryGitRepository {
             throw InMemoryGitRepositoryError.tagAlreadyPresent
         }
         tagsMap[name] = head.hash
-    }
-
-    public func hasUncommittedChanges() -> Bool {
-        return isDirty
-    }
-
-    public func fetch() throws {
-        // TODO.
     }
 }
 
@@ -260,50 +234,89 @@ extension InMemoryGitRepository: FileSystem {
     }
 }
 
+// FIXME TOMER: add delay
 extension InMemoryGitRepository: Repository {
-    public func resolveRevision(tag: String) throws -> Revision {
-        return Revision(identifier: tagsMap[tag]!)
+    public func fetch(completion: @escaping (Result<Void, Error>) -> Void) {
+        return completion(.success(()))
+    }
+    
+    /// The array of current tags in the repository.
+    public func tags(completion: @escaping (Result<[String], Error>) -> Void) {
+        return completion(.success(Array(tagsMap.keys)))
+    }
+    
+    public func resolveRevision(tag: String, completion: @escaping (Result<Revision, Error>) -> Void) {
+        return completion(.success(Revision(identifier: tagsMap[tag]!)))
     }
 
-    public func resolveRevision(identifier: String) throws -> Revision {
-        return Revision(identifier: tagsMap[identifier] ?? identifier)
+    public func resolveRevision(identifier: String, completion: @escaping (Result<Revision, Error>) -> Void) {
+        return completion(.success(Revision(identifier: tagsMap[identifier] ?? identifier)))
     }
 
-    public func exists(revision: Revision) -> Bool {
-        return history[revision.identifier] != nil
+    public func exists(revision: Revision, completion: @escaping (Result<Bool, Error>) -> Void) {
+        return completion(.success(history[revision.identifier] != nil))
     }
 
-    public func openFileView(revision: Revision) throws -> FileSystem {
-        return history[revision.identifier]!.fileSystem
+    public func openFileView(revision: Revision, completion: @escaping (Result<FileSystem, Error>) -> Void) {
+        return completion(.success(history[revision.identifier]!.fileSystem))
     }
 }
 
+// FIXME TOMER: add delay
 extension InMemoryGitRepository: WorkingCheckout {
-    public func getCurrentRevision() throws -> Revision {
-        return Revision(identifier: head.hash)
+    public func getCurrentRevision(completion: @escaping (Result<Revision, Error>) -> Void) {
+        return completion(.success(Revision(identifier: head.hash)))
     }
 
-    public func checkout(revision: Revision) throws {
-        try checkout(revision: revision.identifier)
+    public func checkout(revision: Revision, completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            completion(.success(try checkout(revision: revision.identifier)))
+        } catch {
+            completion(.failure(error))
+        }
     }
 
-    public func hasUnpushedCommits() throws -> Bool {
-        return false
+    public func hasUnpushedCommits(completion: @escaping (Result<Bool, Error>) -> Void) {
+        return completion(.success(false))
     }
 
-    public func checkout(newBranch: String) throws {
+    public func hasUncommittedChanges(completion: @escaping (Result<Bool, Error>) -> Void) {
+        return completion(.success(isDirty))
+    }
+
+    public func checkout(newBranch: String, completion: @escaping (Result<Void, Error>) -> Void) {
         history[newBranch] = head
+        completion(.success(()))
+    }
+    
+    /// Checks out a given tag.
+    public func checkout(tag: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            guard let hash = tagsMap[tag] else {
+                throw InMemoryGitRepositoryError.unknownTag
+            }
+            // Point the head to the revision state of the tag.
+            // It should be impossible that a tag exisits which doesnot have a state.
+            head = history[hash]!
+            isDirty = false
+            // Install this state on the passed filesystem.
+            try installHead()
+            completion(.success(()))
+        } catch {
+            completion(.failure(error))
+        }
     }
 
-    public func isAlternateObjectStoreValid() -> Bool {
-        return true
+    public func isAlternateObjectStoreValid(completion: @escaping (Result<Bool, Error>) -> Void) {
+        return completion(.success(true))
     }
 
-    public func areIgnored(_ paths: [AbsolutePath]) throws -> [Bool] {
-        return [false]
+    public func areIgnored(_ paths: [AbsolutePath], completion: @escaping (Result<[Bool], Error>) -> Void) {
+        return completion(.success([false]))
     }
 }
 
+// FIXME: TOMER add delay
 /// This class implement provider for in memeory git repository.
 public final class InMemoryGitRepositoryProvider: RepositoryProvider {
     /// Contains the repository added to this provider.
@@ -334,36 +347,160 @@ public final class InMemoryGitRepositoryProvider: RepositoryProvider {
     // MARK: - RepositoryProvider conformance
     // Note: These methods use force unwrap (instead of throwing) to honor their preconditions.
 
-    public func fetch(repository: RepositorySpecifier, to path: AbsolutePath) throws {
+    public func fetch(repository: RepositorySpecifier, to path: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void) {
         let repo = specifierMap[RepositorySpecifier(url: repository.url.spm_dropGitSuffix())]!
         fetchedMap[path] = repo.copy()
         add(specifier: RepositorySpecifier(url: path.asURL.absoluteString), repository: repo)
+        completion(.success(()))
     }
 
-    public func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath) throws {
+    public func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void) {
         let repo = fetchedMap[sourcePath]!
         fetchedMap[destinationPath] = repo.copy()
+        completion(.success(()))
     }
 
-    public func open(repository: RepositorySpecifier, at path: AbsolutePath) throws -> Repository {
-        return fetchedMap[path]!
+    public func open(repository: RepositorySpecifier, at path: AbsolutePath, completion: @escaping (Result<Repository, Error>) -> Void) {
+        return completion(.success(fetchedMap[path]!))
     }
 
-    public func cloneCheckout(
+    public func cloneCheckout(repository: RepositorySpecifier, at sourcePath: AbsolutePath, to destinationPath: AbsolutePath, editable: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
+        let checkout = fetchedMap[sourcePath]!.copy(at: destinationPath)
+        checkoutsMap[destinationPath] = checkout
+        completion(.success(()))
+    }
+
+    public func checkoutExists(at path: AbsolutePath, completion: @escaping (Result<Bool, Error>) -> Void) {
+        return completion(.success(checkoutsMap.keys.contains(path)))
+    }
+
+    public func openCheckout(at path: AbsolutePath, completion: @escaping (Result<WorkingCheckout, Error>) -> Void) {
+        return completion(.success(checkoutsMap[path]!))
+    }
+}
+
+// FIXME: move somewhere else
+
+public extension GitRepository {
+    func remotes() throws -> [(name: String, url: String)] {
+        try tsc_await { self.remotes(completion: $0) }
+    }
+    
+    func resolveHash(treeish: String, type: String? = nil) throws -> Hash {
+        try tsc_await { self.resolveHash(treeish: treeish, type: type, completion: $0) }
+    }
+    
+    func read(tree hash: Hash) throws -> Tree {
+        try tsc_await { self.read(tree: hash, completion: $0) }
+    }
+    
+    func read(commit hash: Hash) throws -> Commit {
+        try tsc_await { self.read(commit: hash, completion: $0) }
+    }
+    
+    func setURL(remote: String, url: String) throws {
+        try tsc_await { self.setURL(remote: remote, url: url, completion: $0) }
+    }
+}
+
+public extension Repository {
+    func tags() throws -> [String] {
+        try tsc_await { self.tags(completion: $0) }
+    }
+
+    func resolveRevision(tag: String) throws -> Revision {
+        try tsc_await { self.resolveRevision(tag: tag, completion: $0) }
+    }
+
+    func resolveRevision(identifier: String) throws -> Revision {
+        try tsc_await { self.resolveRevision(identifier: identifier, completion: $0) }
+    }
+
+    func fetch() throws {
+        try tsc_await { self.fetch(completion: $0) }
+    }
+
+    func exists(revision: Revision) throws -> Bool {
+        try tsc_await { self.exists(revision: revision, completion: $0) }
+    }
+
+    func openFileView(revision: Revision) throws -> FileSystem {
+        try tsc_await { self.openFileView(revision: revision, completion: $0) }
+    }
+}
+
+public extension WorkingCheckout {
+    func getCurrentRevision() throws -> Revision {
+        try tsc_await { self.getCurrentRevision(completion: $0) }
+    }
+
+    func hasUnpushedCommits() throws -> Bool {
+        try tsc_await { self.hasUnpushedCommits(completion: $0) }
+    }
+    
+    func hasUncommittedChanges() throws -> Bool {
+        try tsc_await { self.hasUncommittedChanges(completion: $0) }
+    }
+
+    func checkout(tag: String) throws {
+        try tsc_await { self.checkout(tag: tag, completion: $0) }
+    }
+
+    func checkout(revision: Revision) throws {
+        try tsc_await { self.checkout(revision: revision, completion: $0) }
+    }
+
+    func checkout(newBranch: String) throws {
+        try tsc_await { self.checkout(newBranch: newBranch, completion: $0) }
+    }
+
+    func isAlternateObjectStoreValid() throws -> Bool {
+        try tsc_await { self.isAlternateObjectStoreValid(completion: $0) }
+    }
+
+    func areIgnored(_ paths: [AbsolutePath]) throws -> [Bool] {
+        try tsc_await { self.areIgnored(paths, completion: $0) }
+    }
+    
+    func tags2() throws -> [String] {
+        try tsc_await { self.tags(completion: $0) }
+    }
+
+    func fetch2() throws {
+        try tsc_await { self.fetch(completion: $0) }
+    }
+    
+    func exists2(revision: Revision) throws -> Bool {
+        try tsc_await { self.exists(revision: revision, completion: $0) }
+    }
+}
+
+public extension RepositoryProvider {
+    func fetch(repository: RepositorySpecifier, to path: AbsolutePath) throws {
+        try tsc_await { self.fetch(repository: repository, to: path, completion: $0) }
+    }
+
+    func open(repository: RepositorySpecifier, at path: AbsolutePath) throws -> Repository {
+        try tsc_await { self.open(repository: repository, at: path, completion: $0) }
+    }
+
+    func cloneCheckout(
         repository: RepositorySpecifier,
         at sourcePath: AbsolutePath,
         to destinationPath: AbsolutePath,
-        editable: Bool
-    ) throws {
-        let checkout = fetchedMap[sourcePath]!.copy(at: destinationPath)
-        checkoutsMap[destinationPath] = checkout
+        editable: Bool) throws {
+        try tsc_await { self.cloneCheckout(repository: repository, at: sourcePath, to: destinationPath, editable: editable, completion: $0) }
     }
 
-    public func checkoutExists(at path: AbsolutePath) throws -> Bool {
-        return checkoutsMap.keys.contains(path)
+    func checkoutExists(at path: AbsolutePath) throws -> Bool {
+        try tsc_await { self.checkoutExists(at: path, completion: $0) }
     }
 
-    public func openCheckout(at path: AbsolutePath) throws -> WorkingCheckout {
-        return checkoutsMap[path]!
+    func openCheckout(at path: AbsolutePath) throws -> WorkingCheckout {
+        try tsc_await { self.openCheckout(at: path, completion: $0) }
+    }
+
+    func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath) throws {
+        try tsc_await { self.copy(from: sourcePath, to: destinationPath, completion: $0) }
     }
 }

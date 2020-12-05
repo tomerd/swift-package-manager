@@ -357,9 +357,10 @@ public struct PubgrubDependencyResolver {
                 // be process at the end. This allows us to override them when there is a non-version
                 // based (unversioned/branch-based) constraint present in the graph.
                 let container = try provider.getContainerSync(for: node.package)
-                for dependency in try container.packageContainer.getUnversionedDependencies(
-                    productFilter: node.productFilter
-                ) {
+                for dependency in (try temp_await { container.packageContainer.getUnversionedDependencies(
+                    productFilter: node.productFilter,
+                    completion: $0
+                ) }) {
                     if let versionedBasedConstraints = VersionBasedConstraint.constraints(dependency) {
                         for constraint in versionedBasedConstraints {
                             versionBasedDependencies[node, default: []].append(constraint)
@@ -422,10 +423,11 @@ public struct PubgrubDependencyResolver {
             }
 
             for node in constraint.nodes() {
-                var unprocessedDependencies = try container.packageContainer.getDependencies(
+                var unprocessedDependencies = try temp_await { container.packageContainer.getDependencies(
                     at: revisionForDependencies,
-                    productFilter: constraint.products
-                )
+                    productFilter: constraint.products,
+                    completion: $0
+                ) }
                 if let sharedRevision = node.revisionLock(revision: revision) {
                     unprocessedDependencies.append(sharedRevision)
                 }
@@ -542,7 +544,7 @@ public struct PubgrubDependencyResolver {
             let products = assignment.term.node.productFilter
 
             let container = try provider.getContainerSync(for: assignment.term.node.package)
-            let identifier = try container.packageContainer.getUpdatedIdentifier(at: boundVersion)
+            let identifier = try temp_await { container.packageContainer.getUpdatedIdentifier(at: boundVersion, completion: $0) }
 
             if var existing = flattenedAssignments[identifier] {
                 assert(existing.binding == boundVersion, "Two products in one package resolved to different versions: \(existing.products)@\(existing.binding) vs \(products)@\(boundVersion)")
@@ -561,7 +563,7 @@ public struct PubgrubDependencyResolver {
         // Add overriden packages to the result.
         for (package, override) in state.overriddenPackages {
             let container = try provider.getContainerSync(for: package)
-            let identifier = try container.packageContainer.getUpdatedIdentifier(at: override.version)
+            let identifier = try temp_await { container.packageContainer.getUpdatedIdentifier(at: override.version, completion: $0) }
             finalAssignments.append((identifier, override.version, override.products))
         }
 
@@ -1237,7 +1239,7 @@ private final class PubGrubPackageContainer {
 
     /// Compute the bounds of incompatible tools version starting from the given version.
     private func computeIncompatibleToolsVersionBounds(fromVersion: Version) -> VersionSetSpecifier {
-        assert(!packageContainer.isToolsVersionCompatible(at: fromVersion))
+        assert(!((try? temp_await { packageContainer.isToolsVersionCompatible(at: fromVersion, completion: $0) }) ?? false))
         let versions: [Version] = packageContainer.reversedVersions.reversed()
 
         // This is guaranteed to be present.
@@ -1247,7 +1249,7 @@ private final class PubGrubPackageContainer {
         var upperBound = fromVersion
 
         for version in versions.dropFirst(idx + 1) {
-            let isToolsVersionCompatible = packageContainer.isToolsVersionCompatible(at: version)
+            let isToolsVersionCompatible = (try? temp_await { packageContainer.isToolsVersionCompatible(at: version, completion: $0) }) ?? false
             if isToolsVersionCompatible {
                 break
             }
@@ -1255,7 +1257,7 @@ private final class PubGrubPackageContainer {
         }
 
         for version in versions.dropLast(versions.count - idx).reversed() {
-            let isToolsVersionCompatible = packageContainer.isToolsVersionCompatible(at: version)
+            let isToolsVersionCompatible = (try? temp_await { packageContainer.isToolsVersionCompatible(at: version, completion: $0) }) ?? false
             if isToolsVersionCompatible {
                 break
             }
@@ -1292,13 +1294,13 @@ private final class PubGrubPackageContainer {
         root: DependencyResolutionNode
     ) throws -> [Incompatibility] {
         // FIXME: It would be nice to compute bounds for this as well.
-        if !packageContainer.isToolsVersionCompatible(at: version) {
+        if !(try temp_await { packageContainer.isToolsVersionCompatible(at: version, completion: $0) }) {
             let requirement = computeIncompatibleToolsVersionBounds(fromVersion: version)
-            let toolsVersion = try packageContainer.toolsVersion(for: version)
+            let toolsVersion = try temp_await { packageContainer.toolsVersion(for: version, completion: $0) }
             return [Incompatibility(Term(node, requirement), root: root, cause: .incompatibleToolsVersion(toolsVersion))]
         }
 
-        var unprocessedDependencies = try packageContainer.getDependencies(at: version, productFilter: node.productFilter)
+        var unprocessedDependencies = try temp_await { packageContainer.getDependencies(at: version, productFilter: node.productFilter, completion: $0) }
         if let sharedVersion = node.versionLock(version: version) {
             unprocessedDependencies.append(sharedVersion)
         }
@@ -1345,7 +1347,7 @@ private final class PubGrubPackageContainer {
             }).joined())
         }
 
-        let (lowerBounds, upperBounds) = computeBounds(dependencies, from: version, products: node.productFilter)
+        let (lowerBounds, upperBounds) = try computeBounds(dependencies, from: version, products: node.productFilter)
 
         return dependencies.map { dependency in
             var terms: OrderedSet<Term> = []
@@ -1379,58 +1381,105 @@ private final class PubGrubPackageContainer {
         _ dependencies: [PackageContainerConstraint],
         from fromVersion: Version,
         products: ProductFilter
-    ) -> (lowerBounds: [PackageReference: Version], upperBounds: [PackageReference: Version]) {
+    ) throws-> (lowerBounds: [PackageReference: Version], upperBounds: [PackageReference: Version]) {
         
         if dependencies.isEmpty {
             return ([:], [:])
         }
             
-        func computeBoundsNew(with versionsToIterate: AnyCollection<Version>, upperBound: Bool) -> [PackageReference: Version] {
-            let lock = Lock()
-            let sync2 = DispatchGroup()
-            var result: [PackageReference: Version] = [:]
-            var finished = false
-            
-            let compute = { (version: Version, previous: Version) -> Void in
-                if (lock.withLock { finished }) {
-                    return
-                }
-                
-                let bound = upperBound ? version : previous
-                                
-                // If we hit a version which doesn't have a compatible tools version then that's the boundary.
-                let isToolsVersionCompatible = self.packageContainer.isToolsVersionCompatible(at: version)
-                if (lock.withLock { finished }) {
-                    return
-                }
-
-                // Get the dependencies at this version.
-                
-                let currentDependencies = (try? self.packageContainer.getDependencies(at: version, productFilter: products)) ?? []
-                if (lock.withLock { finished }) {
-                    return
-                }
-
-                // Record this version as the bound for our list of dependencies, if appropriate.
-                lock.withLock {
-                    if finished {
-                        return
-                    }
-                    for dependency in dependencies where !result.keys.contains(dependency.identifier) {
-                        // Record the bound if the tools version isn't compatible at the current version.
-                        if !isToolsVersionCompatible {
-                            result[dependency.identifier] = bound
-                        } else if currentDependencies.first(where: { $0.identifier == dependency.identifier }) != dependency {
-                            // Record this version as the bound if we're finding upper bounds since
-                            // upper bound is exclusive and record the previous version if we're
-                            // finding the lower bound since that is inclusive.
-                            result[dependency.identifier] = bound
-                        }
-                    }
-                    finished = finished || result.count == dependencies.count
-                }
+        
+        func compute(iterator: AnyCollection<Version>.Iterator,
+                     version: Version,
+                     previous: Version,
+                     upperBound: Bool,
+                     prior: [PackageReference: Version],
+                     completion: @escaping (Result<[PackageReference: Version], Error>) -> Void)  {
+            /*
+            if (lock.withLock { finished }) {
+                return completion()
             }
             
+            let bound = upperBound ? version : previous
+                            
+            // If we hit a version which doesn't have a compatible tools version then that's the boundary.
+            let isToolsVersionCompatible = (try? temp_await { self.packageContainer.isToolsVersionCompatible(at: version, completion: $0) }) ?? false
+            if (lock.withLock { finished }) {
+                return completion()
+            }
+
+            // Get the dependencies at this version.
+                        
+            let currentDependencies = (try? temp_await { self.packageContainer.getDependencies(at: version, productFilter: products, completion: $0) }) ?? []
+            if (lock.withLock { finished }) {
+                return completion()
+            }
+
+            // Record this version as the bound for our list of dependencies, if appropriate.
+            lock.withLock {
+                if finished {
+                    return completion()
+                }
+                for dependency in dependencies where !result.keys.contains(dependency.identifier) {
+                    // Record the bound if the tools version isn't compatible at the current version.
+                    if !isToolsVersionCompatible {
+                        result[dependency.identifier] = bound
+                    } else if currentDependencies.first(where: { $0.identifier == dependency.identifier }) != dependency {
+                        // Record this version as the bound if we're finding upper bounds since
+                        // upper bound is exclusive and record the previous version if we're
+                        // finding the lower bound since that is inclusive.
+                        result[dependency.identifier] = bound
+                    }
+                }
+                finished = finished || result.count == dependencies.count
+            }
+            */
+            
+            let bound = upperBound ? version : previous
+            var results: [PackageReference: Version] = prior
+            
+            self.packageContainer.isToolsVersionCompatible(at: version) { result in
+                switch result {
+                case .failure(let error):
+                    return completion(.failure(error))
+                case .success(let isToolsVersionCompatible):
+                    // short circuit if tools version not compatible
+                    let getDependencies = isToolsVersionCompatible ?
+                        { completion in completion(.success([])) } :
+                        { completion in self.packageContainer.getDependencies(at: version, productFilter: products, completion: completion) }
+                    
+                    getDependencies() { result in
+                        // this ignores errors deliberately
+                        let currentDependencies = (try? result.get()) ?? []
+                        for dependency in dependencies where !results.keys.contains(dependency.identifier) {
+                            // Record the bound if the tools version isn't compatible at the current version.
+                            if !isToolsVersionCompatible {
+                                results[dependency.identifier] = bound
+                            } else if currentDependencies.first(where: { $0.identifier == dependency.identifier }) != dependency {
+                                // Record this version as the bound if we're finding upper bounds since
+                                // upper bound is exclusive and record the previous version if we're
+                                // finding the lower bound since that is inclusive.
+                                results[dependency.identifier] = bound
+                            }
+                        }
+                        let next = iterator.next()
+                        if nil == next || results.count == dependencies.count {
+                            return completion(.success(results))
+                        } else {
+                            compute(iterator: iterator, version: next!, previous: version, upperBound: upperBound, prior: results, completion: completion)
+                        }
+                    }
+                }
+            }
+        }
+        
+        func computeBoundsNew(with versionsToIterate: AnyCollection<Version>, upperBound: Bool, completion: @escaping (Result<[PackageReference: Version], Error>) -> Void) {
+            //let lock = Lock()
+            //let sync2 = DispatchGroup()
+            //var results: [PackageReference: Version] = [:]
+            //var finished = false
+            
+            
+            /*
             var previous = fromVersion
             for version in versionsToIterate {
                 let prev = previous
@@ -1439,13 +1488,21 @@ private final class PubGrubPackageContainer {
                     compute(version, prev)
                 }
                 previous = version
+            }*/
+            
+            guard let first = versionsToIterate.first else {
+                return completion(.success([:]))
             }
-                        
-            sync2.wait()
-
-            return result
+            
+            compute(iterator: versionsToIterate.makeIterator(),
+                     version: first,
+                     previous: fromVersion,
+                     upperBound: upperBound,
+                     prior: [:],
+                     completion: completion)
         }
 
+        /*
         func computeBoundsOld(with versionsToIterate: AnyCollection<Version>, upperBound: Bool) -> [PackageReference: Version] {
             var result: [PackageReference: Version] = [:]
             var prev = fromVersion
@@ -1481,7 +1538,7 @@ private final class PubGrubPackageContainer {
             }
 
             return result
-        }
+        }*/
 
         let versions: [Version] = packageContainer.reversedVersions.reversed()
 
@@ -1492,19 +1549,44 @@ private final class PubGrubPackageContainer {
 
         let sync = DispatchGroup()
 
+        // FIXME: TOMER lock
+        var errors = [Error]()
         var upperBounds: [PackageReference: Version]!
-        self.queue.async(group: sync) {
-            upperBounds = computeBoundsNew(with: AnyCollection(versions.dropFirst(idx + 1)), upperBound: true)
-        }
-
         var lowerBounds: [PackageReference: Version]!
-        self.queue.async(group: sync) {
-            lowerBounds = computeBoundsNew(with: AnyCollection(versions.dropLast(versions.count - idx).reversed()), upperBound: false)
+        
+        sync.enter()
+        computeBoundsNew(with: AnyCollection(versions.dropFirst(idx + 1)), upperBound: true) { result in
+            defer { sync.leave() }
+            switch result {
+            case .failure(let error):
+                errors.append(error)
+            case .success(let bounds):
+                upperBounds = bounds
+            }
         }
 
-        sync.wait()
-        
-        return (lowerBounds, upperBounds)
+        sync.enter()
+        computeBoundsNew(with: AnyCollection(versions.dropLast(versions.count - idx).reversed()), upperBound: false) { result in
+            defer { sync.leave() }
+            switch result {
+            case .failure(let error):
+                errors.append(error)
+            case .success(let bounds):
+                lowerBounds = bounds
+            }
+        }
+
+        // FIXME: TOMER
+        switch sync.wait(timeout: .now() + 60) {
+        case .timedOut:
+            throw StringError("timeout")
+        case .success:
+            // FIXME: multi
+            if let error = errors.first {
+                throw error
+            }
+            return (lowerBounds, upperBounds)
+        }
     }
 }
 

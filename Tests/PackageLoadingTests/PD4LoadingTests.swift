@@ -347,11 +347,12 @@ class PackageDescription4LoadingTests: PackageDescriptionLoadingTests {
         try fs.writeFileContents(manifestPath, bytes: stream.bytes)
 
         let diagnostics = DiagnosticsEngine()
-        let manifest = try manifestLoader.load(
+        let manifest = try tsc_await { manifestLoader.load(
             package: .root, baseURL: "/foo",
             toolsVersion: .v4, packageKind: .root,
-            fileSystem: fs, diagnostics: diagnostics
-        )
+            fileSystem: fs, diagnostics: diagnostics,
+            completion: $0
+        ) }
 
         XCTAssertEqual(manifest.name, "Trivial")
         XCTAssertEqual(manifest.toolsVersion, .v4)

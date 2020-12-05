@@ -2255,7 +2255,7 @@ final class WorkspaceTests: XCTestCase {
         workspace.checkManagedDependencies { result in
             result.check(dependency: "bar", at: .edited(barPath))
         }
-        let barRepo = try workspace.repoProvider.openCheckout(at: barPath) as! InMemoryGitRepository
+        let barRepo = (try tsc_await { workspace.repoProvider.openCheckout(at: barPath, completion: $0) }) as! InMemoryGitRepository
         XCTAssert(barRepo.revisions.contains("dev"))
 
         // Test unediting.
@@ -3683,7 +3683,7 @@ final class WorkspaceTests: XCTestCase {
             let fooPin = pinsStore.pins.first(where: { $0.packageRef.identity.description == "foo" })!
 
             let fooRepo = workspace.repoProvider.specifierMap[RepositorySpecifier(url: fooPin.packageRef.path)]!
-            let revision = try fooRepo.resolveRevision(tag: "1.0.0")
+            let revision = try tsc_await { fooRepo.resolveRevision(tag: "1.0.0", completion: $0) }
             let newState = CheckoutState(revision: revision, version: "1.0.0")
 
             pinsStore.pin(packageRef: fooPin.packageRef, state: newState)
@@ -3787,12 +3787,12 @@ final class WorkspaceTests: XCTestCase {
 
         // From here the API should be simple and straightforward:
         let diagnostics = DiagnosticsEngine()
-        let manifest = try ManifestLoader.loadManifest(
-            packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], packageKind: .local
-        )
-        let loadedPackage = try PackageBuilder.loadPackage(
-            packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], xcTestMinimumDeploymentTargets: [:], diagnostics: diagnostics
-        )
+        let manifest = try tsc_await { ManifestLoader.loadManifest(
+            packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], packageKind: .local, completion: $0
+        ) }
+        let loadedPackage = try tsc_await { PackageBuilder.loadPackage(
+            packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], xcTestMinimumDeploymentTargets: [:], diagnostics: diagnostics, completion: $0
+        ) }
         let graph = try Workspace.loadGraph(
             packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics
         )
@@ -4358,7 +4358,7 @@ final class WorkspaceTests: XCTestCase {
         let aURL = workspace.urlForPackage(withName: "A")
         let aRef = PackageReference(identity: PackageIdentity(url: aURL), path: aURL)
         let aRepo = workspace.repoProvider.specifierMap[RepositorySpecifier(url: aURL)]!
-        let aRevision = try aRepo.resolveRevision(tag: "1.0.0")
+        let aRevision = try tsc_await { aRepo.resolveRevision(tag: "1.0.0", completion: $0) }
         let aState = CheckoutState(revision: aRevision, version: "1.0.0")
 
         try workspace.set(
@@ -4620,7 +4620,7 @@ final class WorkspaceTests: XCTestCase {
         let aURL = workspace.urlForPackage(withName: "A")
         let aRef = PackageReference(identity: PackageIdentity(url: aURL), path: aURL)
         let aRepo = workspace.repoProvider.specifierMap[RepositorySpecifier(url: aURL)]!
-        let aRevision = try aRepo.resolveRevision(tag: "1.0.0")
+        let aRevision = try tsc_await { aRepo.resolveRevision(tag: "1.0.0", completion: $0) }
         let aState = CheckoutState(revision: aRevision, version: "1.0.0")
         let aDependency = ManagedDependency(packageRef: aRef, subpath: RelativePath("A"), checkoutState: aState)
 

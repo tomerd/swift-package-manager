@@ -280,20 +280,33 @@ public final class PackageBuilder {
         xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion]
             = MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
         diagnostics: DiagnosticsEngine,
-        kind: PackageReference.Kind = .root
-    ) throws -> Package {
-        let manifest = try ManifestLoader.loadManifest(
+        kind: PackageReference.Kind = .root,
+        completion: @escaping (Result<Package, Error>) -> Void
+        
+    ) {
+        ManifestLoader.loadManifest(
             packagePath: packagePath,
             swiftCompiler: swiftCompiler,
             swiftCompilerFlags: swiftCompilerFlags,
-            packageKind: kind)
-        let builder = PackageBuilder(
-            manifest: manifest,
-            productFilter: .everything,
-            path: packagePath,
-            xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
-            diagnostics: diagnostics)
-        return try builder.construct()
+            packageKind: kind) { result in
+            switch result {
+            case .failure(let error):
+                completion(.failure(error))
+            case .success(let manifest):
+                let builder = PackageBuilder(
+                    manifest: manifest,
+                    productFilter: .everything,
+                    path: packagePath,
+                    xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
+                    diagnostics: diagnostics)
+                
+                do {
+                    completion(.success(try builder.construct()))
+                } catch {
+                    completion(.failure(error))
+                }
+            }
+        }
     }
 
     /// Build a new package following the conventions.
