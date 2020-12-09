@@ -29,39 +29,54 @@ public class LocalPackageContainer: PackageContainer {
     private let toolsVersionLoader: ToolsVersionLoaderProtocol
     private let currentToolsVersion: ToolsVersion
     /// The file system that shoud be used to load this package.
-    let fs: FileSystem
+    private let fs: FileSystem
 
     private var _manifest: Manifest? = nil
-    private func loadManifest() throws -> Manifest {
-        if let manifest = _manifest {
-            return manifest
+    
+    // FIXME: TOMER thread-safety
+    private func loadManifest(completion: @escaping (Result<Manifest, Error>) -> Void)  {
+        if let manifest = self._manifest {
+            return completion(.success(manifest))
         }
 
-        // Load the tools version.
-        let toolsVersion = try toolsVersionLoader.load(at: AbsolutePath(identifier.path), fileSystem: fs)
+        do {
+            // Load the tools version.
+            let toolsVersion = try toolsVersionLoader.load(at: AbsolutePath(identifier.path), fileSystem: fs)
 
-        // Validate the tools version.
-        try toolsVersion.validateToolsVersion(self.currentToolsVersion, packagePath: identifier.path)
+            // Validate the tools version.
+            try toolsVersion.validateToolsVersion(self.currentToolsVersion, packagePath: identifier.path)
 
-        // Load the manifest.
-        _manifest = try manifestLoader.load(
-            package: AbsolutePath(identifier.path),
-            baseURL: identifier.path,
-            version: nil,
-            toolsVersion: toolsVersion,
-            packageKind: identifier.kind,
-            fileSystem: fs)
-        return _manifest!
+            // Load the manifest.
+            manifestLoader.load(
+                package: AbsolutePath(identifier.path),
+                baseURL: identifier.path,
+                version: nil,
+                toolsVersion: toolsVersion,
+                packageKind: identifier.kind,
+                fileSystem: fs,
+                on: .global()) { result in
+                
+                if case .success(let manifest) = result {
+                    self._manifest = manifest
+                }
+                completion(result)
+            }
+        } catch {
+            completion(.failure(error))
+        }
     }
 
-    public func getUnversionedDependencies(productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
-        return try loadManifest().dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+    public func getUnversionedDependencies(productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
+        loadManifest() { result in
+            completion(result.map { $0.dependencyConstraints(productFilter: productFilter, mirrors: self.mirrors) })
+        }
     }
 
-    public func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
+    public func getUpdatedIdentifier(at boundVersion: BoundVersion, completion: @escaping (Result<PackageReference, Error>) -> Void) {
         assert(boundVersion == .unversioned, "Unexpected bound version \(boundVersion)")
-        let manifest = try loadManifest()
-        return identifier.with(newName: manifest.name)
+        loadManifest() { result in
+            completion(result.map { self.identifier.with(newName: $0.name) })
+        }
     }
 
     public init(
@@ -81,27 +96,27 @@ public class LocalPackageContainer: PackageContainer {
         self.fs = fs
     }
     
-    public func isToolsVersionCompatible(at version: Version) -> Bool {
+    public func isToolsVersionCompatible(at version: Version, completion: @escaping (Result<Bool, Error>) -> Void) {
         fatalError("This should never be called")
     }
     
-    public func toolsVersion(for version: Version) throws -> ToolsVersion {
+    public func toolsVersion(for version: Version, completion: @escaping (Result<ToolsVersion, Error>) -> Void) {
         fatalError("This should never be called")
     }
     
-    public func versions(filter isIncluded: (Version) -> Bool) throws -> AnySequence<Version> {
+    public func versions(filter isIncluded: (Version) -> Bool, completion: @escaping (Result<AnySequence<Version>, Error>) -> Void) {
         fatalError("This should never be called")
     }
     
-    public func reversedVersions() throws -> [Version] {
+    public func reversedVersions(completion: @escaping (Result<[Version], Error>) -> Void) {
         fatalError("This should never be called")
     }
     
-    public func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+    public func getDependencies(at version: Version, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
         fatalError("This should never be called")
     }
     
-    public func getDependencies(at revision: String, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+    public func getDependencies(at revision: String, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
         fatalError("This should never be called")
     }
 }

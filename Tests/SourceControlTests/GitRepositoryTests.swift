@@ -46,7 +46,7 @@ class GitRepositoryTests: XCTestCase {
             XCTAssert(localFileSystem.exists(testCheckoutPath))
 
             // Test the repository interface.
-            let repository = provider.open(repository: repoSpec, at: testCheckoutPath)
+            let repository = try provider.open(repository: repoSpec, at: testCheckoutPath)
             let tags = try repository.tags()
             XCTAssertEqual(try repository.tags(), ["1.2.3"])
 
@@ -191,7 +191,7 @@ class GitRepositoryTests: XCTestCase {
             let provider = GitRepositoryProvider()
             let repoSpec = RepositorySpecifier(url: testRepoPath.pathString)
             try provider.fetch(repository: repoSpec, to: testClonePath)
-            let repository = provider.open(repository: repoSpec, at: testClonePath)
+            let repository = try provider.open(repository: repoSpec, at: testClonePath)
 
             // Get and test the file system view.
             let view = try repository.openFileView(revision: repository.resolveRevision(tag: "test-tag"))
@@ -307,14 +307,14 @@ class GitRepositoryTests: XCTestCase {
             let provider = GitRepositoryProvider()
             let repoSpec = RepositorySpecifier(url: testRepoPath.pathString)
             try provider.fetch(repository: repoSpec, to: testClonePath)
-            let clonedRepo = provider.open(repository: repoSpec, at: testClonePath)
-            XCTAssertEqual(try clonedRepo.tags(), ["1.2.3"])
+            let clonedRepo = try provider.open(repository: repoSpec, at: testClonePath)
+            XCTAssertEqual((try clonedRepo.tags()), ["1.2.3"])
 
             // Clone off a checkout.
             let checkoutPath = path.appending(component: "checkout")
             try provider.cloneCheckout(repository: repoSpec, at: testClonePath, to: checkoutPath, editable: false)
             let checkoutRepo = try provider.openCheckout(at: checkoutPath)
-            XCTAssertEqual(try checkoutRepo.tags(), ["1.2.3"])
+            XCTAssertEqual((try checkoutRepo.tags2()), ["1.2.3"])
 
             // Add a new file to original repo.
             try localFileSystem.writeFileContents(testRepoPath.appending(component: "test.txt"), bytes: "Hi")
@@ -325,11 +325,11 @@ class GitRepositoryTests: XCTestCase {
 
             // Update the cloned repo.
             try clonedRepo.fetch()
-            XCTAssertEqual(try clonedRepo.tags().sorted(), ["1.2.3", "2.0.0"])
+            XCTAssertEqual((try clonedRepo.tags()).sorted(), ["1.2.3", "2.0.0"])
 
             // Update the checkout.
-            try checkoutRepo.fetch()
-            XCTAssertEqual(try checkoutRepo.tags().sorted(), ["1.2.3", "2.0.0"])
+            try checkoutRepo.fetch2()
+            XCTAssertEqual((try checkoutRepo.tags2()).sorted(), ["1.2.3", "2.0.0"])
         }
     }
 
@@ -411,19 +411,19 @@ class GitRepositoryTests: XCTestCase {
             try localFileSystem.writeFileContents(testRepoPath.appending(component: "test.txt"), bytes: "Hi")
             let repo = GitRepository(path: testRepoPath)
 
-            XCTAssert(repo.hasUncommittedChanges())
+            XCTAssert(try repo.hasUncommittedChanges())
 
             try repo.stage(file: "test.txt")
 
-            XCTAssert(repo.hasUncommittedChanges())
+            XCTAssert(try repo.hasUncommittedChanges())
 
             try repo.commit()
 
-            XCTAssertFalse(repo.hasUncommittedChanges())
+            XCTAssertFalse(try repo.hasUncommittedChanges())
 
             // Modify the file in the repo.
             try localFileSystem.writeFileContents(repo.path.appending(component: "test.txt"), bytes: "Hello")
-            XCTAssert(repo.hasUncommittedChanges())
+            XCTAssert(try repo.hasUncommittedChanges())
         }
     }
 
@@ -437,12 +437,12 @@ class GitRepositoryTests: XCTestCase {
             let repo = GitRepository(path: testRepoPath)
             var currentRevision = try repo.getCurrentRevision()
             // This is the default branch of a new repo.
-            XCTAssert(repo.exists(revision: Revision(identifier: "master")))
+            XCTAssert(try repo.exists(revision: Revision(identifier: "master")))
             // Check a non existent revision.
-            XCTAssertFalse(repo.exists(revision: Revision(identifier: "nonExistent")))
+            XCTAssertFalse(try repo.exists(revision: Revision(identifier: "nonExistent")))
             // Checkout a new branch using command line.
             try systemQuietly([Git.tool, "-C", testRepoPath.pathString, "checkout", "-b", "TestBranch1"])
-            XCTAssert(repo.exists(revision: Revision(identifier: "TestBranch1")))
+            XCTAssert(try repo.exists(revision: Revision(identifier: "TestBranch1")))
             XCTAssertEqual(try repo.getCurrentRevision(), currentRevision)
 
             // Make sure we're on the new branch right now.
@@ -451,7 +451,7 @@ class GitRepositoryTests: XCTestCase {
             // Checkout new branch using our API.
             currentRevision = try repo.getCurrentRevision()
             try repo.checkout(newBranch: "TestBranch2")
-            XCTAssert(repo.exists(revision: Revision(identifier: "TestBranch2")))
+            XCTAssert(try repo.exists(revision: Revision(identifier: "TestBranch2")))
             XCTAssertEqual(try repo.getCurrentRevision(), currentRevision)
             XCTAssertEqual(try repo.currentBranch(), "TestBranch2")
         }
@@ -478,19 +478,19 @@ class GitRepositoryTests: XCTestCase {
             XCTAssertEqual(try repo.currentBranch(), "TestBranch")
             // Create some random file.
             try createAndStageTestFile()
-            XCTAssert(repo.hasUncommittedChanges())
+            XCTAssert(try repo.hasUncommittedChanges())
             // Checkout current revision again, the test file should go away.
             let currentRevision = try repo.getCurrentRevision()
             try repo.checkout(revision: currentRevision)
-            XCTAssertFalse(repo.hasUncommittedChanges())
+            XCTAssertFalse(try repo.hasUncommittedChanges())
             // We should be on detached head.
             XCTAssertEqual(try repo.currentBranch(), "HEAD")
 
             // Try again and checkout to a previous branch.
             try createAndStageTestFile()
-            XCTAssert(repo.hasUncommittedChanges())
+            XCTAssert(try repo.hasUncommittedChanges())
             try repo.checkout(revision: Revision(identifier: "TestBranch"))
-            XCTAssertFalse(repo.hasUncommittedChanges())
+            XCTAssertFalse(try repo.hasUncommittedChanges())
             XCTAssertEqual(try repo.currentBranch(), "TestBranch")
 
             do {
@@ -595,7 +595,7 @@ class GitRepositoryTests: XCTestCase {
             let provider = GitRepositoryProvider()
             let repoSpec = RepositorySpecifier(url: testRepoPath.pathString)
             try provider.fetch(repository: repoSpec, to: testClonePath)
-            let clonedRepo = provider.open(repository: repoSpec, at: testClonePath)
+            let clonedRepo = try provider.open(repository: repoSpec, at: testClonePath)
             XCTAssertEqual(try clonedRepo.tags(), ["1.2.3"])
 
             // Clone off a checkout.
@@ -604,11 +604,11 @@ class GitRepositoryTests: XCTestCase {
             let checkoutRepo = try provider.openCheckout(at: checkoutPath)
 
             // The object store should be valid.
-            XCTAssertTrue(checkoutRepo.isAlternateObjectStoreValid())
+            XCTAssertTrue(try checkoutRepo.isAlternateObjectStoreValid())
 
             // Delete the clone (alternative object store).
             try localFileSystem.removeFileTree(testClonePath)
-            XCTAssertFalse(checkoutRepo.isAlternateObjectStoreValid())
+            XCTAssertFalse(try checkoutRepo.isAlternateObjectStoreValid())
         }
     }
 
@@ -669,7 +669,7 @@ class GitRepositoryTests: XCTestCase {
             let provider = GitRepositoryProvider()
             let repoSpec = RepositorySpecifier(url: testRepoPath.pathString)
             try provider.fetch(repository: repoSpec, to: testClonePath)
-            let clonedRepo = provider.open(repository: repoSpec, at: testClonePath)
+            let clonedRepo = try provider.open(repository: repoSpec, at: testClonePath)
             XCTAssertEqual(try clonedRepo.tags(), [])
 
             // Clone off a checkout.

@@ -73,7 +73,7 @@ public protocol RepositoryProvider {
     ///   - repository: The specifier of the repository to fetch.
     ///   - path: The destiantion path for the fetch.
     /// - Throws: If there is any error fetching the repository.
-    func fetch(repository: RepositorySpecifier, to path: AbsolutePath) throws
+    func fetch(repository: RepositorySpecifier, to path: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void)
 
     /// Open the given repository.
     ///
@@ -84,7 +84,7 @@ public protocol RepositoryProvider {
     ///     repository has previously been created via `fetch`.
     ///
     /// - Throws: If the repository is unable to be opened.
-    func open(repository: RepositorySpecifier, at path: AbsolutePath) throws -> Repository
+    func open(repository: RepositorySpecifier, at path: AbsolutePath, completion: @escaping (Result<Repository, Error>) -> Void)
 
     /// Clone a managed repository into a working copy at on the local file system.
     ///
@@ -107,34 +107,24 @@ public protocol RepositoryProvider {
         repository: RepositorySpecifier,
         at sourcePath: AbsolutePath,
         to destinationPath: AbsolutePath,
-        editable: Bool) throws
+        editable: Bool,
+        completion: @escaping (Result<Void, Error>) -> Void)
 
     /// Returns true if a working repository exists at `path`
-    func checkoutExists(at path: AbsolutePath) throws -> Bool
+    func checkoutExists(at path: AbsolutePath, completion: @escaping (Result<Bool, Error>) -> Void)
 
     /// Open a working repository copy.
     ///
     /// - Parameters:
     ///   - path: The location of the repository on disk, at which the repository
     ///     has previously been created via `cloneCheckout`.
-    func openCheckout(at path: AbsolutePath) throws -> WorkingCheckout
+    func openCheckout(at path: AbsolutePath, completion: @escaping (Result<WorkingCheckout, Error>) -> Void) 
 
     /// Copies the repository at path `from` to path `to`.
     /// - Parameters:
     ///   - sourcePath: the source path.
     ///   - destinationPath: the destination  path.
-    func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath) throws
-}
-
-extension RepositoryProvider {
-    public func checkoutExists(at path: AbsolutePath) throws -> Bool {
-        fatalError("Unimplemented")
-    }
-
-    public func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath) throws {
-        fatalError("Unimplemented")
-    }
-
+    func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void)
 }
 
 /// Abstract repository operations.
@@ -157,28 +147,23 @@ extension RepositoryProvider {
 /// an inconsistency can be detected.
 public protocol Repository {
     /// Get the list of tags in the repository.
-    func tags() throws -> [String]
+    func tags(completion: @escaping (Result<[String], Error>) -> Void)
 
     /// Resolve the revision for a specific tag.
     ///
     /// - Precondition: The `tag` should be a member of `tags`.
-    /// - Throws: If a error occurs accessing the named tag.
-    func resolveRevision(tag: String) throws -> Revision
+    func resolveRevision(tag: String, completion: @escaping (Result<Revision, Error>) -> Void)
 
     /// Resolve the revision for an identifier.
     ///
-    /// The identifier can be a branch name or a revision identifier.
-    ///
-    /// - Throws: If the identifier can not be resolved.
-    func resolveRevision(identifier: String) throws -> Revision
+    /// - Note: The identifier can be a branch name or a revision identifier.
+    func resolveRevision(identifier: String, completion: @escaping (Result<Revision, Error>) -> Void)
 
     /// Fetch and update the repository from its remote.
-    ///
-    /// - Throws: If an error occurs while performing the fetch operation.
-    func fetch() throws
+    func fetch(completion: @escaping (Result<Void, Error>) -> Void)
 
     /// Returns true if the given revision exists.
-    func exists(revision: Revision) -> Bool
+    func exists(revision: Revision, completion: @escaping (Result<Bool, Error>) -> Void)
 
     /// Open an immutable file system view for a particular revision.
     ///
@@ -193,56 +178,47 @@ public protocol Repository {
     /// It is expected behavior that attempts to mutate the given FileSystem
     /// will fail or crash.
     ///
-    /// - Throws: If a error occurs accessing the revision.
-    func openFileView(revision: Revision) throws -> FileSystem
+    func openFileView(revision: Revision, completion: @escaping (Result<FileSystem, Error>) -> Void)
 }
 
 /// An editable checkout of a repository (i.e. a working copy) on the local file
 /// system.
 public protocol WorkingCheckout {
     /// Get the list of tags in the repository.
-    func tags() throws -> [String]
+    func tags(completion: @escaping (Result<[String], Error>) -> Void)
 
     /// Get the current revision.
-    func getCurrentRevision() throws -> Revision
+    func getCurrentRevision(completion: @escaping (Result<Revision, Error>) -> Void)
 
     /// Fetch and update the repository from its remote.
-    ///
-    /// - Throws: If an error occurs while performing the fetch operation.
-    func fetch() throws
+    func fetch(completion: @escaping (Result<Void, Error>) -> Void)
 
     /// Query whether the checkout has any commits which are not pushed to its remote.
-    func hasUnpushedCommits() throws -> Bool
+    func hasUnpushedCommits(completion: @escaping (Result<Bool, Error>) -> Void)
 
     /// This check for any modified state of the repository and returns true
     /// if there are uncommited changes.
-    func hasUncommittedChanges() -> Bool
+    func hasUncommittedChanges(completion: @escaping (Result<Bool, Error>) -> Void)
 
     /// Check out the given tag.
-    func checkout(tag: String) throws
+    func checkout(tag: String, completion: @escaping (Result<Void, Error>) -> Void)
 
     /// Check out the given revision.
-    func checkout(revision: Revision) throws
+    func checkout(revision: Revision, completion: @escaping (Result<Void, Error>) -> Void)
 
     /// Returns true if the given revision exists.
-    func exists(revision: Revision) -> Bool
+    func exists(revision: Revision, completion: @escaping (Result<Bool, Error>) -> Void)
 
     /// Create a new branch and checkout HEAD to it.
     ///
-    /// Note: It is an error to provide a branch name which already exists.
-    func checkout(newBranch: String) throws
+    /// - Note: It is an error to provide a branch name which already exists.
+    func checkout(newBranch: String, completion: @escaping (Result<Void, Error>) -> Void)
 
     /// Returns true if there is an alternative store in the checkout and it is valid.
-    func isAlternateObjectStoreValid() -> Bool
+    func isAlternateObjectStoreValid(completion: @escaping (Result<Bool, Error>) -> Void)
 
     /// Returns true if the file at `path` is ignored by `git`
-    func areIgnored(_ paths: [AbsolutePath]) throws -> [Bool]
-}
-
-extension WorkingCheckout {
-    public func areIgnored(_ paths: [AbsolutePath]) throws -> [Bool] {
-        fatalError("Unimplemented")
-    }
+    func areIgnored(_ paths: [AbsolutePath], completion: @escaping (Result<[Bool], Error>) -> Void)
 }
 
 /// A single repository revision.

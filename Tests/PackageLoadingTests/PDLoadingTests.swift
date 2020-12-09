@@ -34,12 +34,14 @@ class PackageDescriptionLoadingTests: XCTestCase {
         let fs = InMemoryFileSystem()
         let manifestPath = AbsolutePath.root.appending(component: Manifest.filename)
         try fs.writeFileContents(manifestPath, bytes: contents)
-        let m = try manifestLoader.load(
+        let m = try tsc_await { manifestLoader.load(
             package: AbsolutePath.root,
             baseURL: "/foo",
             toolsVersion: toolsVersion,
             packageKind: packageKind,
-            fileSystem: fs)
+            fileSystem: fs,
+            on: .global(),
+            completion: $0) }
         guard m.toolsVersion == toolsVersion else {
             return XCTFail("Invalid manfiest version")
         }
@@ -160,13 +162,15 @@ class PackageDescriptionLoadingTests: XCTestCase {
         let fileSystem = InMemoryFileSystem()
         let manifestPath = AbsolutePath.root.appending(component: Manifest.filename)
         try fileSystem.writeFileContents(manifestPath, bytes: contents)
-        let manifest = try manifestLoader.load(
+        let manifest = try tsc_await { manifestLoader.load(
             package: AbsolutePath.root,
             baseURL: "/foo",
             toolsVersion: toolsVersion,
             packageKind: packageKind,
             fileSystem: fileSystem,
-            diagnostics: diagnostics)
+            diagnostics: diagnostics,
+            on: .global(),
+            completion: $0) }
 
         if manifest.toolsVersion != toolsVersion {
             XCTFail("Invalid manifest version", file: file, line: line)

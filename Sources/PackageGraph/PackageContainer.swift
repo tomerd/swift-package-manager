@@ -39,21 +39,21 @@ public protocol PackageContainer {
     var identifier: PackageReference { get }
 
     /// Returns true if the tools version is compatible at the given version.
-    func isToolsVersionCompatible(at version: Version) -> Bool
+    func isToolsVersionCompatible(at version: Version, completion: @escaping (Result<Bool, Error>) -> Void) 
 
     /// Returns the tools version for the given version
-    func toolsVersion(for version: Version) throws -> ToolsVersion
+    func toolsVersion(for version: Version, completion: @escaping (Result<ToolsVersion, Error>) -> Void)
     
     /// Get the list of versions which are available for the package.
     ///
     /// The list will be returned in sorted order, with the latest version *first*.
     /// All versions will not be requested at once. Resolver will request the next one only
     /// if the previous one did not satisfy all constraints.
-    func versions(filter isIncluded: (Version) -> Bool) throws -> AnySequence<Version>
+    func versions(filter isIncluded: @escaping (Version) -> Bool, completion: @escaping (Result<AnySequence<Version>, Error>) -> Void)
 
     /// Get the list of versions in the repository sorted in the reverse order, that is the latest
     /// version appears first.
-    func reversedVersions() throws -> [Version]
+    func reversedVersions(completion: @escaping (Result<[Version], Error>) -> Void)
 
     // FIXME: We should perhaps define some particularly useful error codes
     // here, so the resolver can handle errors more meaningfully.
@@ -66,7 +66,7 @@ public protocol PackageContainer {
     /// - Precondition: `versions.contains(version)`
     /// - Throws: If the version could not be resolved; this will abort
     ///   dependency resolution completely.
-    func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [PackageContainerConstraint]
+    func getDependencies(at version: Version, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void)
 
     /// Fetch the declared dependencies for a particular revision.
     ///
@@ -75,19 +75,19 @@ public protocol PackageContainer {
     ///
     /// - Throws: If the revision could not be resolved; this will abort
     ///   dependency resolution completely.
-    func getDependencies(at revision: String, productFilter: ProductFilter) throws -> [PackageContainerConstraint]
+    func getDependencies(at revision: String, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void)
 
     /// Fetch the dependencies of an unversioned package container.
     ///
     /// NOTE: This method should not be called on a versioned container.
-    func getUnversionedDependencies(productFilter: ProductFilter) throws -> [PackageContainerConstraint]
+    func getUnversionedDependencies(productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void)
 
     /// Get the updated identifier at a bound version.
     ///
     /// This can be used by the containers to fill in the missing information that is obtained
     /// after the container is available. The updated identifier is returned in result of the
     /// dependency resolution.
-    func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference
+    func getUpdatedIdentifier(at boundVersion: BoundVersion, completion: @escaping (Result<PackageReference, Error>) -> Void)
 }
 
 // MARK: -

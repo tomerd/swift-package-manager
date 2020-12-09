@@ -351,7 +351,13 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
                     bytes: bogusManifest)
             }
             // Check we can load the repository.
-            let manifest = try manifestLoader.load(package: root, baseURL: "/foo", toolsVersion: .v4_2, packageKind: .root, fileSystem: fs)
+            let manifest = try tsc_await { manifestLoader.load(package: root,
+                                                               baseURL: "/foo",
+                                                               toolsVersion: .v4_2,
+                                                               packageKind: .root,
+                                                               fileSystem: fs,
+                                                               on: .global(),
+                                                               completion: $0) }
             XCTAssertEqual(manifest.name, "Trivial")
         }
     }
@@ -469,12 +475,14 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
 
             func check(loader: ManifestLoader, expectCached: Bool) {
                 delegate.clear()
-                let manifest = try! loader.load(
+                let manifest = try! tsc_await { loader.load(
                     package: manifestPath.parentDirectory,
                     baseURL: manifestPath.pathString,
                     toolsVersion: .v4_2,
-                    packageKind: .local
-                )
+                    packageKind: .local,
+                    on: .global(),
+                    completion: $0
+                ) }
 
                 XCTAssertEqual(delegate.loaded, [manifestPath])
                 XCTAssertEqual(delegate.parsed, expectCached ? [] : [manifestPath])
@@ -525,12 +533,14 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
 
             func check(loader: ManifestLoader, expectCached: Bool) {
                 delegate.clear()
-                let manifest = try! loader.load(
+                let manifest = try! tsc_await { loader.load(
                     package: manifestPath.parentDirectory,
                     baseURL: manifestPath.pathString,
                     toolsVersion: .v4_2,
-                    packageKind: .local
-                )
+                    packageKind: .local,
+                    on: .global(),
+                    completion: $0
+                ) }
 
                 XCTAssertEqual(delegate.loaded, [manifestPath])
                 XCTAssertEqual(delegate.parsed, expectCached ? [] : [manifestPath])
@@ -601,12 +611,14 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
                 let manifestPath = AbsolutePath.root.appending(component: Manifest.filename)
                 try fs.writeFileContents(manifestPath, bytes: stream.bytes)
 
-                let m = try manifestLoader.load(
+                let m = try tsc_await { manifestLoader.load(
                     package: AbsolutePath.root,
                     baseURL: "/foo",
                     toolsVersion: .v4_2,
                     packageKind: .root,
-                    fileSystem: fs)
+                    fileSystem: fs,
+                    on: .global(),
+                    completion: $0) }
 
                 XCTAssertEqual(m.name, "Trivial")
             }

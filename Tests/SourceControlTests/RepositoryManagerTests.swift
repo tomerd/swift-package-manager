@@ -26,31 +26,33 @@ private class DummyRepository: Repository {
         self.provider = provider
     }
     
-    func tags() throws -> [String] {
-        ["1.0.0"]
+    func tags(completion: @escaping (Result<[String], Error>) -> Void) {
+        completion(.success(["1.0.0"]))
     }
 
-    func resolveRevision(tag: String) throws -> Revision {
+    func resolveRevision(tag: String, completion: @escaping (Result<Revision, Error>) -> Void) {
         fatalError("unexpected API call")
     }
 
-    func resolveRevision(identifier: String) throws -> Revision {
+    func resolveRevision(identifier: String, completion: @escaping (Result<Revision, Error>) -> Void) {
         fatalError("unexpected API call")
     }
 
-    func exists(revision: Revision) -> Bool {
+    func exists(revision: Revision, completion: @escaping (Result<Bool, Error>) -> Void) {
         fatalError("unexpected API call")
     }
 
-    func fetch() throws {
+    func fetch(completion: @escaping (Result<Void, Error>) -> Void) {
         provider.numFetches += 1
+        completion(.success(()))
     }
 
-    func openFileView(revision: Revision) throws -> FileSystem {
+    func openFileView(revision: Revision, completion: @escaping (Result<FileSystem, Error>) -> Void) {
         fatalError("unexpected API call")
     }
 }
 
+// FIXME: TOMER make thread-safe
 private class DummyRepositoryProvider: RepositoryProvider {
     var numClones = 0
     var numFetches: Int {
@@ -68,46 +70,62 @@ private class DummyRepositoryProvider: RepositoryProvider {
     private var fetchesLock = Lock()
     var _numFetches = 0
     
-    func fetch(repository: RepositorySpecifier, to path: AbsolutePath) throws {
-        assert(!localFileSystem.exists(path))
-        try localFileSystem.createDirectory(path.parentDirectory, recursive: true)
-        try localFileSystem.writeFileContents(path, bytes: ByteString(encodingAsUTF8: repository.url))
+    func fetch(repository: RepositorySpecifier, to path: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            assert(!localFileSystem.exists(path))
+            try localFileSystem.createDirectory(path.parentDirectory, recursive: true)
+            try localFileSystem.writeFileContents(path, bytes: ByteString(encodingAsUTF8: repository.url))
 
-        numClones += 1
+            numClones += 1
+            
+            // We only support one dummy URL.
+            let basename = repository.url.components(separatedBy: "/").last!
+            if basename != "dummy" {
+                throw DummyError.invalidRepository
+            }
+            completion(.success(()))
+        } catch {
+            completion(.failure(error))
+        }
         
-        // We only support one dummy URL.
-        let basename = repository.url.components(separatedBy: "/").last!
-        if basename != "dummy" {
-            throw DummyError.invalidRepository
+    }
+
+    func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            try localFileSystem.copy(from: sourcePath, to: destinationPath)
+
+            numClones += 1
+
+            // We only support one dummy URL.
+            let basename = sourcePath.basename
+            if basename != "dummy" {
+                throw DummyError.invalidRepository
+            }
+            completion(.success(()))
+        } catch {
+            completion(.failure(error))
         }
     }
 
-    func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath) throws {
-        try localFileSystem.copy(from: sourcePath, to: destinationPath)
+    func open(repository: RepositorySpecifier, at path: AbsolutePath, completion: @escaping (Result<Repository, Error>) -> Void) {
+        completion(.success(DummyRepository(provider: self)))
+    }
 
-        numClones += 1
-
-        // We only support one dummy URL.
-        let basename = sourcePath.basename
-        if basename != "dummy" {
-            throw DummyError.invalidRepository
+    func cloneCheckout(repository: RepositorySpecifier, at sourcePath: AbsolutePath, to destinationPath: AbsolutePath, editable: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            try localFileSystem.createDirectory(destinationPath)
+            try localFileSystem.writeFileContents(destinationPath.appending(component: "README.txt"), bytes: "Hi")
+            completion(.success(()))
+        } catch {
+            completion(.failure(error))
         }
     }
 
-    func open(repository: RepositorySpecifier, at path: AbsolutePath) -> Repository {
-        return DummyRepository(provider: self)
+    func checkoutExists(at path: AbsolutePath, completion: @escaping (Result<Bool, Error>) -> Void) {
+        completion(.success(false))
     }
 
-    func cloneCheckout(repository: RepositorySpecifier, at sourcePath: AbsolutePath, to destinationPath: AbsolutePath, editable: Bool) throws {
-        try localFileSystem.createDirectory(destinationPath)
-        try localFileSystem.writeFileContents(destinationPath.appending(component: "README.txt"), bytes: "Hi")
-    }
-
-    func checkoutExists(at path: AbsolutePath) throws -> Bool {
-        return false
-    }
-
-    func openCheckout(at path: AbsolutePath) throws -> WorkingCheckout {
+    func openCheckout(at path: AbsolutePath, completion: @escaping (Result<WorkingCheckout, Error>) -> Void) {
         fatalError("unsupported")
     }
 }
@@ -184,12 +202,12 @@ class RepositoryManagerTests: XCTestCase {
                 XCTAssertEqual(provider.numFetches, 0)
             
                 // Open the repository.
-                let repository = try! handle.open()
+                let repository = try! tsc_await { handle.open(completion: $0) }
                 XCTAssertEqual(try! repository.tags(), ["1.0.0"])
 
                 // Create a checkout of the repository.
                 let checkoutPath = path.appending(component: "checkout")
-                try! handle.cloneCheckout(to: checkoutPath, editable: false)
+                try! tsc_await { handle.cloneCheckout(to: checkoutPath, editable: false, completion: $0) }
             
                 XCTAssert(localFileSystem.exists(checkoutPath.appending(component: "README.txt")))
                 XCTAssert(localFileSystem.exists(checkoutPath))

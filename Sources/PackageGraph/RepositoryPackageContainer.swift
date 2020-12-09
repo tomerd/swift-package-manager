@@ -74,9 +74,12 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
     /// This is used to remember if tools version of a particular version is
     /// valid or not.
     internal var validToolsVersionsCache = ThreadSafeKeyValueStore<Version, Bool>()
+    
+    private let queue: DispatchQueue
 
     init(
         identifier: PackageReference,
+        queue: DispatchQueue,
         mirrors: DependencyMirrors,
         repository: Repository,
         manifestLoader: ManifestLoaderProtocol,
@@ -84,6 +87,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
         currentToolsVersion: ToolsVersion
     ) {
         self.identifier = identifier
+        self.queue = queue
         self.mirrors = mirrors
         self.repository = repository
         self.manifestLoader = manifestLoader
@@ -92,71 +96,160 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
     }
     
     // Compute the map of known versions.
-    private func knownVersions() throws -> [Version: String] {
-        try self.knownVersionsCache.memoize() {
-            let knownVersionsWithDuplicates = Git.convertTagsToVersionMap(try repository.tags())
-
-            return knownVersionsWithDuplicates.mapValues({ tags -> String in
-                if tags.count == 2 {
-                    // FIXME: Warn if the two tags point to different git references.
-                    return tags.first(where: { !$0.hasPrefix("v") })!
-                }
-                assert(tags.count == 1, "Unexpected number of tags")
-                return tags[0]
-            })
+    private func knownVersions(completion: @escaping (Result<[Version: String], Error>) -> Void) {
+        if let versions = self.knownVersionsCache.get() {
+            return completion(.success(versions))
+        }
+        
+        repository.tags() { result in
+            let result = result.map { tags -> [Version: String] in
+                let knownVersionsWithDuplicates = Git.convertTagsToVersionMap(tags)
+                return knownVersionsWithDuplicates.mapValues({ tags -> String in
+                    if tags.count == 2 {
+                        // FIXME: Warn if the two tags point to different git references.
+                        return tags.first(where: { !$0.hasPrefix("v") })!
+                    }
+                    assert(tags.count == 1, "Unexpected number of tags")
+                    return tags[0]
+                })
+            }
+            
+            if case .success(let versions) = result {
+                self.knownVersionsCache.put(versions)
+            }
+            
+            completion(result)
         }
     }
     
-    public func reversedVersions() throws -> [Version] {
-        try self.reversedVersionsCache.memoize() {
-            [Version](try self.knownVersions().keys).sorted().reversed()
+    public func reversedVersions(completion: @escaping (Result<[Version], Error>) -> Void) {
+        if let versions = self.reversedVersionsCache.get() {
+            return completion(.success(versions))
+        }
+        
+        self.knownVersions() { result in
+            let result = result.map { Array(($0.keys.sorted().reversed())) }
+            if case .success(let versions) = result {
+                self.reversedVersionsCache.put(versions)
+            }
+            completion(result)
         }
     }
     
     /// The available version list (in reverse order).
-    public func versions(filter isIncluded: (Version) -> Bool) throws -> AnySequence<Version> {
-        let reversedVersions = try self.reversedVersions()
-        return AnySequence(reversedVersions.filter(isIncluded).lazy.filter({
-            // If we have the result cached, return that.
-            if let result = self.validToolsVersionsCache[$0] {
-                return result
+    public func versions(filter isIncluded: @escaping (Version) -> Bool, completion: @escaping (Result<AnySequence<Version>, Error>) -> Void) {
+        self.reversedVersions() { result in
+            switch result {
+            case .failure(let error):
+                completion(.failure(error))
+            case .success(let reversedVersions):
+                let seq = AnySequence(reversedVersions.filter(isIncluded).lazy.filter({ it in
+                    // If we have the result cached, return that.
+                    if let result = self.validToolsVersionsCache[it] {
+                        return result
+                    }
+
+                    // Otherwise, compute and cache the result.
+                    let isValid = (try? temp_await { self.toolsVersion(for: it, completion: $0) }).flatMap(self.isValidToolsVersion(_:)) ?? false
+                    self.validToolsVersionsCache[it] = isValid
+                    return isValid
+                }))
+                completion(.success(seq))
             }
-
-            // Otherwise, compute and cache the result.
-            let isValid = (try? self.toolsVersion(for: $0)).flatMap(self.isValidToolsVersion(_:)) ?? false
-            self.validToolsVersionsCache[$0] = isValid
-            return isValid
-        }))
-    }
-
-    public func getTag(for version: Version) -> String? {
-        return try? self.knownVersions()[version]
-    }
-
-    /// Returns revision for the given tag.
-    public func getRevision(forTag tag: String) throws -> Revision {
-        return try repository.resolveRevision(tag: tag)
-    }
-
-    /// Returns revision for the given identifier.
-    public func getRevision(forIdentifier identifier: String) throws -> Revision {
-        return try repository.resolveRevision(identifier: identifier)
-    }
-
-    /// Returns the tools version of the given version of the package.
-    public func toolsVersion(for version: Version) throws -> ToolsVersion {
-        try self.toolsVersionsCache.memoize(version) {
-            guard let tag = try self.knownVersions()[version] else {
-                throw StringError("unknown tag \(version)")
-            }
-            let revision = try repository.resolveRevision(tag: tag)
-            let fs = try repository.openFileView(revision: revision)
-            return try toolsVersionLoader.load(at: .root, fileSystem: fs)
         }
     }
 
-    public func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [Constraint] {
-        do {
+    public func getTag(for version: Version, completion: @escaping (Result<String?, Error>) -> Void) {
+        self.knownVersions() { result in
+            switch result {
+            case .failure(let error):
+                completion(.failure(error)) // FIXME: TOMER return nil?
+            case .success(let knownVersions):
+                completion(.success(knownVersions[version]))
+            }
+        }
+        //return try? self.knownVersions()[version]
+    }
+
+    /// Returns revision for the given tag.
+    public func getRevision(forTag tag: String, completion: @escaping (Result<Revision, Error>) -> Void) {
+        repository.resolveRevision(tag: tag, completion: completion)
+    }
+
+    /// Returns revision for the given identifier.
+    public func getRevision(forIdentifier identifier: String, completion: @escaping (Result<Revision, Error>) -> Void) {
+        repository.resolveRevision(identifier: identifier, completion: completion)
+    }
+
+    /// Returns the tools version of the given version of the package.
+    public func toolsVersion(for version: Version, completion: @escaping (Result<ToolsVersion, Error>) -> Void) {
+        if let toolsVersion = self.toolsVersionsCache[version] {
+            return completion(.success(toolsVersion))
+        }
+        
+        self.knownVersions() { result in
+            switch result {
+            case .failure(let error):
+                completion(.failure(error))
+            case .success(let knownVersions):
+                guard let tag = knownVersions[version] else {
+                    return completion(.failure(StringError("unknown tag \(version)")))
+                }
+                self.getRevision(forTag: tag) { result in
+                    switch result {
+                    case .failure(let error):
+                        completion(.failure(error))
+                    case .success(let revision):
+                        self.repository.openFileView(revision: revision) { result in
+                            switch result {
+                            case .failure(let error):
+                                completion(.failure(error))
+                            case .success(let fs):
+                                do {
+                                    let toolsVersion = try self.toolsVersionLoader.load(at: .root, fileSystem: fs)
+                                    self.toolsVersionsCache[version] = toolsVersion
+                                    completion(.success(toolsVersion))
+                                } catch {
+                                    completion(.failure(error))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    public func getDependencies(at version: Version, productFilter: ProductFilter, completion: @escaping (Result<[Constraint], Error>) -> Void) {
+        self.getTag(for: version) { result in
+            switch result {
+            case .failure(let error):
+                completion(.failure(error))
+            case .success(let tag):
+                guard let tag = tag else {
+                    return completion(.failure(StringError("unknown tag \(version)")))
+                }
+                self.getAndCacheDependencies(forIdentifier: tag, productFilter: productFilter,
+                    getDependencies: { completion in
+                        self.getRevision(forTag: tag) { result in
+                            switch result {
+                            case .failure(let error):
+                                completion(.failure(error))
+                            case .success(let revision):
+                                self.getDependencies(at: revision, version: version, productFilter: productFilter, completion: completion)
+                            }
+                        }
+                    },
+                    completion: { result in
+                        let result = result.mapError { error -> Error in
+                            GetDependenciesError(containerIdentifier: self.identifier.repository.url, reference: version.description, underlyingError: error, suggestion: nil)
+                        }
+                        completion(result.map{ $0.1 })
+                    })
+            }
+        }
+        
+        /*do {
             return try cachedDependencies(forIdentifier: version.description, productFilter: productFilter) {
                 guard let tag = try self.knownVersions()[version] else {
                     throw StringError("unknown tag \(version)")
@@ -167,11 +260,56 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
         } catch {
             throw GetDependenciesError(
                 containerIdentifier: identifier.repository.url, reference: version.description, underlyingError: error, suggestion: nil)
-        }
+        }*/
     }
 
-    public func getDependencies(at revision: String, productFilter: ProductFilter) throws -> [Constraint] {
-        do {
+    public func getDependencies(at revision: String, productFilter: ProductFilter, completion: @escaping (Result<[Constraint], Error>) -> Void) {
+        self.getAndCacheDependencies(forIdentifier: revision, productFilter: productFilter,
+            getDependencies: { completion in
+                self.getRevision(forIdentifier: revision) { result in
+                    switch result {
+                    case .failure(let error):
+                        completion(.failure(error))
+                    case .success(let revision):
+                        self.getDependencies(at: revision, productFilter: productFilter, completion: completion)
+                    }
+                }
+            },
+            completion: { result in
+                let result = result.mapError { error -> Error in
+                    do {
+                        // Examine the error to see if we can come up with a more informative and actionable error message.  We know that the revision is expected to be a branch name or a hash (tags are handled through a different code path).
+                        if let error = error as? GitRepositoryError, error.description.contains("Needed a single revision") {
+                            // It was a Git process invocation error.  Take a look at the repository to see if we can come up with a reasonable diagnostic.
+                            if let rev = (try? temp_await { self.getRevision(forIdentifier: revision, completion: $0) }), (try temp_await { self.repository.exists(revision: rev, completion: $0) }) {
+                                // Revision does exist, so something else must be wrong.
+                                throw GetDependenciesError(
+                                    containerIdentifier: self.identifier.repository.url, reference: revision, underlyingError: error, suggestion: nil)
+                            }
+                            else {
+                                // Revision does not exist, so we customize the error.
+                                let sha1RegEx = try! RegEx(pattern: #"\A[:xdigit:]{40}\Z"#)
+                                let isBranchRev = sha1RegEx.matchGroups(in: revision).compactMap{ $0 }.isEmpty
+                                let errorMessage = "could not find " + (isBranchRev ? "a branch named ‘\(revision)’" : "the commit \(revision)")
+                                let mainBranchExists = (try? temp_await { self.getRevision(forIdentifier: "main", completion: $0) }) != nil
+                                let suggestion = (revision == "master" && mainBranchExists) ? "did you mean ‘main’?" : nil
+                                throw GetDependenciesError(
+                                    containerIdentifier: self.identifier.repository.url, reference: revision,
+                                    underlyingError: StringError(errorMessage), suggestion: suggestion)
+                            }
+                        } else {
+                            // If we get this far without having thrown an error, we wrap and throw the underlying error.
+                            throw GetDependenciesError(
+                                containerIdentifier: self.identifier.repository.url, reference: revision, underlyingError: error, suggestion: nil)
+                        }
+                    } catch {
+                        return error
+                    }
+                }
+                completion(result.map{ $0.1 })
+            })
+    
+        /*do {
             return try cachedDependencies(forIdentifier: revision, productFilter: productFilter) {
                 // resolve the revision identifier and return its dependencies.
                 let revision = try repository.resolveRevision(identifier: revision)
@@ -200,10 +338,29 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
             }
             // If we get this far without having thrown an error, we wrap and throw the underlying error.
             throw GetDependenciesError(containerIdentifier: identifier.repository.url, reference: revision, underlyingError: error, suggestion: nil)
-        }
+        }*/
     }
+    
+    private func getAndCacheDependencies(
+            forIdentifier identifier: String,
+            productFilter: ProductFilter,
+            getDependencies: @escaping ( @escaping (Result<(Manifest, [Constraint]), Error>) -> Void) -> Void,
+            completion: @escaping (Result<(Manifest, [Constraint]), Error>) -> Void
+        ) {
+            if let cached = (self.dependenciesCacheLock.withLock { self.dependenciesCache[identifier, default: [:]][productFilter] }) {
+                return completion(.success(cached))
+            }
+            getDependencies() { result in
+                if case .success(let deps) = result {
+                    self.dependenciesCacheLock.withLock {
+                        self.dependenciesCache[identifier, default: [:]][productFilter] = deps
+                    }
+                }
+                completion(result)
+            }
+        }
 
-    private func cachedDependencies(
+    /*private func cachedDependencies(
         forIdentifier identifier: String,
         productFilter: ProductFilter,
         getDependencies: () throws -> (Manifest, [Constraint])
@@ -216,42 +373,71 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
             dependenciesCache[identifier, default: [:]][productFilter] = result
             return result
         }
-    }
+    }*/
 
     /// Returns dependencies of a container at the given revision.
     private func getDependencies(
+        at revision: Revision,
+        version: Version? = nil,
+        productFilter: ProductFilter,
+        completion: @escaping (Result<(Manifest, [Constraint]), Error>) -> Void
+    ) {
+        self.loadManifest(at: revision, version: version) { result in
+            completion(result.map { ($0, $0.dependencyConstraints(productFilter: productFilter, mirrors: self.mirrors)) })
+        }
+    }
+    /*private func getDependencies(
         at revision: Revision,
         version: Version? = nil,
         productFilter: ProductFilter
     ) throws -> (Manifest, [Constraint]) {
         let manifest = try self.loadManifest(at: revision, version: version)
         return (manifest, manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors))
-    }
+    }*/
 
-    public func getUnversionedDependencies(productFilter: ProductFilter) throws -> [Constraint] {
+    public func getUnversionedDependencies(productFilter: ProductFilter, completion: @escaping (Result<[Constraint], Error>) -> Void) {
         // We just return an empty array if requested for unversioned dependencies.
-        return []
+        completion(.success([]))
     }
 
-    public func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
-        let revision: Revision
-        var version: Version?
+    public func getUpdatedIdentifier(at boundVersion: BoundVersion, completion: @escaping (Result<PackageReference, Error>) -> Void) {
         switch boundVersion {
-        case .version(let v):
-            guard let tag = try self.knownVersions()[v] else {
-                throw StringError("unknown tag \(v)")
+        case .version(let version):
+            self.getTag(for: version) { result in
+                switch result {
+                case .failure(let error):
+                    completion(.failure(error))
+                case .success(let tag):
+                    guard let tag = tag else {
+                        return completion(.failure(StringError("unknown tag \(version)")))
+                    }
+                    self.repository.resolveRevision(tag: tag) { result in
+                        switch result {
+                        case .failure(let error):
+                            completion(.failure(error))
+                        case .success(let revision):
+                            self.loadManifest(at: revision, version: version) { result in
+                                completion(result.map { self.identifier.with(newName: $0.name) })
+                            }
+                        }
+                    }
+                }
             }
-            version = v
-            revision = try repository.resolveRevision(tag: tag)
         case .revision(let identifier):
-            revision = try repository.resolveRevision(identifier: identifier)
+            repository.resolveRevision(identifier: identifier) { result in
+                switch result {
+                case .failure(let error):
+                    completion(.failure(error))
+                case .success(let revision):
+                    self.loadManifest(at: revision, version: nil) { result in
+                        completion(result.map { self.identifier.with(newName: $0.name) })
+                    }
+                }
+            }
         case .unversioned, .excluded:
             assertionFailure("Unexpected type requirement \(boundVersion)")
-            return self.identifier
+            return completion(.success(self.identifier))
         }
-
-        let manifest = try self.loadManifest(at: revision, version: version)
-        return self.identifier.with(newName: manifest.name)
     }
 
     /// Returns true if the tools version is valid and can be used by this
@@ -265,12 +451,58 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
         }
     }
 
-    public func isToolsVersionCompatible(at version: Version) -> Bool {
-        return (try? self.toolsVersion(for: version)).flatMap(self.isValidToolsVersion(_:)) ?? false
+    public func isToolsVersionCompatible(at version: Version, completion: @escaping (Result<Bool, Error>) -> Void) {
+        self.toolsVersion(for: version) { result in
+            switch result {
+            case .failure(let error):
+                completion(.failure(error)) // FIXME: TOMER return false?
+            case .success(let toolsVersion):
+                completion(.success(self.isValidToolsVersion(toolsVersion)))
+            }
+        }
+        //return (try? self.toolsVersion(for: version)).flatMap(self.isValidToolsVersion(_:)) ?? false
     }
    
-    private func loadManifest(at revision: Revision, version: Version?) throws -> Manifest {
-        try self.manifestsCache.memoize(revision) {
+    private func loadManifest(at revision: Revision, version: Version?, completion: @escaping (Result<Manifest, Error>) -> Void) {
+        if let manifest = self.manifestsCache[revision] {
+            return completion(.success(manifest))
+        }
+        
+        repository.openFileView(revision: revision) { result in
+            switch result {
+            case .failure(let error):
+                completion(.failure(error))
+            case .success(let fs):
+                do {
+                    let packageURL = self.identifier.repository.url
+
+                    // Load the tools version.
+                    let toolsVersion = try self.toolsVersionLoader.load(at: .root, fileSystem: fs)
+                    // Validate the tools version.
+                    try toolsVersion.validateToolsVersion(
+                        self.currentToolsVersion, version: revision.identifier, packagePath: packageURL)
+
+                    // Load the manifest.
+                    self.manifestLoader.load(package: AbsolutePath.root,
+                                             baseURL: packageURL,
+                                             version: version,
+                                             toolsVersion: toolsVersion,
+                                             packageKind: self.identifier.kind,
+                                             fileSystem: fs,
+                                             on: self.queue) { result in
+                        if case .success(let manifest) = result {
+                            self.manifestsCache[revision] = manifest
+                        }
+                        completion(result)
+                    }
+                } catch {
+                    completion(.failure(error))
+                }
+            }
+        }
+        
+        
+        /*try self.manifestsCache.memoize(revision) {
             let fs = try repository.openFileView(revision: revision)
             let packageURL = identifier.repository.url
 
@@ -289,7 +521,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
                 toolsVersion: toolsVersion,
                 packageKind: identifier.kind,
                 fileSystem: fs)
-        }
+        }*/
     }
 
     public var isRemoteContainer: Bool? {
@@ -360,22 +592,26 @@ public class RepositoryPackageContainerProvider: PackageContainerProvider {
 
         // Resolve the container using the repository manager.
         repositoryManager.lookup(repository: identifier.repository, skipUpdate: skipUpdate, on: queue) { result in
-            // Create the container wrapper.
-            let container = result.tryMap { handle -> PackageContainer in
-                // Open the repository.
-                //
+            switch result {
+            case .failure(let error):
+                completion(.failure(error))
+            case .success(let handle):
                 // FIXME: Do we care about holding this open for the lifetime of the container.
-                let repository = try handle.open()
-                return RepositoryPackageContainer(
-                    identifier: identifier,
-                    mirrors: self.mirrors,
-                    repository: repository,
-                    manifestLoader: self.manifestLoader,
-                    toolsVersionLoader: self.toolsVersionLoader,
-                    currentToolsVersion: self.currentToolsVersion
-                )
+                handle.open() { result in
+                    let result = result.tryMap { repository -> PackageContainer in
+                        return RepositoryPackageContainer(
+                            identifier: identifier,
+                            queue: queue,
+                            mirrors: self.mirrors,
+                            repository: repository,
+                            manifestLoader: self.manifestLoader,
+                            toolsVersionLoader: self.toolsVersionLoader,
+                            currentToolsVersion: self.currentToolsVersion
+                        )
+                    }
+                    completion(result)
+                }
             }
-            completion(container)
         }
     }
 }

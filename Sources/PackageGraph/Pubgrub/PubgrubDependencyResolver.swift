@@ -238,7 +238,7 @@ public struct PubgrubDependencyResolver {
 
             // TODO: replace with async/await when available
             let container = try temp_await { provider.getContainer(for: assignment.term.node.package, completion: $0) }
-            let identifier = try container.underlying.getUpdatedIdentifier(at: boundVersion)
+            let identifier = try temp_await { container.underlying.getUpdatedIdentifier(at: boundVersion, completion: $0) }
 
             if var existing = flattenedAssignments[identifier] {
                 assert(existing.binding == boundVersion, "Two products in one package resolved to different versions: \(existing.products)@\(existing.binding) vs \(products)@\(boundVersion)")
@@ -258,7 +258,7 @@ public struct PubgrubDependencyResolver {
         for (package, override) in state.overriddenPackages {
             // TODO: replace with async/await when available
             let container = try temp_await { provider.getContainer(for: package, completion: $0) }
-            let identifier = try container.underlying.getUpdatedIdentifier(at: override.version)
+            let identifier = try temp_await { container.underlying.getUpdatedIdentifier(at: override.version, completion: $0) }
             finalAssignments.append((identifier, override.version, override.products))
         }
 
@@ -313,7 +313,7 @@ public struct PubgrubDependencyResolver {
                 // based (unversioned/branch-based) constraint present in the graph.
                 // TODO: replace with async/await when available
                 let container = try temp_await { provider.getContainer(for: node.package, completion: $0) }
-                for dependency in try container.underlying.getUnversionedDependencies(productFilter: node.productFilter) {
+                for dependency in (try temp_await { container.underlying.getUnversionedDependencies(productFilter: node.productFilter, completion: $0) }) {
                     if let versionedBasedConstraints = VersionBasedConstraint.constraints(dependency) {
                         for constraint in versionedBasedConstraints {
                             versionBasedDependencies[node, default: []].append(constraint)
@@ -377,10 +377,11 @@ public struct PubgrubDependencyResolver {
             }
 
             for node in constraint.nodes() {
-                var unprocessedDependencies = try container.underlying.getDependencies(
+                var unprocessedDependencies = try temp_await { container.underlying.getDependencies(
                     at: revisionForDependencies,
-                    productFilter: constraint.products
-                )
+                    productFilter: constraint.products,
+                    completion: $0
+                ) }
                 if let sharedRevision = node.revisionLock(revision: revision) {
                     unprocessedDependencies.append(sharedRevision)
                 }
@@ -1094,7 +1095,7 @@ private final class PubGrubPackageContainer {
         if let pinnedVersion = self.pinnedVersion, requirement.contains(pinnedVersion) {
             return 1
         }
-        return try self.underlying.reversedVersions().filter(requirement.contains).count
+        return (try temp_await { self.underlying.reversedVersions(completion: $0) }).filter(requirement.contains).count
     }
 
     /// Computes the bounds of the given range against the versions available in the package.
@@ -1105,7 +1106,7 @@ private final class PubGrubPackageContainer {
         var includeLowerBound = true
         var includeUpperBound = true
 
-        let versions = try self.underlying.reversedVersions()
+        let versions = try temp_await { self.underlying.reversedVersions(completion: $0) }
 
         if let last = versions.last, range.lowerBound < last {
             includeLowerBound = false
@@ -1131,13 +1132,13 @@ private final class PubGrubPackageContainer {
         }
 
         // Return the highest version that is allowed by the input requirement.
-        return try self.underlying.reversedVersions().first { versionSet.contains($0) }
+        return (try temp_await { self.underlying.reversedVersions(completion: $0) }).first { versionSet.contains($0) }
     }
 
     /// Compute the bounds of incompatible tools version starting from the given version.
     private func computeIncompatibleToolsVersionBounds(fromVersion: Version) throws -> VersionSetSpecifier {
-        assert(!self.underlying.isToolsVersionCompatible(at: fromVersion))
-        let versions: [Version] = try self.underlying.reversedVersions().reversed()
+        assert(!((try? temp_await { self.underlying.isToolsVersionCompatible(at: fromVersion, completion: $0) }) ?? false))
+        let versions: [Version] = (try temp_await { self.underlying.reversedVersions(completion: $0) }).reversed()
 
         // This is guaranteed to be present.
         let idx = versions.firstIndex(of: fromVersion)!
@@ -1146,7 +1147,7 @@ private final class PubGrubPackageContainer {
         var upperBound = fromVersion
 
         for version in versions.dropFirst(idx + 1) {
-            let isToolsVersionCompatible = self.underlying.isToolsVersionCompatible(at: version)
+            let isToolsVersionCompatible = try temp_await { self.underlying.isToolsVersionCompatible(at: version, completion: $0) }
             if isToolsVersionCompatible {
                 break
             }
@@ -1154,7 +1155,7 @@ private final class PubGrubPackageContainer {
         }
 
         for version in versions.dropLast(versions.count - idx).reversed() {
-            let isToolsVersionCompatible = self.underlying.isToolsVersionCompatible(at: version)
+            let isToolsVersionCompatible = try temp_await { self.underlying.isToolsVersionCompatible(at: version, completion: $0) }
             if isToolsVersionCompatible {
                 break
             }
@@ -1191,13 +1192,13 @@ private final class PubGrubPackageContainer {
         root: DependencyResolutionNode
     ) throws -> [Incompatibility] {
         // FIXME: It would be nice to compute bounds for this as well.
-        if !self.underlying.isToolsVersionCompatible(at: version) {
+        if !(try temp_await { self.underlying.isToolsVersionCompatible(at: version, completion: $0) }) {
             let requirement = try self.computeIncompatibleToolsVersionBounds(fromVersion: version)
-            let toolsVersion = try self.underlying.toolsVersion(for: version)
+            let toolsVersion = try temp_await { self.underlying.toolsVersion(for: version, completion: $0) }
             return [Incompatibility(Term(node, requirement), root: root, cause: .incompatibleToolsVersion(toolsVersion))]
         }
 
-        var unprocessedDependencies = try self.underlying.getDependencies(at: version, productFilter: node.productFilter)
+        var unprocessedDependencies = try temp_await { self.underlying.getDependencies(at: version, productFilter: node.productFilter, completion: $0) }
         if let sharedVersion = node.versionLock(version: version) {
             unprocessedDependencies.append(sharedVersion)
         }
@@ -1301,7 +1302,8 @@ private final class PubGrubPackageContainer {
                 let bound = upperBound ? version : prev
 
                 // If we hit a version which doesn't have a compatible tools version then that's the boundary.
-                let isToolsVersionCompatible = self.underlying.isToolsVersionCompatible(at: version)
+                // FIXME: TOMER handle error
+                let isToolsVersionCompatible = (try? temp_await { self.underlying.isToolsVersionCompatible(at: version, completion: $0) }) ?? false
                 // Record this version as the bound for our list of dependencies, if appropriate.
                 if !isToolsVersionCompatible {
                     for constraint in constraints where !result.keys.contains(constraint.identifier) {
@@ -1315,7 +1317,7 @@ private final class PubGrubPackageContainer {
                 }
 
                 // Get the dependencies at this version.
-                let currentDependencies = (try? self.underlying.getDependencies(at: version, productFilter: products)) ?? []
+                let currentDependencies = (try? temp_await { self.underlying.getDependencies(at: version, productFilter: products, completion: $0) }) ?? []
                 // Record this version as the bound for our list of dependencies, if appropriate.
                 for constraint in constraints where !result.keys.contains(constraint.identifier) {
                     if currentDependencies.first(where: { $0.identifier == constraint.identifier }) != constraint {
@@ -1333,7 +1335,7 @@ private final class PubGrubPackageContainer {
             return result
         }
 
-        let versions: [Version] = try self.underlying.reversedVersions().reversed()
+        let versions: [Version] = (try temp_await { self.underlying.reversedVersions(completion: $0) }).reversed()
 
         // This is guaranteed to be present.
         let idx = versions.firstIndex(of: fromVersion)!

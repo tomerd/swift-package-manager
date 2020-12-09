@@ -346,12 +346,14 @@ class PackageDescription5LoadingTests: PackageDescriptionLoadingTests {
                 serializedDiagnostics: true, cacheDir: path)
 
             do {
-                _ = try loader.load(
+                _ = try tsc_await { loader.load(
                     package: manifestPath.parentDirectory,
                     baseURL: manifestPath.pathString,
                     toolsVersion: .v5,
-                    packageKind: .local
-                )
+                    packageKind: .local,
+                    on: .global(),
+                    completion: $0
+                ) }
             } catch ManifestParseError.invalidManifestFormat(let error, let diagnosticFile) {
                 XCTAssertMatch(error, .contains("expected expression in container literal"))
                 let contents = try localFileSystem.readFileContents(diagnosticFile!)
@@ -376,13 +378,15 @@ class PackageDescription5LoadingTests: PackageDescriptionLoadingTests {
             }
 
             let diagnostics = DiagnosticsEngine()
-            _ = try loader.load(
+            _ = try tsc_await { loader.load(
                 package: manifestPath.parentDirectory,
                 baseURL: manifestPath.pathString,
                 toolsVersion: .v5,
                 packageKind: .local,
-                diagnostics: diagnostics
-            )
+                diagnostics: diagnostics,
+                on: .global(),
+                completion: $0
+            ) }
 
             guard let diag = diagnostics.diagnostics.first?.message.data as? ManifestLoadingDiagnostic else {
                 return XCTFail("Expected a diagnostic")

@@ -8,6 +8,7 @@
  See http://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
+import Dispatch
 import TSCBasic
 import PackageModel
 import TSCUtility
@@ -280,20 +281,25 @@ public final class PackageBuilder {
         xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion]
             = MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
         diagnostics: DiagnosticsEngine,
-        kind: PackageReference.Kind = .root
-    ) throws -> Package {
-        let manifest = try ManifestLoader.loadManifest(
-            packagePath: packagePath,
-            swiftCompiler: swiftCompiler,
-            swiftCompilerFlags: swiftCompilerFlags,
-            packageKind: kind)
-        let builder = PackageBuilder(
-            manifest: manifest,
-            productFilter: .everything,
-            path: packagePath,
-            xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
-            diagnostics: diagnostics)
-        return try builder.construct()
+        kind: PackageReference.Kind = .root,
+        on queue: DispatchQueue,
+        completion: @escaping(Result<Package, Error>) -> Void
+    ) {
+        ManifestLoader.loadManifest(packagePath: packagePath,
+                                    swiftCompiler: swiftCompiler,
+                                    swiftCompilerFlags: swiftCompilerFlags,
+                                    packageKind: kind,
+                                    on: queue) { result in
+            let result = result.tryMap { manifest -> Package in
+                let builder = PackageBuilder(manifest: manifest,
+                                             productFilter: .everything,
+                                             path: packagePath,
+                                             xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
+                                             diagnostics: diagnostics)
+                return try builder.construct()
+            }
+            completion(result)
+        }
     }
 
     /// Build a new package following the conventions.

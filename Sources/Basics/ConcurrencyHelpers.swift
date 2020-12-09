@@ -79,6 +79,12 @@ public final class ThreadSafeBox<Value> {
             self.underlying
         }
     }
+    
+    public func put(_ value: Value) {
+        self.lock.withLock {
+            self.underlying = value
+        }
+    }
 }
 
 @available(*, deprecated, message: "replace with async/await when available")

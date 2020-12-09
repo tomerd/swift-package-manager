@@ -43,24 +43,24 @@ private class MockRepository: Repository {
         return PackageReference(identity: PackageIdentity(url: self.url), path: self.url)
     }
 
-    func tags() throws -> [String] {
-        return self.versions.keys.map { String(describing: $0) }
+    func tags(completion: @escaping (Result<[String], Error>) -> Void) {
+        completion(.success(self.versions.keys.map { String(describing: $0) }))
     }
 
-    func resolveRevision(tag: String) throws -> Revision {
+    func resolveRevision(tag: String, completion: @escaping (Result<Revision, Error>) -> Void) {
         assert(self.versions.index(forKey: Version(string: tag)!) != nil)
-        return Revision(identifier: tag)
+        completion(.success(Revision(identifier: tag)))
     }
 
-    func resolveRevision(identifier: String) throws -> Revision {
+    func resolveRevision(identifier: String, completion: @escaping (Result<Revision, Error>) -> Void) {
         fatalError("Unexpected API call")
     }
 
-    func fetch() throws {
+    func fetch(completion: @escaping (Result<Void, Error>) -> Void) {
         fatalError("Unexpected API call")
     }
 
-    func exists(revision: Revision) -> Bool {
+    func exists(revision: Revision, completion: @escaping (Result<Bool, Error>) -> Void) {
         fatalError("Unexpected API call")
     }
 
@@ -68,10 +68,10 @@ private class MockRepository: Repository {
         fatalError("Unexpected API call")
     }
 
-    func openFileView(revision: Revision) throws -> FileSystem {
+    func openFileView(revision: Revision, completion: @escaping (Result<FileSystem, Error>) -> Void) {
         assert(self.versions.index(forKey: Version(string: revision.identifier)!) != nil)
         // This is used for reading the tools version.
-        return self.fs
+        return completion(.success(self.fs))
     }
 }
 
@@ -97,28 +97,34 @@ private class MockRepositories: RepositoryProvider {
         self.manifestLoader = MockManifestLoader(manifests: allManifests)
     }
 
-    func fetch(repository: RepositorySpecifier, to path: AbsolutePath) throws {
+    func fetch(repository: RepositorySpecifier, to path: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void) {
         // No-op.
         assert(self.repositories.index(forKey: repository.url) != nil)
+        completion(.success(()))
     }
 
-    func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath) throws {
+    func copy(from sourcePath: AbsolutePath, to destinationPath: AbsolutePath, completion: @escaping (Result<Void, Error>) -> Void) {
         // No-op.
+        completion(.success(()))
     }
 
-    func checkoutExists(at path: AbsolutePath) throws -> Bool {
-        return false
+    func cloneCheckout(repository: RepositorySpecifier, at sourcePath: AbsolutePath, to destinationPath: AbsolutePath, editable: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
+        completion(.success(()))
     }
 
-    func open(repository: RepositorySpecifier, at path: AbsolutePath) throws -> Repository {
-        return self.repositories[repository.url]!
+    func open(repository: RepositorySpecifier, at path: AbsolutePath, completion: @escaping (Result<Repository, Error>) -> Void) {
+        completion(.success(self.repositories[repository.url]!))
     }
 
     func cloneCheckout(repository: RepositorySpecifier, at sourcePath: AbsolutePath, to destinationPath: AbsolutePath, editable: Bool) throws {
         fatalError("unexpected API call")
     }
 
-    func openCheckout(at path: AbsolutePath) throws -> WorkingCheckout {
+    func openCheckout(at path: AbsolutePath, completion: @escaping (Result<WorkingCheckout, Error>) -> Void) {
+        fatalError("unexpected API call")
+    }
+
+    func checkoutExists(at path: AbsolutePath, completion: @escaping (Result<Bool, Error>) -> Void) {
         fatalError("unexpected API call")
     }
 }
@@ -265,7 +271,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             let provider = createProvider(ToolsVersion(version: "4.0.0"))
             let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url)
             let container = try provider.getContainer(for: ref, skipUpdate: false) as! RepositoryPackageContainer
-            let revision = try container.getRevision(forTag: "1.0.0")
+            let revision = try tsc_await { container.getRevision(forTag: "1.0.0", completion: $0) }
             do {
                 _ = try container.getDependencies(at: revision.identifier, productFilter: .nothing)
             } catch let error as RepositoryPackageContainer.GetDependenciesError {
@@ -632,11 +638,5 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
               XCTAssertNotEqual(forNothing, forProduct)
             #endif
         }
-    }
-}
-
-extension PackageContainerProvider {
-    fileprivate func getContainer(for identifier: PackageReference, skipUpdate: Bool) throws -> PackageContainer {
-        try tsc_await { self.getContainer(for: identifier, skipUpdate: skipUpdate, on: .global(), completion: $0)  }
     }
 }

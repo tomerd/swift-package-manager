@@ -1907,7 +1907,7 @@ private func AssertError(
     }
 }
 
-// FIXME: this is not thread-safe
+// FIXME: TOMER make thread-safe
 public class MockContainer: PackageContainer {
     public typealias Dependency = (container: PackageReference, requirement: PackageRequirement, productFilter: ProductFilter)
 
@@ -1928,7 +1928,7 @@ public class MockContainer: PackageContainer {
 
     public var _versions: [BoundVersion]
 
-    public func versions(filter isIncluded: (Version) -> Bool) throws -> AnySequence<Version> {
+public func versions(filter isIncluded: @escaping (Version) -> Bool, completion: @escaping (Result<AnySequence<Version>, Error>) -> Void) {
         var versions: [Version] = []
         for version in self._versions {
             guard case .version(let v) = version else { continue }
@@ -1936,67 +1936,67 @@ public class MockContainer: PackageContainer {
                 versions.append(v)
             }
         }
-        return AnySequence(versions)
+        completion(.success(AnySequence(versions)))
     }
 
-    public func reversedVersions() throws ->  [Version] {
+public func reversedVersions(completion: @escaping (Result<[Version], Error>) -> Void) {
         var versions: [Version] = []
         for version in self._versions {
             guard case .version(let v) = version else { continue }
             versions.append(v)
         }
-        return versions
+        return completion(.success(versions))
     }
 
-    public func isToolsVersionCompatible(at version: Version) -> Bool {
+    public func isToolsVersionCompatible(at version: Version, completion: @escaping (Result<Bool, Error>) -> Void) {
         // this checks for *exact* version match which is good enough for our current tests
         if let toolsVersion = try? self.toolsVersion(for: version) {
-            return self.toolsVersion == toolsVersion
+            return completion(.success(self.toolsVersion == toolsVersion))
         }
         
-        return (try? self.versions(filter: { _ in true }).contains(version)) ?? false
+        completion(.success((try? self.versions(filter: { _ in true }).contains(version)) ?? false))
     }
     
-    public func toolsVersion(for version: Version) throws -> ToolsVersion {
+    public func toolsVersion(for version: Version, completion: @escaping (Result<ToolsVersion, Error>) -> Void) {
         struct NotFound: Error {}
         
         guard let version = versionsToolsVersions[version] else {
-            throw NotFound()
+            return completion(.failure(NotFound()))
         }
-        return version
+        return completion(.success(version))
     }
 
-    public func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
-        return try getDependencies(at: version.description, productFilter: productFilter)
+    public func getDependencies(at version: Version, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
+        return self.getDependencies(at: version.description, productFilter: productFilter, completion: completion)
     }
 
-    public func getDependencies(at revision: String, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+    public func getDependencies(at revision: String, productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
         guard let revisionDependencies = dependencies[revision] else {
-            throw _MockLoadingError.unknownRevision
+            return completion(.failure(_MockLoadingError.unknownRevision))
         }
         var filteredDependencies: [MockContainer.Dependency] = []
         for (product, productDependencies) in revisionDependencies where productFilter.contains(product) {
             filteredDependencies.append(contentsOf: productDependencies)
         }
-        return filteredDependencies.map({ value in
+        completion(.success(filteredDependencies.map({ value in
             let (name, requirement, filter) = value
             return PackageContainerConstraint(container: name, requirement: requirement, products: filter)
-        })
+        })))
     }
 
-    public func getUnversionedDependencies(productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
+    public func getUnversionedDependencies(productFilter: ProductFilter, completion: @escaping (Result<[PackageContainerConstraint], Error>) -> Void) {
         // FIXME: This is messy, remove unversionedDeps property.
         if !unversionedDeps.isEmpty {
-            return unversionedDeps
+            return completion(.success(unversionedDeps))
         }
-        return try getDependencies(at: PackageRequirement.unversioned.description, productFilter: productFilter)
+        self.getDependencies(at: PackageRequirement.unversioned.description, productFilter: productFilter, completion: completion)
     }
 
-    public func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
+    public func getUpdatedIdentifier(at boundVersion: BoundVersion, completion: @escaping (Result<PackageReference, Error>) -> Void) {
         if let manifestName = manifestName {
             name = name.with(newName: manifestName.identity.description)
         }
-        return name
+        return completion(.success(name))
     }
 
     public convenience init(

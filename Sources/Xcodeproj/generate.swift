@@ -8,6 +8,7 @@
  See http://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
+import Basics
 import TSCBasic
 import PackageGraph
 import PackageModel
@@ -97,8 +98,8 @@ public func generate(
         // references in the project.
         extraDirs = try findDirectoryReferences(path: srcroot)
 
-        if try repositoryProvider.checkoutExists(at: srcroot) {
-            let workingCheckout = try repositoryProvider.openCheckout(at: srcroot)
+        if (try temp_await { repositoryProvider.checkoutExists(at: srcroot, completion: $0) }) {
+            let workingCheckout = try temp_await { repositoryProvider.openCheckout(at: srcroot, completion: $0) }
             extraFiles = try getExtraFilesFor(package: graph.rootPackages[0], in: workingCheckout)
         }
     } else {
@@ -279,7 +280,7 @@ func getExtraFilesFor(package: ResolvedPackage, in workingCheckout: WorkingCheck
     }
 
     // Return if we can't determine if the files are git ignored.
-    guard let isIgnored = try? workingCheckout.areIgnored(extraFiles) else {
+    guard let isIgnored = (try? temp_await { workingCheckout.areIgnored(extraFiles, completion: $0) }) else {
         return []
     }
     extraFiles = extraFiles.enumerated().filter({ !isIgnored[$0.offset] }).map({ $0.element })

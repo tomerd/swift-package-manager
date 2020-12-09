@@ -35,11 +35,14 @@ class ManifestLoadingPerfTests: XCTestCasePerf {
         try write(trivialManifest) { path in
             measure {
                 for _ in 0..<N {
-                    let manifest = try! self.manifestLoader.load(
+                    let manifest = try! tsc_await { self.manifestLoader.load(
                         package: path,
                         baseURL: "/Trivial",
                         toolsVersion: .v4_2,
-                        packageKind: .root)
+                        packageKind: .root,
+                        on: .global(),
+                        completion: $0)
+                    }
                     XCTAssertEqual(manifest.name, "Trivial")
                 }
             }
@@ -67,11 +70,14 @@ class ManifestLoadingPerfTests: XCTestCasePerf {
         try write(manifest) { path in
             measure {
                 for _ in 0..<N {
-                    let manifest = try! self.manifestLoader.load(
+                    let manifest = try! tsc_await { self.manifestLoader.load(
                         package: path,
                         baseURL: "/Trivial",
                         toolsVersion: .v4_2,
-                        packageKind: .root)
+                        packageKind: .root,
+                        on: .global(),
+                        completion: $0)
+                    }
                     XCTAssertEqual(manifest.name, "Foo")
                 }
             }

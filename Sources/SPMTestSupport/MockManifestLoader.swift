@@ -10,6 +10,7 @@
 
 import func XCTest.XCTFail
 
+import Dispatch
 import TSCBasic
 import PackageModel
 import PackageLoading
@@ -54,12 +55,14 @@ public final class MockManifestLoader: ManifestLoaderProtocol {
         toolsVersion: ToolsVersion,
         packageKind: PackageReference.Kind,
         fileSystem: FileSystem?,
-        diagnostics: DiagnosticsEngine?
-    ) throws -> PackageModel.Manifest {
+        diagnostics: DiagnosticsEngine?,
+        on queue: DispatchQueue,
+        completion: @escaping (Result<PackageModel.Manifest, Error>) -> Void
+    ) {
         let key = Key(url: baseURL, version: version)
         if let result = manifests[key] {
-            return result
+            return completion(.success(result))
         }
-        throw MockManifestLoaderError.unknownRequest("\(key)")
+        return completion(.failure(MockManifestLoaderError.unknownRequest("\(key)")))
     }
 }

@@ -120,9 +120,9 @@ public class RepositoryManager {
         }
 
         /// Open the given repository.
-        public func open() throws -> Repository {
+        public func open(completion: @escaping (Result<Repository, Error>) -> Void) {
             precondition(status == .available, "open() called in invalid state")
-            return try self.manager.open(self)
+            self.manager.open(self, completion: completion)
         }
 
         /// Clone into a working copy at on the local file system.
@@ -132,9 +132,9 @@ public class RepositoryManager {
         ///           expected to be non-existent when called.
         ///
         ///   - editable: The clone is expected to be edited by user.
-        public func cloneCheckout(to path: AbsolutePath, editable: Bool) throws {
+        public func cloneCheckout(to path: AbsolutePath, editable: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
             precondition(status == .available, "cloneCheckout() called in invalid state")
-            try self.manager.cloneCheckout(self, to: path, editable: editable)
+            self.manager.cloneCheckout(self, to: path, editable: editable, completion: completion)
         }
 
         fileprivate func toJSON() -> JSON {
@@ -263,10 +263,34 @@ public class RepositoryManager {
             let handle = self.getHandle(repository: repository)
             // Dispatch the action we want to take on the serial queue of the handle.
             handle.serialQueue.sync {
-                let result: LookupResult
+                //let result: LookupResult
 
                 switch handle.status {
                 case .available:
+                    if skipUpdate {
+                        return completion(.success(handle))
+                    }
+
+                    queue.async {
+                        self.delegate?.handleWillUpdate(handle: handle)
+                    }
+
+                    // Update the repository when it is being looked up.
+                    handle.open() { result in
+                        switch result {
+                        case .failure(let error):
+                            completion(.failure(error))
+                        case .success(let repo):
+                            repo.fetch() { result in
+                                queue.async {
+                                    self.delegate?.handleDidUpdate(handle: handle)
+                                }
+
+                                completion(result.map { _ in handle })
+                            }
+                        }
+                    }
+                    /*
                     result = LookupResult(catching: {
                         // Update the repository when it is being looked up.
                         let repo = try handle.open()
@@ -288,6 +312,7 @@ public class RepositoryManager {
 
                         return handle
                     })
+                    */
                 case .pending, .uninitialized, .cached, .error:
                     let isCached = handle.status == .cached
                     let repositoryPath = self.path.appending(handle.subpath)
@@ -303,6 +328,42 @@ public class RepositoryManager {
                     }
 
                     // Fetch the repo.
+                    self.fetchAndPopulateCache(handle: handle, repositoryPath: repositoryPath) { result in
+                        switch result {
+                        case .failure(let error):
+                            // Inform delegate.
+                            queue.async {
+                                self.delegate?.fetchingDidFinish(handle: handle, fetchDetails: nil, error: error)
+                            }
+                            completion(.failure(error))
+                        case .success(let fetchDetails):
+                            handle.status = .available
+
+                            // Inform delegate.
+                            queue.async {
+                                self.delegate?.fetchingDidFinish(handle: handle, fetchDetails: fetchDetails, error: nil)
+                            }
+
+                            self.serialQueue.sync {
+                                do {
+                                    // Update the serialized repositories map.
+                                    //
+                                    // We do this so we don't have to read the other
+                                    // handles when saving the sate of this handle.
+                                    self.serializedRepositories[repository.url] = handle.toJSON()
+                                    try self.persistence.saveState(self)
+                                    completion(.success(handle))
+                                } catch {
+                                    // FIXME: Handle failure gracefully, somehow.
+                                    //fatalError("unable to save manager state \(error)")
+                                    completion(.failure(error))
+                                }
+                            }
+                        }
+                    }
+
+                    // Fetch the repo.
+                    /*
                     var fetchError: Swift.Error? = nil
                     var fetchDetails: FetchDetails? = nil
                     do {
@@ -336,12 +397,12 @@ public class RepositoryManager {
                             // FIXME: Handle failure gracefully, somehow.
                             fatalError("unable to save manager state \(error)")
                         }
-                    }
+                    }*/
                 }
                 // Call the completion handler.
-                queue.async {
+                /*queue.async {
                     completion(result)
-                }
+                }*/
             }
         }
     }
@@ -353,10 +414,10 @@ public class RepositoryManager {
     ///   - update: Update a repository that is already cached or alternatively fetch the repository into the cache.
     /// - Throws:
     /// - Returns: Details about the performed fetch.
-   @discardableResult
-    func fetchAndPopulateCache(handle: RepositoryHandle, repositoryPath: AbsolutePath) throws -> FetchDetails {
-        var updatedCache = false
-        var fromCache = false
+    // FIXME: TOMER clean this further
+    func fetchAndPopulateCache(handle: RepositoryHandle, repositoryPath: AbsolutePath, completion: @escaping (Result<FetchDetails, Error>) -> Void) {
+        //var updatedCache = false
+        //var fromCache = false
 
         // We are expecting handle.repository.url to always be a resolved absolute path.
         let isLocal = (try? AbsolutePath(validating: handle.repository.url)) != nil
@@ -368,29 +429,56 @@ public class RepositoryManager {
                 try initalizeCacheIfNeeded(cachePath: cachePath)
                 try fileSystem.withLock(on: cachedRepositoryPath, type: .exclusive) {
                     // Fetch the repository into the cache.
-                    if (fileSystem.exists(cachedRepositoryPath)) {
-                        let repo = try self.provider.open(repository: handle.repository, at: cachedRepositoryPath)
-                        try repo.fetch()
+                    if fileSystem.exists(cachedRepositoryPath) {
+                        self.provider.open(repository: handle.repository, at: cachedRepositoryPath) { result in
+                            switch result {
+                            case .failure(let error):
+                                // Fetch without populating the cache in the case of an error.
+                                print("Skipping cache due to an error: \(error)")
+                                self.provider.fetch(repository: handle.repository, to: repositoryPath) { result in
+                                    completion(result.map{ _ in FetchDetails(fromCache: false, updatedCache: false) })
+                                }
+                            case .success(let repo):
+                                repo.fetch() { result in
+                                    switch result {
+                                    case .failure(let error):
+                                        completion(.failure(error))
+                                    case .success:
+                                        // Copy the repository from the cache into the repository path.
+                                        self.provider.copy(from: cachedRepositoryPath, to: repositoryPath) { result in
+                                            completion(result.map {  _ in FetchDetails(fromCache: true, updatedCache: true) })
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     } else {
-                        try self.provider.fetch(repository: handle.repository, to: cachedRepositoryPath)
+                        self.provider.fetch(repository: handle.repository, to: cachedRepositoryPath) { result in
+                            switch result {
+                            case .failure(let error):
+                                completion(.failure(error))
+                            case .success:
+                                // Copy the repository from the cache into the repository path.
+                                self.provider.copy(from: cachedRepositoryPath, to: repositoryPath) { result in
+                                    completion(result.map {  _ in FetchDetails(fromCache: true, updatedCache: true) })
+                                }
+                            }
+                        }
                     }
-                    updatedCache = true
-                    // Copy the repository from the cache into the repository path.
-                    try self.provider.copy(from: cachedRepositoryPath, to: repositoryPath)
-                    fromCache = true
                 }
             } catch {
                 // Fetch without populating the cache in the case of an error.
                 print("Skipping cache due to an error: \(error)")
-                try self.provider.fetch(repository: handle.repository, to: repositoryPath)
-                fromCache = false
+                self.provider.fetch(repository: handle.repository, to: repositoryPath) { result in
+                    completion(result.map{ _ in FetchDetails(fromCache: false, updatedCache: false) })
+                }
             }
         } else {
             // Fetch without populating the cache when no `cachePath` is set.
-            try self.provider.fetch(repository: handle.repository, to: repositoryPath)
-            fromCache = false
+            self.provider.fetch(repository: handle.repository, to: repositoryPath) { result in
+                completion(result.map{ _ in FetchDetails(fromCache: false, updatedCache: false) })
+            }
         }
-        return FetchDetails(fromCache: fromCache, updatedCache: updatedCache)
     }
 
     /// Returns the handle for repository if available, otherwise creates a new one.
@@ -423,22 +511,23 @@ public class RepositoryManager {
     }
 
     /// Open a repository from a handle.
-    private func open(_ handle: RepositoryHandle) throws -> Repository {
-        return try provider.open(
-            repository: handle.repository, at: path.appending(handle.subpath))
+    private func open(_ handle: RepositoryHandle, completion: @escaping (Result<Repository, Error>) -> Void) {
+        self.provider.open(repository: handle.repository, at: path.appending(handle.subpath), completion: completion)
     }
 
     /// Clone a repository from a handle.
     private func cloneCheckout(
         _ handle: RepositoryHandle,
         to destinationPath: AbsolutePath,
-        editable: Bool
-    ) throws {
-        try provider.cloneCheckout(
+        editable: Bool,
+        completion: @escaping (Result<Void, Error>) -> Void
+    ) {
+        self.provider.cloneCheckout(
             repository: handle.repository,
             at: path.appending(handle.subpath),
             to: destinationPath,
-            editable: editable)
+            editable: editable,
+            completion: completion)
     }
 
     /// Removes the repository.

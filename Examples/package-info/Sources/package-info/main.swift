@@ -1,3 +1,4 @@
+import Basics
 import PackageModel
 import PackageLoading
 import PackageGraph
@@ -31,8 +32,8 @@ let package = localFileSystem.currentWorkingDirectory!
 // There are several levels of information available.
 // Each takes longer to load than the level above it, but provides more detail.
 let diagnostics = DiagnosticsEngine()
-let manifest = try ManifestLoader.loadManifest(packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], packageKind: .local)
-let loadedPackage = try PackageBuilder.loadPackage(packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics)
+let manifest = try temp_await { ManifestLoader.loadManifest(packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], packageKind: .local, on: .global(), completion: $0) }
+let loadedPackage = try temp_await { PackageBuilder.loadPackage(packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics, on: .global(), completion: $0) }
 let graph = try Workspace.loadGraph(packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics)
 
 // EXAMPLES
