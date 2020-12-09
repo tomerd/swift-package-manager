@@ -293,6 +293,8 @@ public final class ManifestLoader: ManifestLoaderProtocol {
     ) {
         queue.async {
             do {
+                print("---- loadManifest \(baseURL) \(version)")
+                
                 try self.createCacheIfNeeded()
 
                 // Inform the delegate.

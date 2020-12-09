@@ -47,6 +47,24 @@ public final class ThreadSafeKeyValueStore<Key, Value> where Key: Hashable {
             self.underlying.isEmpty
         }
     }
+    
+    public var count: Int {
+        self.lock.withLock {
+            self.underlying.count
+        }
+    }
+    
+    public func forEach(_ body: ((key: Key, value: Value)) throws -> Void) rethrows {
+        try self.lock.withLock {
+            try self.underlying.forEach(body)
+        }
+    }
+    
+    public func mapValues<T>(_ transform: (Value) throws -> T) rethrows -> [Key : T] {
+        try self.lock.withLock {
+            try self.underlying.mapValues(transform)
+        }
+    }
 }
 
 /// Thread-safe value boxing  structure
@@ -90,4 +108,9 @@ public final class ThreadSafeBox<Value> {
 @available(*, deprecated, message: "replace with async/await when available")
 public func temp_await<T, ErrorType>(_ body: (@escaping (Result<T, ErrorType>) -> Void) -> Void) throws -> T {
     return try tsc_await(body)
+}
+
+@available(*, deprecated, message: "replace with async/await when available")
+public func temp_await<T>(_ body: (@escaping (T) -> Void) -> Void) -> T {
+    return tsc_await(body)
 }

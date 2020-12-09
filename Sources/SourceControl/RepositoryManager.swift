@@ -220,7 +220,8 @@ public class RepositoryManager {
 
         self.operationQueue = OperationQueue()
         self.operationQueue.name = "org.swift.swiftpm.repomanagerqueue-concurrent"
-        self.operationQueue.maxConcurrentOperationCount = 10
+        // FIXME: TOMER should compute off of CPU
+        self.operationQueue.maxConcurrentOperationCount = 50
 
         self.persistence = SimplePersistence(
             fileSystem: fileSystem,

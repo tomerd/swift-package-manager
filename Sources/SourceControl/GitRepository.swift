@@ -12,6 +12,7 @@ import Basics
 import Dispatch
 import TSCBasic
 import TSCUtility
+import class Foundation.OperationQueue
 
 // MARK: - GitShellHelper
 
@@ -19,9 +20,15 @@ import TSCUtility
 private struct GitShellHelper {
     /// Reference to process set, if installed.
     private let processSet: ProcessSet?
-
+    
+    private let operationQueue: OperationQueue
+    
     init(processSet: ProcessSet? = nil) {
         self.processSet = processSet
+        self.operationQueue = OperationQueue()
+        self.operationQueue.name = "org.swift.swiftpm.git-shell"
+        // FIXME: TOMER should compute off of CPU
+        self.operationQueue.maxConcurrentOperationCount = 1
     }
 
     /// Private function to invoke the Git tool with its default environment and given set of arguments.  The specified
@@ -33,28 +40,31 @@ private struct GitShellHelper {
              barrier: Bool,
              completion: @escaping (Result<String, Error>) -> Void
     ) {
-        queue.async(flags: barrier ? .barrier : .assignCurrentContext) {
-            let process = Process(arguments: [Git.tool] + args, environment: environment, outputRedirection: .collect)
-            let result: ProcessResult
-            do {
-                try self.processSet?.add(process)
-                try process.launch()
-                result = try process.waitUntilExit()
-                guard result.exitStatus == .terminated(code: 0) else {
-                    return completion(.failure(GitShellError(result: result)))
+        //FIXME: TOMER double queue
+        self.operationQueue.addOperation {
+            //queue.async(flags: barrier ? .barrier : .assignCurrentContext) {
+                let process = Process(arguments: [Git.tool] + args, environment: environment, outputRedirection: .collect)
+                let result: ProcessResult
+                do {
+                    try self.processSet?.add(process)
+                    try process.launch()
+                    result = try process.waitUntilExit()
+                    guard result.exitStatus == .terminated(code: 0) else {
+                        return completion(.failure(GitShellError(result: result)))
+                    }
+                    return try completion(.success(result.utf8Output().spm_chomp()))
+                } catch let error as GitShellError {
+                    completion(.failure(error))
+                } catch {
+                    // Handle a failure to even launch the Git tool by synthesizing a result that we can wrap an error around.
+                    let result = ProcessResult(arguments: process.arguments,
+                                               environment: process.environment,
+                                               exitStatus: .terminated(code: -1),
+                                               output: .failure(error),
+                                               stderrOutput: .failure(error))
+                    completion(.failure(GitShellError(result: result)))
                 }
-                return try completion(.success(result.utf8Output().spm_chomp()))
-            } catch let error as GitShellError {
-                completion(.failure(error))
-            } catch {
-                // Handle a failure to even launch the Git tool by synthesizing a result that we can wrap an error around.
-                let result = ProcessResult(arguments: process.arguments,
-                                           environment: process.environment,
-                                           exitStatus: .terminated(code: -1),
-                                           output: .failure(error),
-                                           stderrOutput: .failure(error))
-                completion(.failure(GitShellError(result: result)))
-            }
+            //}
         }
     }
 }
@@ -461,7 +471,7 @@ public final class GitRepository: Repository, WorkingCheckout {
     }
 
     public func openFileView(revision: Revision, completion: @escaping (Result<FileSystem, Error>) -> Void) {
-        completion(Result(catching: { try GitFileSystemView(repository: self, revision: revision) }))
+        completion(.success(GitFileSystemView(repository: self, revision: revision)))
     }
 
     // MARK: Working Checkout Interface

@@ -308,13 +308,13 @@ class GitRepositoryTests: XCTestCase {
             let repoSpec = RepositorySpecifier(url: testRepoPath.pathString)
             try provider.fetch(repository: repoSpec, to: testClonePath)
             let clonedRepo = try provider.open(repository: repoSpec, at: testClonePath)
-            XCTAssertEqual((try clonedRepo.tags()), ["1.2.3"])
+            XCTAssertEqual(try clonedRepo.tags(), ["1.2.3"])
 
             // Clone off a checkout.
             let checkoutPath = path.appending(component: "checkout")
             try provider.cloneCheckout(repository: repoSpec, at: testClonePath, to: checkoutPath, editable: false)
             let checkoutRepo = try provider.openCheckout(at: checkoutPath)
-            XCTAssertEqual((try checkoutRepo.tags2()), ["1.2.3"])
+            XCTAssertEqual(try checkoutRepo.tags2(), ["1.2.3"])
 
             // Add a new file to original repo.
             try localFileSystem.writeFileContents(testRepoPath.appending(component: "test.txt"), bytes: "Hi")
@@ -325,11 +325,11 @@ class GitRepositoryTests: XCTestCase {
 
             // Update the cloned repo.
             try clonedRepo.fetch()
-            XCTAssertEqual((try clonedRepo.tags()).sorted(), ["1.2.3", "2.0.0"])
+            XCTAssertEqual(try clonedRepo.tags().sorted(), ["1.2.3", "2.0.0"])
 
             // Update the checkout.
             try checkoutRepo.fetch2()
-            XCTAssertEqual((try checkoutRepo.tags2()).sorted(), ["1.2.3", "2.0.0"])
+            XCTAssertEqual(try checkoutRepo.tags2().sorted(), ["1.2.3", "2.0.0"])
         }
     }
 

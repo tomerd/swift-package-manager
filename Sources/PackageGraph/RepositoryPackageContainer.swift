@@ -162,8 +162,9 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
     public func getTag(for version: Version, completion: @escaping (Result<String?, Error>) -> Void) {
         self.knownVersions() { result in
             switch result {
-            case .failure(let error):
-                completion(.failure(error)) // FIXME: TOMER return nil?
+            case .failure:
+                //completion(.failure(error)) // FIXME: TOMER return nil?
+                completion(.success(nil))
             case .success(let knownVersions):
                 completion(.success(knownVersions[version]))
             }
@@ -201,18 +202,12 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
                         completion(.failure(error))
                     case .success(let revision):
                         self.repository.openFileView(revision: revision) { result in
-                            switch result {
-                            case .failure(let error):
-                                completion(.failure(error))
-                            case .success(let fs):
-                                do {
-                                    let toolsVersion = try self.toolsVersionLoader.load(at: .root, fileSystem: fs)
-                                    self.toolsVersionsCache[version] = toolsVersion
-                                    completion(.success(toolsVersion))
-                                } catch {
-                                    completion(.failure(error))
-                                }
+                            let result = result.tryMap { fs -> ToolsVersion in
+                                let toolsVersion = try self.toolsVersionLoader.load(at: .root, fileSystem: fs)
+                                self.toolsVersionsCache[version] = toolsVersion
+                                return toolsVersion
                             }
+                            completion(result)
                         }
                     }
                 }
@@ -230,7 +225,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
                     return completion(.failure(StringError("unknown tag \(version)")))
                 }
                 self.getAndCacheDependencies(forIdentifier: tag, productFilter: productFilter,
-                    getDependencies: { completion in
+                    loader: { completion in
                         self.getRevision(forTag: tag) { result in
                             switch result {
                             case .failure(let error):
@@ -265,7 +260,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
 
     public func getDependencies(at revision: String, productFilter: ProductFilter, completion: @escaping (Result<[Constraint], Error>) -> Void) {
         self.getAndCacheDependencies(forIdentifier: revision, productFilter: productFilter,
-            getDependencies: { completion in
+             loader: { completion in
                 self.getRevision(forIdentifier: revision) { result in
                     switch result {
                     case .failure(let error):
@@ -344,13 +339,13 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
     private func getAndCacheDependencies(
             forIdentifier identifier: String,
             productFilter: ProductFilter,
-            getDependencies: @escaping ( @escaping (Result<(Manifest, [Constraint]), Error>) -> Void) -> Void,
+            loader: @escaping ( @escaping (Result<(Manifest, [Constraint]), Error>) -> Void) -> Void,
             completion: @escaping (Result<(Manifest, [Constraint]), Error>) -> Void
         ) {
             if let cached = (self.dependenciesCacheLock.withLock { self.dependenciesCache[identifier, default: [:]][productFilter] }) {
                 return completion(.success(cached))
             }
-            getDependencies() { result in
+            loader() { result in
                 if case .success(let deps) = result {
                     self.dependenciesCacheLock.withLock {
                         self.dependenciesCache[identifier, default: [:]][productFilter] = deps
@@ -454,8 +449,9 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
     public func isToolsVersionCompatible(at version: Version, completion: @escaping (Result<Bool, Error>) -> Void) {
         self.toolsVersion(for: version) { result in
             switch result {
-            case .failure(let error):
-                completion(.failure(error)) // FIXME: TOMER return false?
+            case .failure:
+                //completion(.failure(error)) // FIXME: TOMER return false?
+                completion(.success(false))
             case .success(let toolsVersion):
                 completion(.success(self.isValidToolsVersion(toolsVersion)))
             }

@@ -613,20 +613,17 @@ public struct PubgrubDependencyResolver {
     }
 
     private func computeCounts(for terms: [Term], completion: @escaping (Result<[Term: Int], Error>) -> Void) {
-        let lock = Lock()
-        var results = [Term: Result<Int, Error>]()
+        let results = ThreadSafeKeyValueStore<Term, Result<Int, Error>>()
 
         terms.forEach { term in
             provider.getContainer(for: term.node.package) { result in
                 let result = result.flatMap { container in Result(catching: { try container.versionCount(term.requirement) }) }
-                lock.withLock {
-                    results[term] = result
-                    if results.count == terms.count {
-                        do {
-                            completion(.success(try results.mapValues { try $0.get() }))
-                        } catch {
-                            completion(.failure(error))
-                        }
+                results[term] = result
+                if results.count == terms.count {
+                    do {
+                        completion(.success(try results.mapValues { try $0.get() }))
+                    } catch {
+                        completion(.failure(error))
                     }
                 }
             }
@@ -1250,12 +1247,14 @@ private final class PubGrubPackageContainer {
             }.joined())
         }
 
-        let (lowerBounds, upperBounds) = try computeBounds(for: node, constraints: constraints, from: version, products: node.productFilter)
+        print("computeBounds \(node.package.name)")
+        let bounds = try temp_await { computeBounds(for: node, constraints: constraints, from: version, products: node.productFilter, completion: $0) }
+        print("~computeBounds \(node.package.name)")
 
         return constraints.map { constraint in
             var terms: OrderedSet<Term> = []
-            let lowerBound = lowerBounds[constraint.identifier] ?? "0.0.0"
-            let upperBound = upperBounds[constraint.identifier] ?? Version(version.major + 1, 0, 0)
+            let lowerBound = bounds.lower[constraint.identifier] ?? "0.0.0"
+            let upperBound = bounds.upper[constraint.identifier] ?? Version(version.major + 1, 0, 0)
             assert(lowerBound < upperBound)
 
             // We only have version-based requirements at this point.
@@ -1281,17 +1280,36 @@ private final class PubGrubPackageContainer {
     /// If a dependency is absent in the dictionary, it is present in all versions of the package
     /// above or below the given version. As with regular version ranges, the lower bound is
     /// inclusive and the upper bound is exclusive.
+    struct Bounds {
+        var lower: [PackageReference: Version]
+        var upper: [PackageReference: Version]
+        
+        init() {
+            self.lower = [:]
+            self.upper = [:]
+        }
+        
+        init(lower: [PackageReference: Version], upper: [PackageReference: Version]) {
+            self.lower = lower
+            self.upper = upper
+        }
+    }
+    
     private func computeBounds(
         for node: DependencyResolutionNode,
         constraints: [PackageContainerConstraint],
         from fromVersion: Version,
-        products: ProductFilter
-    ) throws -> (lowerBounds: [PackageReference: Version], upperBounds: [PackageReference: Version]) {
+        products: ProductFilter,
+        completion: @escaping (Result<Bounds, Error>) -> Void
+    ) {
         if constraints.isEmpty {
-            return ([:], [:])
+            return completion(.success(Bounds()))
         }
-
-        func compute(_ versions: AnyCollection<Version>, upperBound: Bool) -> [PackageReference: Version] {
+        
+        func compute(_ versions: AnyCollection<Version>,
+                     toolsVersionsCompatible: ThreadSafeKeyValueStore<Version, Bool>,
+                     dependencies: ThreadSafeKeyValueStore<Version, [PackageContainerConstraint]>,
+                     upperBound: Bool) throws -> [PackageReference: Version] {
             var result: [PackageReference: Version] = [:]
             var prev = fromVersion
 
@@ -1301,14 +1319,25 @@ private final class PubGrubPackageContainer {
                 // finding the lower bound since that is inclusive.
                 let bound = upperBound ? version : prev
 
-                // If we hit a version which doesn't have a compatible tools version then that's the boundary.
-                // FIXME: TOMER handle error
-                let isToolsVersionCompatible = (try? temp_await { self.underlying.isToolsVersionCompatible(at: version, completion: $0) }) ?? false
-                // Record this version as the bound for our list of dependencies, if appropriate.
-                if !isToolsVersionCompatible {
-                    for constraint in constraints where !result.keys.contains(constraint.identifier) {
+                for constraint in constraints where !result.keys.contains(constraint.identifier) {
+                    guard let isToolsVersionCompatible = toolsVersionsCompatible[version] else {
+                        assertionFailure("version \(version) tools-version-compatibility not found")
+                        throw InternalError("version \(version) tools-version-compatibility not found")
+                    }
+                    // If we hit a version which doesn't have a compatible tools version then that's the boundary.
+                    if !isToolsVersionCompatible {
                         // Record the bound if the tools version isn't compatible at the current version.
                         result[constraint.identifier] = bound
+                    } else {
+                        // Get the dependencies at this version.
+                        guard let currentDependencies = dependencies[version] else {
+                            assertionFailure("version \(version) dependencies not found")
+                            throw InternalError("version \(version) dependencies not found")
+                        }
+                        // Record this version as the bound for our list of dependencies, if appropriate.
+                        if currentDependencies.first(where: { $0.identifier == constraint.identifier }) != constraint {
+                            result[constraint.identifier] = bound
+                        }
                     }
                     // We're done if we found bounds for all of our dependencies.
                     if result.count == constraints.count {
@@ -1316,50 +1345,74 @@ private final class PubGrubPackageContainer {
                     }
                 }
 
-                // Get the dependencies at this version.
-                let currentDependencies = (try? temp_await { self.underlying.getDependencies(at: version, productFilter: products, completion: $0) }) ?? []
-                // Record this version as the bound for our list of dependencies, if appropriate.
-                for constraint in constraints where !result.keys.contains(constraint.identifier) {
-                    if currentDependencies.first(where: { $0.identifier == constraint.identifier }) != constraint {
-                        result[constraint.identifier] = bound
-                    }
-                }
-                // We're done if we found bounds for all of our dependencies.
-                if result.count == constraints.count {
-                    break
-                }
-
                 prev = version
             }
 
             return result
         }
+        
+        self.queue.async {
+            do {
+                let versions: [Version] = (try temp_await { self.underlying.reversedVersions(completion: $0) }).reversed()
+                guard let idx = versions.firstIndex(of: fromVersion) else {
+                    throw InternalError("version \(fromVersion) for \(node.package.name) not found")
+                }
+                
+                // Precompute required data in parallel
 
-        let versions: [Version] = (try temp_await { self.underlying.reversedVersions(completion: $0) }).reversed()
+                let sync = DispatchGroup()
+                
+                // loads manifests in parallel
+                // this is a performance bottle-neck!
+                let toolsVersionsCompatible = ThreadSafeKeyValueStore<Version, Bool>()
+                for version in versions {
+                    sync.enter()
+                    print("isToolsVersionCompatible \(version) for \(node.package.name)")
+                    self.underlying.isToolsVersionCompatible(at: version) { result in
+                        defer { sync.leave() }
+                        toolsVersionsCompatible[version] = (try? result.get()) ?? false
+                    }
+                }
+                
+                // FIXME: should this timeout be configurable?
+                if case .timedOut = sync.wait(timeout: .now() + 60) {
+                    throw StringError("timeout computing \(node.package.name) bounds")
+                }
+                
+                // loads dependencies in parallel
+                // this is a performance bottle-neck!
+                let dependencies = ThreadSafeKeyValueStore<Version, [PackageContainerConstraint]>()
+                for version in (versions.filter { toolsVersionsCompatible[$0] ?? true }) {
+                    sync.enter()
+                    print("getDependencies \(version) for \(node.package.name)")
+                    self.underlying.getDependencies(at: version, productFilter: products) { result in
+                        defer { sync.leave() }
+                        dependencies[version] = (try? result.get()) ?? []
+                    }
+                }
+                
+                // FIXME: should this timeout be configurable?
+                if case .timedOut = sync.wait(timeout: .now() + 60) {
+                    throw StringError("timeout computing \(node.package.name) bounds")
+                }
 
-        // This is guaranteed to be present.
-        let idx = versions.firstIndex(of: fromVersion)!
+                // Compute upper and lower bounds for the dependencies.
 
-        // Compute upper and lower bounds for the dependencies.
+                let upperBounds = try compute(AnyCollection(versions.dropFirst(idx + 1)),
+                                          toolsVersionsCompatible: toolsVersionsCompatible,
+                                          dependencies: dependencies,
+                                          upperBound: true)
 
-        let sync = DispatchGroup()
+                let lowerBounds = try compute(AnyCollection(versions.dropLast(versions.count - idx).reversed()),
+                                          toolsVersionsCompatible: toolsVersionsCompatible,
+                                          dependencies: dependencies,
+                                          upperBound: false)
+                
+                completion(.success(Bounds(lower: lowerBounds, upper: upperBounds)))
 
-        var upperBounds: [PackageReference: Version] = [:]
-        self.queue.async(group: sync) {
-            upperBounds = compute(AnyCollection(versions.dropFirst(idx + 1)), upperBound: true)
-        }
-
-        var lowerBounds: [PackageReference: Version] = [:]
-        self.queue.async(group: sync) {
-            lowerBounds = compute(AnyCollection(versions.dropLast(versions.count - idx).reversed()), upperBound: false)
-        }
-
-        // FIXME: should this timeout be configurable?
-        switch sync.wait(timeout: .now() + 60) {
-        case .timedOut:
-            throw StringError("timeout computing \(node.package.name) bounds")
-        case .success:
-            return (lowerBounds, upperBounds)
+            } catch {
+                completion(.failure(error))
+            }
         }
     }
 }
