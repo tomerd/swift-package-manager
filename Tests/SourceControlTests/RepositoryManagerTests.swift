@@ -345,6 +345,41 @@ class RepositoryManagerTests: XCTestCase {
         }
     }
 
+    func testCacheWithConcurrency() throws {
+        fixture(name: "DependencyResolution/External/Simple") { prefix in
+            let cachePath = prefix.appending(component: "cache") // will be created by RepositoryManager
+            let repositoriesPath = prefix.appending(component: "repositories")
+            try localFileSystem.createDirectory(repositoriesPath)
+            let repo = RepositorySpecifier(url: prefix.appending(component: "Foo").pathString)
+
+            let provider = GitRepositoryProvider()
+            let delegate = DummyRepositoryManagerDelegate()
+
+            let manager = RepositoryManager(path: repositoriesPath, provider: provider, delegate: delegate, cachePath: cachePath)
+            manager.cacheLocalPackages = true
+
+            let sync = DispatchGroup()
+            for _ in (0 ..< 500) {
+                sync.enter()
+                manager.lookup(repository: repo, on: .global()) { result in
+                    defer { sync.leave() }
+                    switch result {
+                    case .failure(let error):
+                        XCTFail("\(error)")
+                    case .success(let handler):
+                        XCTAssertEqual(handler.repository.basename, repo.basename)
+                        XCTAssertDirectoryExists(cachePath.appending(component: repo.fileSystemIdentifier))
+                        XCTAssertDirectoryExists(repositoriesPath.appending(component: repo.fileSystemIdentifier))
+                    }
+                }
+            }
+
+            if case .timedOut = sync.wait(timeout: .now() + 120) {
+                XCTFail("timeout")
+            }
+        }
+    }
+
     func testReset() throws {
         try testWithTemporaryDirectory { path in
             let repos = path.appending(component: "repo")
