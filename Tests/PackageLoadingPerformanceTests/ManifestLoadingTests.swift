@@ -13,6 +13,7 @@ import XCTest
 import TSCBasic
 import SPMTestSupport
 import PackageLoading
+import PackageModel
 
 class ManifestLoadingPerfTests: XCTestCasePerf {
     let manifestLoader = ManifestLoader(manifestResources: Resources.default)
@@ -36,10 +37,11 @@ class ManifestLoadingPerfTests: XCTestCasePerf {
             measure {
                 for _ in 0..<N {
                     let manifest = try! self.manifestLoader.load(
-                        package: path,
-                        baseURL: "/Trivial",
-                        toolsVersion: .v4_2,
-                        packageKind: .root)
+                        packageIdentity: PackageIdentity2("fake"), // FIXME
+                        packageKind: .root,
+                        at: path,
+                        url: "/Trivial",
+                        toolsVersion: .v4_2)
                     XCTAssertEqual(manifest.name, "Trivial")
                 }
             }
@@ -68,10 +70,11 @@ class ManifestLoadingPerfTests: XCTestCasePerf {
             measure {
                 for _ in 0..<N {
                     let manifest = try! self.manifestLoader.load(
-                        package: path,
-                        baseURL: "/Trivial",
-                        toolsVersion: .v4_2,
-                        packageKind: .root)
+                        packageIdentity: PackageIdentity2("fake"), // FIXME
+                        packageKind: .root,
+                        at: path,
+                        url: "/Trivial",
+                        toolsVersion: .v4_2)
                     XCTAssertEqual(manifest.name, "Foo")
                 }
             }

@@ -53,7 +53,7 @@ extension PackageReference {
     /// Initializes a `PackageReference` from `RepositorySpecifier`
     init(repository: RepositorySpecifier, kind: PackageReference.Kind = .remote) {
         self.init(
-            identity: PackageIdentity(url: repository.url),
+            identity: PackageIdentity2(repository.url), // FIXME need to change the model to not be repo specific
             path: repository.url,
             kind: kind
         )

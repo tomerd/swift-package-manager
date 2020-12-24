@@ -374,15 +374,15 @@ extension Workspace {
     ///     - diagnostics: The diagnostics engine that reports errors, warnings
     ///       and notes.
     public func edit(
-        packageName: String,
+        package packageIdentity: PackageIdentity2,
         path: AbsolutePath? = nil,
         revision: Revision? = nil,
         checkoutBranch: String? = nil,
         diagnostics: DiagnosticsEngine
     ) {
         do {
-            try _edit(
-                packageName: packageName,
+            try self._edit(
+                package: packageIdentity,
                 path: path,
                 revision: revision,
                 checkoutBranch: checkoutBranch,
@@ -405,13 +405,14 @@ extension Workspace {
     ///     - diagnostics: The diagnostics engine that reports errors, warnings
     ///           and notes.
     public func unedit(
-        packageName: String,
+        package packageIdentity: PackageIdentity2,
         forceRemove: Bool,
         root: PackageGraphRootInput,
         diagnostics: DiagnosticsEngine
     ) throws {
-        guard let dependency = state.dependencies[forNameOrIdentity: packageName] else {
-            diagnostics.emit(.dependencyNotFound(packageName: packageName))
+        guard let dependency = state.dependencies[forIdentity: packageIdentity] else {
+            // FIXME
+            diagnostics.emit(.dependencyNotFound(packageName: packageIdentity.description))
             return
         }
 
@@ -433,7 +434,7 @@ extension Workspace {
     ///   - diagnostics: The diagnostics engine that reports errors, warnings
     ///     and notes.
     public func resolve(
-        packageName: String,
+        package packageIdentity: PackageIdentity2,
         root: PackageGraphRootInput,
         version: Version? = nil,
         branch: String? = nil,
@@ -441,8 +442,9 @@ extension Workspace {
         diagnostics: DiagnosticsEngine
     ) throws {
         // Look up the dependency and check if we can pin it.
-        guard let dependency = state.dependencies[forNameOrIdentity: packageName] else {
-            diagnostics.emit(.dependencyNotFound(packageName: packageName))
+        guard let dependency = state.dependencies[forIdentity: packageIdentity] else {
+            // FIXME
+            diagnostics.emit(.dependencyNotFound(packageName: packageIdentity.description))
             return
         }
         guard let currentState = checkoutState(for: dependency, diagnostics: diagnostics) else {
@@ -461,8 +463,8 @@ extension Workspace {
             requirement = currentState.requirement
         }
         let constraint = PackageContainerConstraint(
-                // If any products are required, the rest of the package graph will supply those constraints.
-                container: dependency.packageRef, requirement: requirement, products: .nothing)
+            // If any products are required, the rest of the package graph will supply those constraints.
+            package: dependency.package, requirement: requirement, products: .nothing)
 
         // Run the resolution.
         try self._resolve(root: root, forceResolution: false, extraConstraints: [constraint], diagnostics: diagnostics)
@@ -544,7 +546,7 @@ extension Workspace {
     @discardableResult
     public func updateDependencies(
         root: PackageGraphRootInput,
-        packages: [String] = [],
+        packages: [PackageIdentity2] = [],
         diagnostics: DiagnosticsEngine,
         dryRun: Bool = false
     ) throws -> [(PackageReference, Workspace.PackageStateChange)]? {
@@ -553,10 +555,12 @@ extension Workspace {
 
         // FIXME: this should not block
         // Load the root manifests and currently checked out manifests.
-        let rootManifests = try temp_await { self.loadRootManifests(packages: root.packages, diagnostics: diagnostics, completion: $0) }
+        var root = root
+        let rootManifestsPaths = Array(root.manifests.keys)
+        root.manifests = try temp_await { self.loadRootManifests(packages: rootManifestsPaths, diagnostics: diagnostics, completion: $0) }
 
         // Load the current manifests.
-        let graphRoot = PackageGraphRoot(input: root, manifests: rootManifests)
+        let graphRoot = PackageGraphRoot(input: root)
         let currentManifests = try self.loadDependencyManifests(root: graphRoot, diagnostics: diagnostics)
 
         // Abort if we're unable to load the pinsStore or have any diagnostics.
@@ -569,7 +573,7 @@ extension Workspace {
         var updateConstraints = currentManifests.editedPackagesConstraints()
 
         // Create constraints based on root manifest and pins for the update resolution.
-        updateConstraints += graphRoot.constraints(mirrors: config.mirrors)
+        updateConstraints += graphRoot.constraints()
 
         let pinsMap: PinsStore.PinsMap
         if packages.isEmpty {
@@ -578,7 +582,7 @@ extension Workspace {
         } else {
             // We have input packages so we have to partially update the package graph. Remove
             // the pins for the input packages so only those packages are updated.
-            pinsMap = pinsStore.pinsMap.filter{ !packages.contains($0.value.packageRef.name) }
+            pinsMap = pinsStore.pinsMap.filter{ !packages.contains($0.value.package.identity) }
         }
         
         // Resolve the dependencies.
@@ -709,9 +713,9 @@ extension Workspace {
         // Load the graph.
         return try PackageGraph.load(
             root: manifests.root,
-            mirrors: config.mirrors,
+            //mirrors: config.mirrors,
             additionalFileRules: additionalFileRules,
-            externalManifests: manifests.allDependencyManifests(),
+            externalManifests: manifests.dependencyManifests(),
             requiredDependencies: manifests.computePackageURLs().required,
             unsafeAllowedPackages: manifests.unsafeAllowedPackages(),
             remoteArtifacts: remoteArtifacts,
@@ -733,7 +737,7 @@ extension Workspace {
         diagnostics: DiagnosticsEngine
     ) -> PackageGraph {
         try! self.loadPackageGraph(
-            rootInput: PackageGraphRootInput(packages: [root], mirrors: config.mirrors),
+            rootInput: PackageGraphRootInput(packages: [root]),
             explicitProduct: explicitProduct,
             diagnostics: diagnostics
         )
@@ -746,7 +750,7 @@ extension Workspace {
         diagnostics: DiagnosticsEngine
     ) throws -> PackageGraph {
         try self.loadPackageGraph(
-            rootInput: PackageGraphRootInput(packages: [rootPath], mirrors: config.mirrors),
+            rootInput: PackageGraphRootInput(packages: [rootPath]),
             explicitProduct: explicitProduct,
             diagnostics: diagnostics
         )
@@ -768,35 +772,37 @@ extension Workspace {
 
     /// Loads and returns manifests at the given paths.
     public func loadRootManifests(
-        packages: [AbsolutePath],
+        packages paths: [AbsolutePath],
         diagnostics: DiagnosticsEngine,
-        completion: @escaping(Result<[Manifest], Error>) -> Void
+        completion: @escaping(Result<[AbsolutePath: Manifest], Error>) -> Void
     ) {
-        let lock = Lock()
         let sync = DispatchGroup()
-        var rootManifests = [Manifest]()
-        packages.forEach { package in
+        let rootManifests = ThreadSafeKeyValueStore<AbsolutePath, Manifest>()
+        paths.forEach { path in
             sync.enter()
-            self.loadManifest(packagePath: package, url: package.pathString, packageKind: .root, diagnostics: diagnostics) { result in
+            self.loadManifest(packageIdentity: PackageIdentity2(path.pathString), // FIXME fake identity for root manifest
+                              packageKind: .root,
+                              at: path,
+                              url: path.pathString,
+                              diagnostics: diagnostics) { result in
                 defer { sync.leave() }
                 if case .success(let manifest) = result {
-                    lock.withLock {
-                        rootManifests.append(manifest)
-                    }
+                    rootManifests[path] = manifest
                 }
             }
         }
 
         sync.notify(queue: self.queue) {
+            // FIXME: restore?
             // Check for duplicate root packages.
-            let duplicateRoots = rootManifests.spm_findDuplicateElements(by: \.name)
+            /*let duplicateRoots = rootManifests.spm_findDuplicateElements(by: \.name)
             if !duplicateRoots.isEmpty {
                 let name = duplicateRoots[0][0].name
                 diagnostics.emit(error: "found multiple top-level packages named '\(name)'")
                 return completion(.success([]))
-            }
+            }*/
 
-            completion(.success(rootManifests))
+            completion(.success(rootManifests.get()))
         }
     }
 
@@ -837,24 +843,25 @@ extension Workspace {
         case .checkout(let checkoutState):
             return checkoutState
         case .edited:
-            diagnostics.emit(error: "dependency '\(dependency.packageRef.name)' already in edit mode")
+            diagnostics.emit(error: "dependency '\(dependency.package.identity)' already in edit mode")
         case .local:
-            diagnostics.emit(error: "local dependency '\(dependency.packageRef.name)' can't be edited")
+            diagnostics.emit(error: "local dependency '\(dependency.package.identity)' can't be edited")
         }
         return nil
     }
 
     /// Edit implementation.
     fileprivate func _edit(
-        packageName: String,
+        package packageIdentity: PackageIdentity2,
         path: AbsolutePath? = nil,
         revision: Revision? = nil,
         checkoutBranch: String? = nil,
         diagnostics: DiagnosticsEngine
     ) throws {
         // Look up the dependency and check if we can edit it.
-        guard let dependency = state.dependencies[forNameOrIdentity: packageName] else {
-            diagnostics.emit(.dependencyNotFound(packageName: packageName))
+        guard let dependency = state.dependencies[forIdentity: packageIdentity] else {
+            // FIXME
+            diagnostics.emit(.dependencyNotFound(packageName: packageIdentity.description))
             return
         }
 
@@ -864,33 +871,38 @@ extension Workspace {
 
         // If a path is provided then we use it as destination. If not, we
         // use the folder with packageName inside editablesPath.
-        let destination = path ?? editablesPath.appending(component: packageName)
+        // FIXME: c99 the identity?
+        let destination = path ?? editablesPath.appending(component: packageIdentity.description)
 
         // If there is something present at the destination, we confirm it has
         // a valid manifest with name same as the package we are trying to edit.
         if fileSystem.exists(destination) {
             // FIXME: this should not block
             let manifest = try temp_await {
-                self.loadManifest(packagePath: destination,
-                                  url: dependency.packageRef.repository.url,
+                self.loadManifest(packageIdentity: dependency.package.identity,
                                   packageKind: .local,
+                                  at: destination,
+                                  url: dependency.package.repository.url,
                                   diagnostics: diagnostics,
                                   completion: $0)
             }
 
-            guard manifest.name == packageName else {
+            // FIXME, restore validation
+            /*guard manifest.name == packageName else {
                 return diagnostics.emit(error: "package at '\(destination)' is \(manifest.name) but was expecting \(packageName)")
-            }
+            }*/
 
             // Emit warnings for branch and revision, if they're present.
             if let checkoutBranch = checkoutBranch {
                 diagnostics.emit(.editBranchNotCheckedOut(
-                    packageName: packageName,
+                    // FIXME
+                    packageName: packageIdentity.description,
                     branchName: checkoutBranch))
             }
             if let revision = revision {
                 diagnostics.emit(.editRevisionNotUsed(
-                    packageName: packageName,
+                    // FIXME
+                    packageName: packageIdentity.description,
                     revisionIdentifier: revision.identifier))
             }
         } else {
@@ -899,7 +911,7 @@ extension Workspace {
             // Get handle to the repository.
             // TODO: replace with async/await when available
             let handle = try temp_await {
-                repositoryManager.lookup(repository: dependency.packageRef.repository, skipUpdate: true, on: self.queue, completion: $0)
+                repositoryManager.lookup(repository: dependency.package.repository, skipUpdate: true, on: self.queue, completion: $0)
             }
             let repo = try handle.open()
 
@@ -926,7 +938,8 @@ extension Workspace {
             try fileSystem.createDirectory(editablesPath)
             // FIXME: We need this to work with InMem file system too.
             if !(fileSystem is InMemoryFileSystem) {
-                let symLinkPath = editablesPath.appending(component: packageName)
+                // FIXME: c99 the identity?
+                let symLinkPath = editablesPath.appending(component: packageIdentity.description)
 
                 // Cleanup any existing symlink.
                 if fileSystem.isSymlink(symLinkPath) {
@@ -948,7 +961,8 @@ extension Workspace {
         }
 
         // Save the new state.
-        state.dependencies.add(dependency.editedDependency(subpath: RelativePath(packageName), unmanagedPath: path))
+        // FIXME: c99 the identity?
+        state.dependencies.add(dependency.editedDependency(subpath: RelativePath(packageIdentity.description), unmanagedPath: path))
         try state.saveState()
     }
 
@@ -966,7 +980,8 @@ extension Workspace {
         switch dependency.state {
         // If the dependency isn't in edit mode, we can't unedit it.
         case .checkout, .local:
-            throw WorkspaceDiagnostics.DependencyNotInEditMode(dependencyName: dependency.packageRef.name)
+            // FIXME
+            throw WorkspaceDiagnostics.DependencyNotInEditMode(dependencyName: dependency.package.identity.description)
 
         case .edited(let path):
             if path != nil {
@@ -1002,10 +1017,10 @@ extension Workspace {
                 // Restore the original checkout.
                 //
                 // The clone method will automatically update the managed dependency state.
-                _ = try clone(package: dependency.packageRef, at: checkoutState)
+                _ = try clone(package: dependency.package, at: checkoutState)
         } else {
             // The original dependency was removed, update the managed dependency state.
-            state.dependencies.remove(forURL: dependency.packageRef.path)
+            state.dependencies.remove(dependency.package.identity)
             try state.saveState()
         }
 
@@ -1034,7 +1049,7 @@ extension Workspace {
         let requiredURLs = dependencyManifests.computePackageURLs().required
 
         for dependency in state.dependencies  {
-            if requiredURLs.contains(where: { $0.path == dependency.packageRef.path }) {
+            if requiredURLs.contains(where: { $0.identity == dependency.package.identity }) {
                 pinsStore.pin(dependency)
             }
         }
@@ -1062,7 +1077,7 @@ fileprivate extension PinsStore {
         }
 
         self.pin(
-            packageRef: dependency.packageRef,
+            package: dependency.package,
             state: checkoutState)
     }
 }
@@ -1091,84 +1106,104 @@ extension Workspace {
         }
 
         /// Find a manifest given its name.
-        func lookup(manifest name: String) -> Manifest? {
+        /*func lookup(manifest name: String) -> Manifest? {
             return dependencies.first(where: { $0.manifest.name == name })?.manifest
-        }
+        }*/
 
         /// Returns all manifests contained in DependencyManifests.
-        public func allDependencyManifests() -> [Manifest] {
-            return dependencies.map({ $0.manifest })
+        public func dependencyManifests() -> [PackageIdentity2: (AbsolutePath, Manifest)] {
+            self.dependencies.reduce(into: [PackageIdentity2: (AbsolutePath, Manifest)](), { partial, item in
+                // FIXME: this make assumption about the dependency path being absolute which is true but we probably wan to validate here
+                partial[item.dependency.package.identity] = (AbsolutePath(item.dependency.package.path), item.manifest)
+            })
         }
 
         /// Computes the identities which are declared in the manifests but aren't present in dependencies.
         public func missingPackageURLs() -> Set<PackageReference> {
-            return computePackageURLs().missing
+            return self.computePackageURLs().missing
         }
 
         /// Returns the list of packages which are allowed to vend products with unsafe flags.
         func unsafeAllowedPackages() -> Set<PackageReference> {
             var result = Set<PackageReference>()
 
-            for dependency in dependencies {
+            for dependency in self.dependencies {
                 let dependency = dependency.dependency
                 switch dependency.state {
                 case .checkout(let checkout):
                     if checkout.isBranchOrRevisionBased {
-                        result.insert(dependency.packageRef)
+                        result.insert(dependency.package)
                     }
                 case .edited:
                     continue
                 case .local:
-                    result.insert(dependency.packageRef)
+                    result.insert(dependency.package)
                 }
             }
 
             // Root packages are always allowed to use unsafe flags.
-            result.formUnion(root.packageRefs)
+            result.formUnion(self.root.packageManifests.map{ $0.key })
 
             return result
         }
 
         func computePackageURLs() -> (required: Set<PackageReference>, missing: Set<PackageReference>) {
-            let manifestsMap: [PackageIdentity: Manifest] = Dictionary(uniqueKeysWithValues:
-                root.manifests.map({ (PackageIdentity(url: $0.url), $0) }) +
-                dependencies.map({ (PackageIdentity(url: $0.manifest.url), $0.manifest) }))
+            let manifestsMap: [PackageIdentity2: Manifest] = Dictionary(uniqueKeysWithValues:
+                self.root.packageManifests.map({ ($0.key.identity, $0.value) }) +
+                self.dependencies.map({ ($0.dependency.package.identity, $0.manifest) })
+            )
 
             var inputIdentities: Set<PackageReference> = []
-            let inputNodes: [GraphLoadingNode] = root.manifests.map({ manifest in
-                let identity = PackageIdentity(url: manifest.url)
-                let package = PackageReference(identity: identity, path: manifest.url, kind: manifest.packageKind)
+            let inputNodes: [GraphLoadingNode] = root.packageManifests.map({ package, manifest in
+                //let identity = PackageIdentity(url: manifest.url)
+                let identity = package.identity
+                // FIXME this is wrong
+                let path = AbsolutePath(package.path)
+                //let package = PackageReference(identity: identity, path: man ifest.url, kind: manifest.packageKind)
                 inputIdentities.insert(package)
-                let node = GraphLoadingNode(manifest: manifest, productFilter: .everything)
+                let node = GraphLoadingNode(identity: identity, path: path, manifest: manifest, productFilter: .everything)
                 return node
             }) + root.dependencies.compactMap({ dependency in
-                let url = workspace.config.mirrors.effectiveURL(forURL: dependency.url)
-                let identity = PackageIdentity(url: url)
-                let package = PackageReference(identity: identity, path: url)
+                //let url = workspace.config.mirrors.effectiveURL(forURL: dependency.url)
+                //let identity = PackageIdentity(url: url)
+                // FIXME effectiveURL should take Foundation.URL
+                let url = workspace.config.mirrors.effectiveURL(forURL: dependency.location.absoluteString)
+                let identity = dependency.identity
+                // FIXME this is wrong
+                let path = AbsolutePath(url)
+                let package = PackageReference(identity: identity, path: path.pathString, kind: .remote)
                 inputIdentities.insert(package)
-                guard let manifest = manifestsMap[identity] else { return nil }
-                let node = GraphLoadingNode(manifest: manifest, productFilter: dependency.productFilter)
-                return node
+                return manifestsMap[identity].map {
+                    GraphLoadingNode(identity: identity, path: path, manifest: $0, productFilter: dependency.productFilter)
+                }
             })
 
             var requiredIdentities: Set<PackageReference> = []
             _ = transitiveClosure(inputNodes) { node in
-                return node.manifest.dependenciesRequired(for: node.productFilter).compactMap({ dependency in
-                    let url = workspace.config.mirrors.effectiveURL(forURL: dependency.url)
-                    let identity = PackageIdentity(url: url)
-                    let package = PackageReference(identity: identity, path: url)
+                return node.manifest.dependenciesRequired(for: node.productFilter).compactMap{ dependency in
+                    //let url = workspace.config.mirrors.effectiveURL(forURL: dependency.url)
+                    //let identity = PackageIdentity(url: url)
+                    // FIXME effectiveURL should take Foundation.URL
+                    let url = workspace.config.mirrors.effectiveURL(forURL: dependency.location.absoluteString)
+                    let identity = dependency.identity
+                    // FIXME this is wrong
+                    let path = AbsolutePath(url)
+                    let package = PackageReference(identity: identity, path: path.pathString, kind: .remote)
                     requiredIdentities.insert(package)
-                    guard let manifest = manifestsMap[identity] else { return nil }
-                    return GraphLoadingNode(manifest: manifest, productFilter: dependency.productFilter)
-                })
+                    return manifestsMap[identity].map {
+                        GraphLoadingNode(identity: identity, path: path, manifest: $0, productFilter: dependency.productFilter)
+                    }
+                }
             }
+
             // FIXME: This should be an ordered set.
             requiredIdentities = inputIdentities.union(requiredIdentities)
 
-            let availableIdentities: Set<PackageReference> = Set(manifestsMap.map({
+            let availableIdentities: Set<PackageReference> = Set(manifestsMap.map{
                 let url = workspace.config.mirrors.effectiveURL(forURL: $0.1.url)
                 return PackageReference(identity: $0.key, path: url, kind: $0.1.packageKind)
-            }))
+            })
+
             // We should never have loaded a manifest we don't need.
             assert(availableIdentities.isSubset(of: requiredIdentities), "\(availableIdentities) | \(requiredIdentities)")
             // These are the missing package identities.
@@ -1189,12 +1224,12 @@ extension Workspace {
                     // FIXME: We shouldn't need to construct a new package reference object here.
                     // We should get the correct one from managed dependency object.
                     let ref = PackageReference(
-                        identity: managedDependency.packageRef.identity,
-                        path: managedDependency.packageRef.path,
+                        identity: managedDependency.package.identity,
+                        path: managedDependency.package.path,
                         kind: .local
                     )
                     let constraint = PackageContainerConstraint(
-                        container: ref,
+                        package: ref,
                         requirement: .unversioned,
                         products: productFilter)
                     allConstraints.append(constraint)
@@ -1222,12 +1257,12 @@ extension Workspace {
                 // FIXME: We shouldn't need to construct a new package reference object here.
                 // We should get the correct one from managed dependency object.
                 let ref = PackageReference(
-                    identity: managedDependency.packageRef.identity,
+                    identity: managedDependency.package.identity,
                     path: workspace.path(for: managedDependency).pathString,
                     kind: .local
                 )
                 let constraint = PackageContainerConstraint(
-                    container: ref,
+                    package: ref,
                     requirement: .unversioned,
                     products: productFilter)
                 constraints.append(constraint)
@@ -1272,7 +1307,7 @@ extension Workspace {
         case .edited(let path):
             return path ?? editablesPath.appending(dependency.subpath)
 		case .local:
-            return AbsolutePath(dependency.packageRef.path)
+            return AbsolutePath(dependency.package.path)
         }
     }
 
@@ -1312,9 +1347,9 @@ extension Workspace {
         let dependenciesToCheck = Array(state.dependencies)
         // Remove any managed dependency which has become a root.
         for dependency in dependenciesToCheck {
-            if root.packageRefs.contains(dependency.packageRef) {
+            if root.packageManifests.keys.contains(dependency.package) {
                 diagnostics.wrap {
-                    try self.remove(package: dependency.packageRef)
+                    try self.remove(package: dependency.package)
                 }
             }
         }
@@ -1326,38 +1361,56 @@ extension Workspace {
         }
 
         // optimization: preload in parallel
-        let rootDependencyManifestsURLs = root.dependencies.map{ config.mirrors.effectiveURL(forURL: $0.url) }
-        let rootDependencyManifests = try temp_await { self.loadManifests(forURLs: rootDependencyManifestsURLs, diagnostics: diagnostics, completion: $0) }
+        //let rootDependencyManifestsURLs = root.dependencies.map{ ($0.identity, config.mirrors.effectiveURL(forURL: $0.url)) }
+        //let rootDependencyManifests = try temp_await { self.loadManifests(forURLs: rootDependencyManifestsURLs, diagnostics: diagnostics, completion: $0) }
 
-        let inputManifests = root.manifests + rootDependencyManifests
+        //let inputManifests = root.packageManifests.map{ $0.value } + rootDependencyManifests
 
         // Map of loaded manifests. We do this to avoid reloading the shared nodes.
 
         // Compute the transitive closure of available dependencies.
-        struct NameAndFilter: Hashable { // Just because a raw tuple cannot be hashable.
-            let name: String
+        struct IdentityAndFilter: Hashable { // Just because a raw tuple cannot be hashable.
+            let identity: PackageIdentity2
             let filter: ProductFilter
         }
 
-        // optimization: preload in parallel
-        let inputDependenciesURLs = inputManifests.compactMap { $0.dependencies.compactMap{ config.mirrors.effectiveURL(forURL: $0.url) } }.flatMap { $0 }
-        // FIXME: this should not block
-        var loadedManifests = try temp_await { self.loadManifests(forURLs: inputDependenciesURLs, diagnostics: diagnostics, completion: $0) }.reduce(into: [String: Manifest]()) { (partial, manifest) in
-            partial[manifest.url] = manifest
+        let rootManifests = root.packageManifests.reduce(into: [PackageIdentity2: Manifest]()){ partial, item in
+            partial[item.key.identity] = item.value
         }
 
-        let allManifestsWithPossibleDuplicates = try topologicalSort(inputManifests.map({ KeyedPair(($0, ProductFilter.everything), key: NameAndFilter(name: $0.name, filter: .everything)) })) { node in
+        // FIXME effectiveURL should take Foundation.URL
+        let rootDependencyManifestsURLs = root.dependencies.map{ ($0.identity, config.mirrors.effectiveURL(forURL: $0.location.absoluteString)) }
+        let rootDependencyManifests = try temp_await { self.loadManifests(forURLs: rootDependencyManifestsURLs, diagnostics: diagnostics, completion: $0) }
+
+        //let inputManifests = root.packageManifests.map{ $0.value } + rootDependencyManifests
+
+        // TODO: is this merging logic correct? prefer the ones from the root basically
+        var loadedManifests = rootDependencyManifests.merging(rootManifests, uniquingKeysWith: { (lhs, rhs) in return lhs })
+
+        // optimization: preload in parallel
+        //let inputDependenciesURLs = inputManifests.compactMap { $0.dependencies.compactMap{ config.mirrors.effectiveURL(forURL: $0.url) } }.flatMap { $0 }
+        // FIXME: this should not block
+        // var loadedManifests = try temp_await { self.loadManifests(forURLs: inputDependenciesURLs, diagnostics: diagnostics, completion: $0) }.reduce(into: [PackageIdentity2: Manifest]()) { (partial, manifest) in
+        //    partial[manifest.url] = manifest
+        //}
+
+
+        //let allManifestsWithPossibleDuplicates
+        let allManifests = try topologicalSort(loadedManifests.map({ KeyedPair(($0.1, ProductFilter.everything), key: IdentityAndFilter(identity: $0.0, filter: .everything)) })) { node in
             return node.item.0.dependenciesRequired(for: node.item.1).compactMap({ dependency in
-                let url = config.mirrors.effectiveURL(forURL: dependency.url)
+                // FIXME effectiveURL should take Foundation.URL
+                let url = config.mirrors.effectiveURL(forURL: dependency.location.absoluteString)
+                let identity = dependency.identity
                 // FIXME: this should not block
-                let manifest = loadedManifests[url] ?? temp_await { self.loadManifest(forURL: url, diagnostics: diagnostics, completion: $0) }
-                loadedManifests[url] = manifest
-                return manifest.flatMap({ KeyedPair(($0, dependency.productFilter), key: NameAndFilter(name: $0.name, filter: dependency.productFilter)) })
+                let manifest = loadedManifests[identity] ?? temp_await { self.loadManifest(packageIdentity: identity, url: url, diagnostics: diagnostics, completion: $0) }
+                loadedManifests[identity] = manifest
+                return manifest.flatMap{ KeyedPair(($0, dependency.productFilter), key: IdentityAndFilter(identity: identity, filter: dependency.productFilter)) }
             })
         }
 
+        /* FIXME: i dont think this is still rquired
         var deduplication: Set<String> = []
-        var allManifests: [KeyedPair<(Manifest, ProductFilter), NameAndFilter>] = []
+        var allManifests: [KeyedPair<(Manifest, ProductFilter), IdentityAndFilter>] = []
         for node in allManifestsWithPossibleDuplicates {
             if deduplication.contains(node.item.0.name) {
                 continue // A duplicate.
@@ -1365,12 +1418,20 @@ extension Workspace {
                 allManifests.append(node)
                 deduplication.insert(node.item.0.name)
             }
-        }
+        }*/
 
-        let allDependencyManifests = allManifests.map{ $0.item }.filter{ !root.manifests.contains($0.0) }
+        /*let allDependencyManifests = allManifests.map{ $0.item }.filter{ !root.manifests.contains($0.0) }
         let deps = try allDependencyManifests.map{ manifest, productFilter -> (Manifest, ManagedDependency, ProductFilter) in
             guard let dependency = state.dependencies[forURL: manifest.url] else {
                 throw InternalError("dependency not found for \(manifest.url)")
+            }
+            return (manifest, dependency, productFilter)
+        }*/
+
+        let allDependencyManifests = allManifests.map{ ($0.key.identity, $0.item.0, $0.item.1) }.filter{ !rootManifests.keys.contains($0.0) }
+        let deps = try allDependencyManifests.map{ identity, manifest, productFilter -> (Manifest, ManagedDependency, ProductFilter) in
+            guard let dependency = state.dependencies[forIdentity: identity] else {
+                throw InternalError("dependency not found for \(identity)")
             }
             return (manifest, dependency, productFilter)
         }
@@ -1380,9 +1441,11 @@ extension Workspace {
 
 
     /// Loads the given manifest, if it is present in the managed dependencies.
-    fileprivate func loadManifest(forURL packageURL: String, diagnostics: DiagnosticsEngine, completion: @escaping (Manifest?) -> Void) {
+    fileprivate func loadManifest(packageIdentity: PackageIdentity2,
+                                  url: String,
+                                  diagnostics: DiagnosticsEngine, completion: @escaping (Manifest?) -> Void) {
         // Check if this dependency is available.
-        guard let managedDependency = state.dependencies[forURL: packageURL] else {
+        guard let managedDependency = state.dependencies[forIdentity: packageIdentity] else {
             return completion(nil)
         }
 
@@ -1402,35 +1465,33 @@ extension Workspace {
         let packagePath = path(for: managedDependency)
 
         // Load and return the manifest.
-        self.loadManifest(packagePath: packagePath,
-                          url: managedDependency.packageRef.path,
-                          version: version,
+        self.loadManifest(packageIdentity: packageIdentity,
                           packageKind: packageKind,
+                          at: packagePath,
+                          url: managedDependency.package.path,
+                          version: version,
                           diagnostics: diagnostics) { result in
             // error is added to diagnostics in the function above
             completion(try? result.get())
         }
     }
 
-    private func loadManifests(forURLs urls: [String], diagnostics: DiagnosticsEngine, completion: @escaping (Result<[Manifest], Error>) -> Void) {
+    private func loadManifests(forURLs sources: [(PackageIdentity2, String)], diagnostics: DiagnosticsEngine, completion: @escaping (Result<[PackageIdentity2: Manifest], Error>) -> Void) {
         // this is allot of boilerplate code but its is important for performance
-        let lock = Lock()
         let sync = DispatchGroup()
-        var manifests = [Manifest]()
-        urls.forEach { url in
+        let manifests = ThreadSafeKeyValueStore<PackageIdentity2, Manifest>()
+        sources.forEach { source in
             sync.enter()
-            self.loadManifest(forURL: url, diagnostics: diagnostics) { manifest in
+            self.loadManifest(packageIdentity: source.0, url: source.1, diagnostics: diagnostics) { manifest in
                 defer { sync.leave() }
                 if let manifest = manifest {
-                    lock.withLock {
-                        manifests.append(manifest)
-                    }
+                    manifests[source.0] = manifest
                 }
             }
         }
 
         sync.notify(queue: self.queue) {
-            completion(.success(manifests))
+            completion(.success(manifests.get()))
         }
     }
 
@@ -1438,30 +1499,32 @@ extension Workspace {
     ///
     /// This is just a helper wrapper to the manifest loader.
     fileprivate func loadManifest(
-        packagePath: AbsolutePath,
+        packageIdentity: PackageIdentity2,
+        packageKind: PackageReference.Kind,
+        at path: AbsolutePath,
         url: String,
         version: Version? = nil,
-        packageKind: PackageReference.Kind,
         diagnostics: DiagnosticsEngine,
         completion: @escaping (Result<Manifest, Error>) -> Void
     ) {
         // Load the manifest, bracketed by the calls to the delegate callbacks. The delegate callback is only passed any diagnostics emited during the parsing of the manifest, but they are also forwarded up to the caller.
-        delegate?.willLoadManifest(packagePath: packagePath, url: url, version: version, packageKind: packageKind)
+        delegate?.willLoadManifest(packagePath: path, url: url, version: version, packageKind: packageKind)
         let manifestDiagnostics = DiagnosticsEngine(handlers: [{diagnostics.emit($0)}])
-        diagnostics.with(location: PackageLocation.Local(packagePath: packagePath)) { diagnostics in
+        diagnostics.with(location: PackageLocation.Local(packagePath: path)) { diagnostics in
             do {
                 // Load the tools version for the package.
-                let toolsVersion = try toolsVersionLoader.load(at: packagePath, fileSystem: fileSystem)
+                let toolsVersion = try toolsVersionLoader.load(at: path, fileSystem: fileSystem)
 
                 // Validate the tools version.
-                try toolsVersion.validateToolsVersion(currentToolsVersion, packagePath: packagePath.pathString)
+                try toolsVersion.validateToolsVersion(currentToolsVersion, packagePath: path.pathString)
 
                 // Load the manifest.
-                manifestLoader.load(package: packagePath,
-                                    baseURL: url,
+                manifestLoader.load(packageIdentity: packageIdentity,
+                                    packageKind: packageKind,
+                                    at: path,
+                                    url: url,
                                     version: version,
                                     toolsVersion: toolsVersion,
-                                    packageKind: packageKind,
                                     diagnostics: diagnostics,
                                     on: self.queue) { result in
 
@@ -1469,7 +1532,7 @@ extension Workspace {
                     case .failure(let error):
                         diagnostics.emit(error)
                     case .success(let manifest):
-                        self.delegate?.didLoadManifest(packagePath: packagePath, url: url, version: version, packageKind: packageKind, manifest: manifest, diagnostics: manifestDiagnostics.diagnostics)
+                        self.delegate?.didLoadManifest(packagePath: path, url: url, version: version, packageKind: packageKind, manifest: manifest, diagnostics: manifestDiagnostics.diagnostics)
                     }
                     completion(result)
                 }
@@ -1501,8 +1564,8 @@ extension Workspace {
 
         for artifact in updatedArtifacts {
             let existingArtifact = state.artifacts[
-                packageURL: artifact.packageRef.path,
-                targetName: artifact.targetName
+                package: artifact.packageRef.identity,
+                target: artifact.targetName
             ]
 
             switch artifact.source {
@@ -1539,7 +1602,7 @@ extension Workspace {
         // Remove the artifacts and directories which are not needed anymore.
         diagnostics.wrap {
             for artifact in artifactsToRemove {
-                state.artifacts.remove(packageURL: artifact.packageRef.path, targetName: artifact.targetName)
+                state.artifacts.remove(package: artifact.packageRef.identity, target: artifact.targetName)
 
                 if let path = path(for: artifact) {
                     try fileSystem.removeFileTree(path)
@@ -1571,8 +1634,9 @@ extension Workspace {
 
     private func artifacts(from manifests: DependencyManifests) throws -> [ManagedArtifact] {
         let packageAndManifests: [(PackageReference, Manifest)] =
-            zip(manifests.root.packageRefs, manifests.root.manifests) + // Root package and manifests.
-            manifests.dependencies.map({ manifest, managed, _ in (managed.packageRef, manifest) }) // Dependency package and manifests.
+            //zip(manifests.root.packageRefs, manifests.root.manifests) + // Root package and manifests.
+            manifests.root.packageManifests.map { ($0.key, $0.value) } + // Root package and manifests.
+            manifests.dependencies.map({ manifest, managed, _ in (managed.package, manifest) }) // Dependency package and manifests.
 
         var artifacts: [ManagedArtifact] = []
 
@@ -1721,8 +1785,11 @@ extension Workspace {
         createCacheDirectories(with: diagnostics)
 
         // FIXME: this should not block
-        let rootManifests = try temp_await { self.loadRootManifests(packages: root.packages, diagnostics: diagnostics, completion: $0) }
-        let graphRoot = PackageGraphRoot(input: root, manifests: rootManifests, explicitProduct: explicitProduct)
+        var root = root
+        let rootManifestsPaths = Array(root.manifests.keys)
+        let rootManifests = try temp_await { self.loadRootManifests(packages: rootManifestsPaths, diagnostics: diagnostics, completion: $0) }
+        root.manifests = rootManifests
+        let graphRoot = PackageGraphRoot(input: root, explicitProduct: explicitProduct)
 
         // Load the pins store or abort now.
         guard let pinsStore = diagnostics.wrap({ try self.pinsStore.load() }), !diagnostics.hasErrors else {
@@ -1737,7 +1804,7 @@ extension Workspace {
         let pins = pinsStore.pins.map({ $0 })
         DispatchQueue.concurrentPerform(iterations: pins.count) { idx in
             _ = try? temp_await {
-                containerProvider.getContainer(for: pins[idx].packageRef, skipUpdate: true, on: self.queue, completion: $0)
+                containerProvider.getContainer(for: pins[idx].package, skipUpdate: true, on: self.queue, completion: $0)
             }
         }
 
@@ -1746,7 +1813,7 @@ extension Workspace {
         // We require cloning if there is no checkout or if the checkout doesn't
         // match with the pin.
         let requiredPins = pins.filter({ pin in
-            guard let dependency = state.dependencies[forURL: pin.packageRef.path] else {
+            guard let dependency = state.dependencies[forIdentity: pin.package.identity] else {
                 return true
             }
             switch dependency.state {
@@ -1760,18 +1827,18 @@ extension Workspace {
         // Clone the required pins.
         for pin in requiredPins {
             diagnostics.wrap {
-                _ = try self.clone(package: pin.packageRef, at: pin.state)
+                _ = try self.clone(package: pin.package, at: pin.state)
             }
         }
 
         // Save state for local packages, if any.
         //
         // FIXME: This will only work for top-level local packages right now.
-        for rootManifest in rootManifests {
+        for rootManifest in rootManifests.values {
             let dependencies = rootManifest.dependencies.filter{ $0.requirement == .localPackage }
             for localPackage in dependencies {
-                let package = localPackage.createPackageRef(mirrors: self.config.mirrors)
-                state.dependencies.add(ManagedDependency.local(packageRef: package))
+                let package = localPackage.createPackageRef()
+                state.dependencies.add(ManagedDependency.local(package: package))
             }
         }
         diagnostics.wrap { try state.saveState() }
@@ -1815,10 +1882,12 @@ extension Workspace {
 
         // FIXME: this should not block
         // Load the root manifests and currently checked out manifests.
-        let rootManifests = try temp_await { self.loadRootManifests(packages: root.packages, diagnostics: diagnostics, completion: $0) }
+        let rootManifestsPaths = Array(root.manifests.keys)
+        let rootManifests = try temp_await { self.loadRootManifests(packages: rootManifestsPaths, diagnostics: diagnostics, completion: $0) }
 
         // Load the current manifests.
-        let graphRoot = PackageGraphRoot(input: root, manifests: rootManifests, explicitProduct: explicitProduct)
+        let input = PackageGraphRootInput(manifests: rootManifests)
+        let graphRoot = PackageGraphRoot(input: input, explicitProduct: explicitProduct)
         let currentManifests = try self.loadDependencyManifests(root: graphRoot, diagnostics: diagnostics)
         guard !diagnostics.hasErrors else {
             return currentManifests
@@ -1864,7 +1933,7 @@ extension Workspace {
         // Create the constraints.
         var constraints = [PackageContainerConstraint]()
         constraints += currentManifests.editedPackagesConstraints()
-        constraints += graphRoot.constraints(mirrors: config.mirrors) + extraConstraints
+        constraints += graphRoot.constraints() + extraConstraints
 
         // Perform dependency resolution.
         let resolver = createResolver(pinsMap: pinsStore.pinsMap)
@@ -1899,9 +1968,9 @@ extension Workspace {
         let missing = updatedDependencyManifests.computePackageURLs().missing
         if !missing.isEmpty {
             // Check if an override package has a mismatching basename.
-            if self.didDiagnosePackageOverrideBasenameMismatch(updatedDependencyManifests, diagnostics) {
+            /*if self.didDiagnosePackageOverrideBasenameMismatch(updatedDependencyManifests, diagnostics) {
                 return updatedDependencyManifests
-            } else if retryOnPackagePathMismatch {
+            } else*/ if retryOnPackagePathMismatch {
                 // Retry resolution which will most likely resolve correctly now since
                 // we have the manifest files of all the dependencies.
                 return try self._resolve(
@@ -1949,15 +2018,17 @@ extension Workspace {
         return updatedDependencyManifests
     }
 
+    // FIXME: restore? does not seem possible any more
+    /*
     private func didDiagnosePackageOverrideBasenameMismatch(
         _ dependencyManifests: DependencyManifests,
         _ diagnostics: DiagnosticsEngine
     ) -> Bool {
         let rootManifests = dependencyManifests.root.manifests.spm_createDictionary{ ($0.name, $0) }
 
-        for missingURLs in dependencyManifests.computePackageURLs().missing {
+        for missingPackage in dependencyManifests.computePackageURLs().missing {
             // FIXME: this should not block
-            guard let manifest = (temp_await { self.loadManifest(forURL: missingURLs.path, diagnostics: diagnostics, completion: $0) }) else { continue }
+            guard let manifest = (temp_await { self.loadManifest(packageIdentity: missingPackage.identity, url: missingPackage.path, diagnostics: diagnostics, completion: $0) }) else { continue }
             if let override = rootManifests[manifest.name] {
                 let overrideIdentity = PackageIdentity(url: override.url)
                 let manifestIdentity = PackageIdentity(url: manifest.url)
@@ -1968,7 +2039,7 @@ extension Workspace {
             }
         }
         return false
-    }
+    }*/
 
     public enum ResolutionPrecomputationResult: Equatable {
         case required(reason: WorkspaceResolveReason)
@@ -1993,9 +2064,9 @@ extension Workspace {
         extraConstraints: [PackageContainerConstraint] = []
     ) -> ResolutionPrecomputationResult {
         let constraints =
-            root.constraints(mirrors: config.mirrors) +
+            root.constraints() +
             // Include constraints from the manifests in the graph root.
-            root.manifests.flatMap({ $0.dependencyConstraints(productFilter: .everything, mirrors: config.mirrors) }) +
+            root.packageManifests.flatMap({ $0.value.dependencyConstraints(productFilter: .everything, mirrors: config.mirrors) }) +
             dependencyManifests.dependencyConstraints() +
             extraConstraints
 
@@ -2039,11 +2110,11 @@ extension Workspace {
             case .edited, .local: continue
             }
 
-            let identity = dependency.packageRef.identity
+            let identity = dependency.package.identity
 
-            if requiredURLs.contains(where: { $0.path == dependency.packageRef.path }) {
+            if requiredURLs.contains(where: { $0.identity == dependency.package.identity }) {
                 // If required identity contains this dependency, it should be in the pins store.
-                if let pin = pinsStore.pinsMap[identity], pin.packageRef.path == dependency.packageRef.path {
+                if let pin = pinsStore.pinsMap[identity], pin.package.identity == dependency.package.identity {
                     continue
                 }
             } else if !pins.contains(identity) {
@@ -2142,16 +2213,16 @@ extension Workspace {
     ) throws -> [(PackageReference, PackageStateChange)] {
         // Load pins store and managed dependendencies.
         let pinsStore = try self.pinsStore.load()
-        var packageStateChanges: [String: (PackageReference, PackageStateChange)] = [:]
+        var packageStateChanges: [PackageIdentity2: (PackageReference, PackageStateChange)] = [:]
 
         // Set the states from resolved dependencies results.
         for (packageRef, binding, products) in resolvedDependencies {
             // Get the existing managed dependency for this package ref, if any.
             let currentDependency: ManagedDependency?
-            if let existingDependency = state.dependencies[forURL: packageRef.path] {
+            if let existingDependency = state.dependencies[forIdentity: packageRef.identity] {
                 currentDependency = existingDependency
             } else {
-                // Check if this is a edited dependency.
+                // Check if this is an edited dependency.
                 //
                 // This is a little bit ugly but can probably be cleaned up by
                 // putting information in the PackageReference type. We change
@@ -2161,11 +2232,12 @@ extension Workspace {
                 // the edited checkout is unchanged.
                 if let editedDependency = state.dependencies.first(where: {
                     guard $0.basedOn != nil else { return false }
-                    return path(for: $0).pathString == packageRef.path
+                    //return path(for: $0).pathString == packageRef.path
+                    return $0.package.identity == packageRef.identity
                 }) {
                     currentDependency = editedDependency
-                    let originalReference = editedDependency.basedOn!.packageRef // forced unwrap safe
-                    packageStateChanges[originalReference.path] = (originalReference, .unchanged)
+                    let originalReference = editedDependency.basedOn!.package // forced unwrap safe
+                    packageStateChanges[originalReference.identity] = (originalReference, .unchanged)
                 } else {
                     currentDependency = nil
                 }
@@ -2177,21 +2249,21 @@ extension Workspace {
 
             case .unversioned:
                 // Ignore the root packages.
-                if root.packageRefs.contains(packageRef) {
+                if root.packageManifests.keys.contains(packageRef) {
                     continue
                 }
 
                 if let currentDependency = currentDependency {
                     switch currentDependency.state {
                     case .local, .edited:
-                        packageStateChanges[packageRef.path] = (packageRef, .unchanged)
+                        packageStateChanges[packageRef.identity] = (packageRef, .unchanged)
                     case .checkout:
                         let newState = PackageStateChange.State(requirement: .unversioned, products: products)
-                        packageStateChanges[packageRef.path] = (packageRef, .updated(newState))
+                        packageStateChanges[packageRef.identity] = (packageRef, .updated(newState))
                     }
                 } else {
                     let newState = PackageStateChange.State(requirement: .unversioned, products: products)
-                    packageStateChanges[packageRef.path] = (packageRef, .added(newState))
+                    packageStateChanges[packageRef.identity] = (packageRef, .added(newState))
                 }
 
             case .revision(let identifier, let branch):
@@ -2208,7 +2280,7 @@ extension Workspace {
                 // If we have a branch and we shouldn't be updating the
                 // branches, use the revision from pin instead (if present).
                 if branch != nil {
-                    if let pin = pinsStore.pins.first(where: { $0.packageRef == packageRef }),
+                    if let pin = pinsStore.pins.first(where: { $0.package == packageRef }),
                         !updateBranches,
                         pin.state.branch == branch {
                         revision = pin.state.revision
@@ -2221,34 +2293,34 @@ extension Workspace {
                     // to do anything.
                     let newState = CheckoutState(revision: revision, branch: branch)
                     if case .checkout(let checkoutState) = currentDependency.state, checkoutState == newState {
-                        packageStateChanges[packageRef.path] = (packageRef, .unchanged)
+                        packageStateChanges[packageRef.identity] = (packageRef, .unchanged)
                     } else {
                         // Otherwise, we need to update this dependency to this revision.
                         let newState = PackageStateChange.State(requirement: .revision(revision, branch: branch), products: products)
-                        packageStateChanges[packageRef.path] = (packageRef, .updated(newState))
+                        packageStateChanges[packageRef.identity] = (packageRef, .updated(newState))
                     }
                 } else {
                     let newState = PackageStateChange.State(requirement: .revision(revision, branch: branch), products: products)
-                    packageStateChanges[packageRef.path] = (packageRef, .added(newState))
+                    packageStateChanges[packageRef.identity] = (packageRef, .added(newState))
                 }
 
             case .version(let version):
                 if let currentDependency = currentDependency {
                     if case .checkout(let checkoutState) = currentDependency.state, checkoutState.version == version {
-                        packageStateChanges[packageRef.path] = (packageRef, .unchanged)
+                        packageStateChanges[packageRef.identity] = (packageRef, .unchanged)
                     } else {
                         let newState = PackageStateChange.State(requirement: .version(version), products: products)
-                        packageStateChanges[packageRef.path] = (packageRef, .updated(newState))
+                        packageStateChanges[packageRef.identity] = (packageRef, .updated(newState))
                     }
                 } else {
                     let newState = PackageStateChange.State(requirement: .version(version), products: products)
-                    packageStateChanges[packageRef.path] = (packageRef, .added(newState))
+                    packageStateChanges[packageRef.identity] = (packageRef, .added(newState))
                 }
             }
         }
         // Set the state of any old package that might have been removed.
-        for packageRef in state.dependencies.lazy.map({ $0.packageRef }) where packageStateChanges[packageRef.path] == nil {
-            packageStateChanges[packageRef.path] = (packageRef, .removed)
+        for packageRef in state.dependencies.lazy.map({ $0.package }) where packageStateChanges[packageRef.identity] == nil {
+            packageStateChanges[packageRef.identity] = (packageRef, .removed)
         }
 
         return Array(packageStateChanges.values)
@@ -2310,8 +2382,9 @@ extension Workspace {
                 switch dependency.state {
                 case .checkout(let checkoutState):
                     // If some checkout dependency has been removed, clone it again.
-                    _ = try clone(package: dependency.packageRef, at: checkoutState)
-                    diagnostics.emit(.checkedOutDependencyMissing(packageName: dependency.packageRef.name))
+                    _ = try clone(package: dependency.package, at: checkoutState)
+                    // FIXME
+                    diagnostics.emit(.checkedOutDependencyMissing(packageName: dependency.package.identity.description))
 
                 case .edited:
                     // If some edited dependency has been removed, mark it as unedited.
@@ -2320,11 +2393,11 @@ extension Workspace {
                     // here because we expect this method to be called as part
                     // of some other resolve operation (i.e. resolve, update, etc).
                     try unedit(dependency: dependency, forceRemove: true, diagnostics: diagnostics)
-
-                    diagnostics.emit(.editedDependencyMissing(packageName: dependency.packageRef.name))
+                    // FIXME
+                    diagnostics.emit(.editedDependencyMissing(packageName: dependency.package.identity.description))
 
                 case .local:
-                    state.dependencies.remove(forURL: dependency.packageRef.path)
+                    state.dependencies.remove(dependency.package.identity)
                     try state.saveState()
                 }
             }
@@ -2399,7 +2472,7 @@ extension Workspace {
     /// - Throws: If the operation could not be satisfied.
     private func fetch(package: PackageReference) throws -> AbsolutePath {
         // If we already have it, fetch to update the repo from its remote.
-        if let dependency = state.dependencies[forURL: package.path] {
+        if let dependency = self.state.dependencies[forIdentity: package.identity] {
             let path = checkoutsPath.appending(dependency.subpath)
 
             // Make sure the directory is not missing (we will have to clone again
@@ -2475,7 +2548,7 @@ extension Workspace {
 
         // Write the state record.
         state.dependencies.add(ManagedDependency(
-            packageRef: package,
+            package: package,
             subpath: path.relative(to: checkoutsPath),
             checkoutState: checkoutState))
         try state.saveState()
@@ -2514,7 +2587,7 @@ extension Workspace {
             checkoutState = CheckoutState(revision: revision, branch: branch)
 
         case .unversioned:
-            state.dependencies.add(ManagedDependency.local(packageRef: package))
+            state.dependencies.add(ManagedDependency.local(package: package))
             try state.saveState()
             return AbsolutePath(package.path)
         }
@@ -2525,8 +2598,8 @@ extension Workspace {
     /// Removes the clone and checkout of the provided specifier.
     fileprivate func remove(package: PackageReference) throws {
 
-        guard let dependency = state.dependencies[forURL: package.path] else {
-            throw InternalError("trying to remove \(package.name) which isn't in workspace")
+        guard let dependency = state.dependencies[forIdentity: package.identity] else {
+            throw InternalError("trying to remove \(package.identity) which isn't in workspace")
         }
 
         // We only need to update the managed dependency structure to "remove"
@@ -2535,7 +2608,7 @@ extension Workspace {
         // Note that we don't actually remove a local package from disk.
         switch dependency.state {
         case .local:
-            state.dependencies.remove(forURL: package.path)
+            state.dependencies.remove(package.identity)
             try state.saveState()
             return
         case .checkout, .edited:
@@ -2543,7 +2616,7 @@ extension Workspace {
         }
 
         // Inform the delegate.
-        delegate?.removing(repository: dependency.packageRef.repository.url)
+        delegate?.removing(repository: dependency.package.repository.url)
 
         // Compute the dependency which we need to remove.
         let dependencyToRemove: ManagedDependency
@@ -2555,7 +2628,7 @@ extension Workspace {
             state.dependencies.add(dependency)
         } else {
             dependencyToRemove = dependency
-            state.dependencies.remove(forURL: dependencyToRemove.packageRef.path)
+            state.dependencies.remove(dependencyToRemove.package.identity)
         }
 
         // Remove the checkout.
@@ -2569,7 +2642,7 @@ extension Workspace {
         try fileSystem.removeFileTree(dependencyPath)
 
         // Remove the clone.
-        try repositoryManager.remove(repository: dependencyToRemove.packageRef.repository)
+        try repositoryManager.remove(repository: dependencyToRemove.package.repository)
 
         // Save the state.
         try state.saveState()

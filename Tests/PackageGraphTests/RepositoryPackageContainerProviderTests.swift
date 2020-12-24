@@ -40,7 +40,7 @@ private class MockRepository: Repository {
     }
 
     var packageRef: PackageReference {
-        return PackageReference(identity: PackageIdentity(url: self.url), path: self.url)
+        return PackageReference(identity: PackageIdentity(url: self.url), path: self.url, kind: .remote)
     }
 
     func getTags() throws -> [String] {
@@ -178,7 +178,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             manifestLoader: MockManifestLoader(manifests: [:])
         )
 
-        let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString)
+        let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString, kind: .remote)
         let container = try provider.getContainer(for: ref, skipUpdate: false)
         let v = try container.toolsVersionsAppropriateVersionsDescending().map { $0 }
         XCTAssertEqual(v, ["2.0.3", "1.0.3", "1.0.2", "1.0.1", "1.0.0"])
@@ -233,7 +233,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
         do {
             let provider = createProvider(ToolsVersion(version: "4.0.0"))
-            let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url)
+            let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url, kind: .remote)
             let container = try provider.getContainer(for: ref, skipUpdate: false)
             let v = try container.toolsVersionsAppropriateVersionsDescending().map { $0 }
             XCTAssertEqual(v, ["1.0.1"])
@@ -241,7 +241,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
         do {
             let provider = createProvider(ToolsVersion(version: "4.2.0"))
-            let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url)
+            let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url, kind: .remote)
             let container = try provider.getContainer(for: ref, skipUpdate: false) as! RepositoryPackageContainer
             XCTAssertTrue(container.validToolsVersionsCache.isEmpty)
             let v = try container.toolsVersionsAppropriateVersionsDescending().map { $0 }
@@ -254,7 +254,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
         do {
             let provider = createProvider(ToolsVersion(version: "3.0.0"))
-            let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url)
+            let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url, kind: .remote)
             let container = try provider.getContainer(for: ref, skipUpdate: false)
             let v = try container.toolsVersionsAppropriateVersionsDescending().map { $0 }
             XCTAssertEqual(v, [])
@@ -263,7 +263,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         // Test that getting dependencies on a revision that has unsupported tools version is diganosed properly.
         do {
             let provider = createProvider(ToolsVersion(version: "4.0.0"))
-            let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url)
+            let ref = PackageReference(identity: PackageIdentity(url: specifier.url), path: specifier.url, kind: .remote)
             let container = try provider.getContainer(for: ref, skipUpdate: false) as! RepositoryPackageContainer
             let revision = try container.getRevision(forTag: "1.0.0")
             do {
@@ -310,7 +310,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             repositoryManager: repositoryManager,
             manifestLoader: MockManifestLoader(manifests: [:])
         )
-        let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString)
+        let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString, kind: .remote)
         let container = try provider.getContainer(for: ref, skipUpdate: false)
         let v = try container.toolsVersionsAppropriateVersionsDescending().map { $0 }
         XCTAssertEqual(v, ["1.0.4-alpha", "1.0.2-dev.2", "1.0.2-dev", "1.0.1", "1.0.0", "1.0.0-beta.1", "1.0.0-alpha.1"])
@@ -350,7 +350,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             repositoryManager: repositoryManager,
             manifestLoader: MockManifestLoader(manifests: [:])
         )
-        let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString)
+        let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString, kind: .remote)
         let container = try provider.getContainer(for: ref, skipUpdate: false)
         let v = try container.toolsVersionsAppropriateVersionsDescending().map { $0 }
         XCTAssertEqual(v, ["2.0.1", "1.0.4", "1.0.2", "1.0.1", "1.0.0"])
@@ -363,9 +363,10 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         #endif
 
         let dependencies = [
-            PackageDependencyDescription(name: "Bar1", url: "/Bar1", requirement: .upToNextMajor(from: "1.0.0")),
-            PackageDependencyDescription(name: "Bar2", url: "/Bar2", requirement: .upToNextMajor(from: "1.0.0")),
-            PackageDependencyDescription(name: "Bar3", url: "/Bar3", requirement: .upToNextMajor(from: "1.0.0")),
+            // FIXME
+            PackageDependencyDescription(identity: .init("Bar1"), location: URL(string: "/Bar1")!, requirement: .upToNextMajor(from: "1.0.0")),
+            PackageDependencyDescription(identity: .init("Bar2"), location: URL(string: "/Bar2")!, requirement: .upToNextMajor(from: "1.0.0")),
+            PackageDependencyDescription(identity: .init("Bar3"), location: URL(string: "/Bar3")!, requirement: .upToNextMajor(from: "1.0.0")),
         ]
 
         let products = [
@@ -387,7 +388,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         ]
         let v5Constraints = dependencies.map {
             PackageContainerConstraint(
-                container: $0.createPackageRef(mirrors: mirrors),
+                package: $0.createPackageRef(),
                 requirement: $0.requirement.toConstraintRequirement(),
                 products: v5ProductMapping[$0.name]!
             )
@@ -399,7 +400,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         ]
         let v5_2Constraints = dependencies.map {
             PackageContainerConstraint(
-                container: $0.createPackageRef(mirrors: mirrors),
+                package: $0.createPackageRef(),
                 requirement: $0.requirement.toConstraintRequirement(),
                 products: v5_2ProductMapping[$0.name]!
             )
@@ -420,7 +421,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             XCTAssertEqual(
                 manifest
                     .dependencyConstraints(productFilter: .everything, mirrors: mirrors)
-                    .sorted(by: { $0.identifier.identity < $1.identifier.identity }),
+                    .sorted(by: { $0.package.identity < $1.package.identity }),
                 [
                     v5Constraints[0],
                     v5Constraints[1],
@@ -444,7 +445,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             XCTAssertEqual(
                 manifest
                     .dependencyConstraints(productFilter: .everything, mirrors: mirrors)
-                    .sorted(by: { $0.identifier.identity < $1.identifier.identity }),
+                    .sorted(by: { $0.package.identity < $1.package.identity }),
                 [
                     v5Constraints[0],
                     v5Constraints[1],
@@ -492,7 +493,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             XCTAssertEqual(
                 manifest
                     .dependencyConstraints(productFilter: .specific(Set(products.map { $0.name })), mirrors: mirrors)
-                    .sorted(by: { $0.identifier.identity < $1.identifier.identity }),
+                    .sorted(by: { $0.package.identity < $1.package.identity }),
                 [
                     v5_2Constraints[0],
                     v5_2Constraints[1],
@@ -538,7 +539,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             let containerProvider = RepositoryPackageContainerProvider(repositoryManager: repositoryManager, manifestLoader: MockManifestLoader(manifests: [.init(url: packageDir.pathString, version: nil): manifest]))
 
             // Get a hold of the container for the test package.
-            let packageRef = PackageReference(identity: PackageIdentity(path: packageDir), path: packageDir.pathString)
+            let packageRef = PackageReference(identity: PackageIdentity(path: packageDir), path: packageDir.pathString, kind: .remote)
             let container = try containerProvider.getContainer(for: packageRef, skipUpdate: false) as! RepositoryPackageContainer
 
             // Simulate accessing a fictitious dependency on the `master` branch, and check that we get back the expected error.
@@ -594,8 +595,10 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
                 v: .v5_2,
                 packageKind: .root,
                 dependencies: [
+                    // FIXME
                     PackageDependencyDescription(
-                        url: "Somewhere/Dependency",
+                        identity: .init("Somewhere.Dependency"),
+                        location: URL(string: "Somewhere/Dependency")!,
                         requirement: .exact(version),
                         productFilter: .specific([])
                     )
@@ -615,7 +618,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
                 )
             )
 
-            let packageReference = PackageReference(identity: PackageIdentity(path: packageDirectory), path: packageDirectory.pathString)
+            let packageReference = PackageReference(identity: PackageIdentity(path: packageDirectory), path: packageDirectory.pathString, kind: .remote)
             let container = try containerProvider.getContainer(for: packageReference, skipUpdate: false)
 
             let forNothing = try container.getDependencies(at: version, productFilter: .specific([]))

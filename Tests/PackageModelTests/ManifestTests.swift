@@ -68,9 +68,10 @@ class ManifestTests: XCTestCase {
 
     func testRequiredDependencies() throws {
         let dependencies = [
-            PackageDependencyDescription(name: "Bar1", url: "/Bar1", requirement: .upToNextMajor(from: "1.0.0")),
-            PackageDependencyDescription(name: "Bar2", url: "/Bar2", requirement: .upToNextMajor(from: "1.0.0")),
-            PackageDependencyDescription(name: "Bar3", url: "/Bar3", requirement: .upToNextMajor(from: "1.0.0")),
+            // FIXME
+            PackageDependencyDescription(identity: .init("Bar1"), location: URL(string: "/Bar1")!, requirement: .upToNextMajor(from: "1.0.0")),
+            PackageDependencyDescription(identity: .init("Bar2"), location: URL(string: "/Bar2")!, requirement: .upToNextMajor(from: "1.0.0")),
+            PackageDependencyDescription(identity: .init("Bar3"), location: URL(string: "/Bar3")!, requirement: .upToNextMajor(from: "1.0.0")),
         ]
 
         let products = [

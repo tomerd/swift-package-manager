@@ -35,10 +35,11 @@ class PackageDescriptionLoadingTests: XCTestCase {
         let manifestPath = AbsolutePath.root.appending(component: Manifest.filename)
         try fs.writeFileContents(manifestPath, bytes: contents)
         let m = try manifestLoader.load(
-            package: AbsolutePath.root,
-            baseURL: "/foo",
-            toolsVersion: toolsVersion,
+            packageIdentity: PackageIdentity2("fake"), // FIXME
             packageKind: packageKind,
+            at: AbsolutePath.root,
+            url: "/foo",
+            toolsVersion: toolsVersion,
             fileSystem: fs)
         guard m.toolsVersion == toolsVersion else {
             return XCTFail("Invalid manfiest version")
@@ -161,10 +162,11 @@ class PackageDescriptionLoadingTests: XCTestCase {
         let manifestPath = AbsolutePath.root.appending(component: Manifest.filename)
         try fileSystem.writeFileContents(manifestPath, bytes: contents)
         let manifest = try manifestLoader.load(
-            package: AbsolutePath.root,
-            baseURL: "/foo",
-            toolsVersion: toolsVersion,
+            packageIdentity: PackageIdentity2("fake"), // FIXME
             packageKind: packageKind,
+            at: AbsolutePath.root,
+            url: "/foo",
+            toolsVersion: toolsVersion,
             fileSystem: fileSystem,
             diagnostics: diagnostics)
 

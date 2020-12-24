@@ -128,7 +128,7 @@ extension SwiftPackageTool {
             
             let changes = try workspace.updateDependencies(
                 root: swiftTool.getWorkspaceRoot(),
-                packages: packages,
+                packages: packages.map(PackageIdentity2.init), // FIXME?
                 diagnostics: swiftTool.diagnostics,
                 dryRun: dryRun
             )
@@ -165,17 +165,21 @@ extension SwiftPackageTool {
 
         func run(_ swiftTool: SwiftTool) throws {
             let workspace = try swiftTool.getActiveWorkspace()
-            let root = try swiftTool.getWorkspaceRoot()
+            //let root = try swiftTool.getWorkspaceRoot()
 
+            let rootPackagePath = try swiftTool.getPackageRoot()
             let manifests = try temp_await {
-                workspace.loadRootManifests(packages: root.packages, diagnostics: swiftTool.diagnostics, completion: $0)
+                workspace.loadRootManifests(packages: [rootPackagePath], diagnostics: swiftTool.diagnostics, completion: $0)
             }
-            guard let manifest = manifests.first else { return }
+            guard let manifest = manifests.first?.value else {
+                return
+            }
 
             let builder = PackageBuilder(
+                identity: try PackageIdentity2(swiftTool.getPackageRoot().pathString), // FIXME what is the identity?
+                path: try swiftTool.getPackageRoot(),
                 manifest: manifest,
                 productFilter: .everything,
-                path: try swiftTool.getPackageRoot(),
                 xcTestMinimumDeploymentTargets: MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
                 diagnostics: swiftTool.diagnostics
             )
@@ -234,14 +238,24 @@ extension SwiftPackageTool {
             // Get the root package.
             let workspace = try swiftTool.getActiveWorkspace()
             let root = try swiftTool.getWorkspaceRoot()
-            let manifest = try temp_await {
-                workspace.loadRootManifests(packages: root.packages, diagnostics: swiftTool.diagnostics, completion: $0)
-            }[0]
+            guard let rootManifestPath = root.manifests.keys.first else {
+                print("error: Could not find root manifest")
+                throw Diagnostics.fatalError
+            }
+            guard let manifest = (try temp_await {
+                workspace.loadRootManifests(packages: [rootManifestPath],
+                                            diagnostics: swiftTool.diagnostics,
+                                            completion: $0)
+            }[rootManifestPath]) else {
+                print("error: Could not find root manifest")
+                throw Diagnostics.fatalError
+            }
 
             let builder = PackageBuilder(
+                identity: try PackageIdentity2(swiftTool.getPackageRoot().pathString), // FIXME what is the identity?
+                path: try swiftTool.getPackageRoot(),
                 manifest: manifest,
                 productFilter: .everything,
-                path: try swiftTool.getPackageRoot(),
                 xcTestMinimumDeploymentTargets: [:], // Minimum deployment target does not matter for this operation.
                 diagnostics: swiftTool.diagnostics
             )
@@ -361,12 +375,19 @@ extension SwiftPackageTool {
         
         func run(_ swiftTool: SwiftTool) throws {
             let workspace = try swiftTool.getActiveWorkspace()
-            let root = try swiftTool.getWorkspaceRoot()
+            //let root = try swiftTool.getWorkspaceRoot()
 
+            //let manifests = try temp_await {
+            //    workspace.loadRootManifests(packages: root.packages, diagnostics: swiftTool.diagnostics, completion: $0)
+            //}
+            //guard let manifest = manifests.first else { return }
+            let rootPackagePath = try swiftTool.getPackageRoot()
             let manifests = try temp_await {
-                workspace.loadRootManifests(packages: root.packages, diagnostics: swiftTool.diagnostics, completion: $0)
+                workspace.loadRootManifests(packages: [rootPackagePath], diagnostics: swiftTool.diagnostics, completion: $0)
             }
-            guard let manifest = manifests.first else { return }
+            guard let manifest = manifests.first?.value else {
+                return
+            }
 
             let encoder = JSONEncoder.makeWithDefaults()
             encoder.userInfo[Manifest.dumpPackageKey] = true
@@ -910,11 +931,11 @@ fileprivate func logPackageChanges(changes: [(PackageReference, Workspace.Packag
         let currentVersion = pins.pinsMap[package.identity]?.state.description ?? ""
         switch change {
         case let .added(state):
-            stream <<< "+ \(package.name) \(state.requirement.prettyPrinted)"
+            stream <<< "+ \(package.identity) \(state.requirement.prettyPrinted)"
         case let .updated(state):
-            stream <<< "~ \(package.name) \(currentVersion) -> \(package.name) \(state.requirement.prettyPrinted)"
+            stream <<< "~ \(package.identity) \(currentVersion) -> \(package.identity) \(state.requirement.prettyPrinted)"
         case .removed:
-            stream <<< "- \(package.name) \(currentVersion)"
+            stream <<< "- \(package.identity) \(currentVersion)"
         case .unchanged:
             continue
         }

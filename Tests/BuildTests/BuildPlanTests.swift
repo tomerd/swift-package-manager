@@ -107,15 +107,18 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -210,16 +213,19 @@ final class BuildPlanTests: XCTestCase {
             let diagnostics = DiagnosticsEngine()
             let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "ExplicitTest",
-                        path: testDirPath.description,
-                        url: "/ExplicitTest",
-                        packageKind: .root,
-                        targets: [
-                            TargetDescription(name: "A", dependencies: ["B"]),
-                            TargetDescription(name: "B", dependencies: ["C"]),
-                            TargetDescription(name: "C", dependencies: []),
-                        ]),
+                    PackageIdentity2("ExplicitTest"):
+                        (AbsolutePath("/ExplicitTest"),
+                        Manifest.createV4Manifest(
+                            name: "ExplicitTest",
+                            path: testDirPath.description,
+                            url: "/ExplicitTest",
+                            packageKind: .root,
+                            targets: [
+                                TargetDescription(name: "A", dependencies: ["B"]),
+                                TargetDescription(name: "B", dependencies: ["C"]),
+                                TargetDescription(name: "C", dependencies: []),
+                            ])
+                        ),
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)
@@ -270,40 +276,44 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    dependencies: [
-                        PackageDependencyDescription(url: "/ExtPkg", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: [
-                            .target(name: "PkgLib", condition: PackageConditionDescription(
-                                platformNames: ["linux", "android"],
-                                config: nil
-                            ))
-                        ]),
-                        TargetDescription(name: "PkgLib", dependencies: [
-                            .product(name: "ExtLib", package: "ExtPkg", condition: PackageConditionDescription(
-                                platformNames: [],
-                                config: "debug"
-                            ))
-                        ]),
-                    ]
-                ),
-                Manifest.createV4Manifest(
-                    name: "ExtPkg",
-                    path: "/ExtPkg",
-                    url: "/ExtPkg",
-                    packageKind: .remote,
-                    products: [
-                        ProductDescription(name: "ExtLib", type: .library(.automatic), targets: ["ExtLib"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "ExtLib", dependencies: []),
-                    ]
-                ),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        dependencies: [
+                            PackageDependencyDescription(url: "/ExtPkg", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: [
+                                .target(name: "PkgLib", condition: PackageConditionDescription(
+                                    platformNames: ["linux", "android"],
+                                    config: nil
+                                ))
+                            ]),
+                            TargetDescription(name: "PkgLib", dependencies: [
+                                .product(name: "ExtLib", package: "ExtPkg", condition: PackageConditionDescription(
+                                    platformNames: [],
+                                    config: "debug"
+                                ))
+                            ]),
+                        ])
+                    ),
+                PackageIdentity2("ExtPkg"):
+                    (AbsolutePath("/ExtPkg"),
+                    Manifest.createV4Manifest(
+                        name: "ExtPkg",
+                        path: "/ExtPkg",
+                        url: "/ExtPkg",
+                        packageKind: .remote,
+                        products: [
+                            ProductDescription(name: "ExtLib", type: .library(.automatic), targets: ["ExtLib"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "ExtLib", dependencies: []),
+                        ])
+                    ),
             ]
         )
 
@@ -373,30 +383,36 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fileSystem, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "A",
-                    path: "/A",
-                    url: "/A",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "ATarget", dependencies: ["BLibrary"]),
-                        TargetDescription(name: "ATargetTests", dependencies: ["ATarget"], type: .test),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "B",
-                    path: "/B",
-                    url: "/B",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "BLibrary", type: .library(.automatic), targets: ["BTarget"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "BTarget", dependencies: []),
-                        TargetDescription(name: "BTargetTests", dependencies: ["BTarget"], type: .test),
-                    ]),
+                PackageIdentity2("A"):
+                    (AbsolutePath("/A"),
+                    Manifest.createV4Manifest(
+                        name: "A",
+                        path: "/A",
+                        url: "/A",
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "ATarget", dependencies: ["BLibrary"]),
+                            TargetDescription(name: "ATargetTests", dependencies: ["ATarget"], type: .test),
+                        ])
+                    ),
+                PackageIdentity2("B"):
+                    (AbsolutePath("/B"),
+                    Manifest.createV4Manifest(
+                        name: "B",
+                        path: "/B",
+                        url: "/B",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "BLibrary", type: .library(.automatic), targets: ["BTarget"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "BTarget", dependencies: []),
+                            TargetDescription(name: "BTargetTests", dependencies: ["BTarget"], type: .test),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -427,14 +443,17 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -480,29 +499,35 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/ExtPkg", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: ["ExtPkg"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "ExtPkg",
-                    path: "/ExtPkg",
-                    url: "/ExtPkg",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "ExtPkg", type: .library(.automatic), targets: ["extlib"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "extlib", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/ExtPkg", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: ["ExtPkg"]),
+                        ])
+                    ),
+                PackageIdentity2("ExtPkg"):
+                    (AbsolutePath("/ExtPkg"),
+                    Manifest.createV4Manifest(
+                        name: "ExtPkg",
+                        path: "/ExtPkg",
+                        url: "/ExtPkg",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "ExtPkg", type: .library(.automatic), targets: ["extlib"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "extlib", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -593,38 +618,44 @@ final class BuildPlanTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    dependencies: [
-                        PackageDependencyDescription(url: "/ExtPkg", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: [
-                            .target(name: "PkgLib", condition: PackageConditionDescription(
-                                platformNames: ["linux", "android"],
-                                config: nil
-                            ))
-                        ]),
-                        TargetDescription(name: "PkgLib", dependencies: [
-                            .product(name: "ExtPkg", package: "ExtPkg", condition: PackageConditionDescription(
-                                platformNames: [],
-                                config: "debug"
-                            ))
-                        ]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "ExtPkg",
-                    path: "/ExtPkg",
-                    url: "/ExtPkg",
-                    packageKind: .remote,
-                    products: [
-                        ProductDescription(name: "ExtPkg", type: .library(.automatic), targets: ["ExtLib"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "ExtLib", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        dependencies: [
+                            PackageDependencyDescription(url: "/ExtPkg", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: [
+                                .target(name: "PkgLib", condition: PackageConditionDescription(
+                                    platformNames: ["linux", "android"],
+                                    config: nil
+                                ))
+                            ]),
+                            TargetDescription(name: "PkgLib", dependencies: [
+                                .product(name: "ExtPkg", package: "ExtPkg", condition: PackageConditionDescription(
+                                    platformNames: [],
+                                    config: "debug"
+                                ))
+                            ]),
+                        ])
+                    ),
+                PackageIdentity2("ExtPkg"):
+                    (AbsolutePath("/ExtPkg"),
+                    Manifest.createV4Manifest(
+                        name: "ExtPkg",
+                        path: "/ExtPkg",
+                        url: "/ExtPkg",
+                        packageKind: .remote,
+                        products: [
+                            ProductDescription(name: "ExtPkg", type: .library(.automatic), targets: ["ExtLib"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "ExtLib", dependencies: []),
+                        ])
+                    ),
             ]
         )
 
@@ -679,17 +710,20 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    cLanguageStandard: "gnu99",
-                    cxxLanguageStandard: "c++1z",
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        cLanguageStandard: "gnu99",
+                        cxxLanguageStandard: "c++1z",
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -740,15 +774,18 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -809,16 +846,19 @@ final class BuildPlanTests: XCTestCase {
         let graph = try loadPackageGraph(
             fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    v: .v5,
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createManifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        v: .v5,
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -849,31 +889,37 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Dep", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["swiftlib"]),
-                        TargetDescription(name: "swiftlib", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: ["Dep"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Dep",
-                    path: "/Dep",
-                    url: "/Dep",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Dep", type: .library(.automatic), targets: ["Dep"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Dep", dependencies: ["CDep"]),
-                        TargetDescription(name: "CDep", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/Dep", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["swiftlib"]),
+                            TargetDescription(name: "swiftlib", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: ["Dep"]),
+                        ])
+                    ),
+                PackageIdentity2("Dep"):
+                    (AbsolutePath("/Dep"),
+                    Manifest.createV4Manifest(
+                        name: "Dep",
+                        path: "/Dep",
+                        url: "/Dep",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Dep", type: .library(.automatic), targets: ["Dep"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Dep", dependencies: ["CDep"]),
+                            TargetDescription(name: "CDep", dependencies: []),
+                        ])
+                    ),
             ],
             createREPLProduct: true
         )
@@ -899,15 +945,18 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: []),
-                        TargetDescription(name: "FooTests", dependencies: ["Foo"], type: .test),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: []),
+                            TargetDescription(name: "FooTests", dependencies: ["Foo"], type: .test),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -960,22 +1009,28 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "Clibgit", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: []),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Clibgit",
-                    path: "/Clibgit",
-                    url: "/Clibgit",
-                    packageKind: .local),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "Clibgit", requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: []),
+                        ])
+                    ),
+                PackageIdentity2("Clibgit"):
+                    (AbsolutePath("/Clibgit"),
+                    Manifest.createV4Manifest(
+                        name: "Clibgit",
+                        path: "/Clibgit",
+                        url: "/Clibgit",
+                        packageKind: .local),
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1017,15 +1072,18 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "lib", dependencies: []),
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "lib", dependencies: []),
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1051,28 +1109,34 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let g = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Bar-Baz", type: .library(.dynamic), targets: ["Bar"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar", dependencies: []),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["Bar-Baz"]),
-                    ]),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Bar-Baz", type: .library(.dynamic), targets: ["Bar"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar", dependencies: []),
+                        ])
+                    ),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["Bar-Baz"]),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1144,18 +1208,21 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    products: [
-                        ProductDescription(name: "lib", type: .library(.dynamic), targets: ["lib"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "lib", dependencies: []),
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        products: [
+                            ProductDescription(name: "lib", type: .library(.dynamic), targets: ["lib"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "lib", dependencies: []),
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1208,18 +1275,21 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    products: [
-                        ProductDescription(name: "lib", type: .library(.dynamic), targets: ["lib"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "lib", dependencies: []),
-                        TargetDescription(name: "exe", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        products: [
+                            ProductDescription(name: "lib", type: .library(.dynamic), targets: ["lib"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "lib", dependencies: []),
+                            TargetDescription(name: "exe", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1272,46 +1342,55 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fileSystem, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "A",
-                    path: "/A",
-                    url: "/A",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
-                        PackageDependencyDescription(url: "/C", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    products: [
-                        ProductDescription(name: "aexec", type: .executable, targets: ["ATarget"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "ATarget", dependencies: ["BLibrary"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "B",
-                    path: "/B",
-                    url: "/B",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "BLibrary", type: .library(.static), targets: ["BTarget1"]),
-                        ProductDescription(name: "bexec", type: .executable, targets: ["BTarget2"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "BTarget1", dependencies: []),
-                        TargetDescription(name: "BTarget2", dependencies: []),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "C",
-                    path: "/C",
-                    url: "/C",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "cexec", type: .executable, targets: ["CTarget"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "CTarget", dependencies: []),
-                    ]),
-            ]
+                PackageIdentity2("A"):
+                    (AbsolutePath("/A"),
+                    Manifest.createV4Manifest(
+                        name: "A",
+                        path: "/A",
+                        url: "/A",
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(url: "/C", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        products: [
+                            ProductDescription(name: "aexec", type: .executable, targets: ["ATarget"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "ATarget", dependencies: ["BLibrary"]),
+                        ])
+                    ),
+                PackageIdentity2("B"):
+                    (AbsolutePath("/B"),
+                    Manifest.createV4Manifest(
+                        name: "B",
+                        path: "/B",
+                        url: "/B",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "BLibrary", type: .library(.static), targets: ["BTarget1"]),
+                            ProductDescription(name: "bexec", type: .executable, targets: ["BTarget2"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "BTarget1", dependencies: []),
+                            TargetDescription(name: "BTarget2", dependencies: []),
+                        ])
+                    ),
+                PackageIdentity2("C"):
+                    (AbsolutePath("/C"),
+                    Manifest.createV4Manifest(
+                        name: "C",
+                        path: "/C",
+                        url: "/C",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "cexec", type: .executable, targets: ["CTarget"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "CTarget", dependencies: []),
+                        ])
+                    ),
+                ]
         )
 
         #if ENABLE_TARGET_BASED_DEPENDENCY_RESOLUTION
@@ -1364,66 +1443,72 @@ final class BuildPlanTests: XCTestCase {
             fs: fileSystem,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "A",
-                    path: "/A",
-                    url: "/A",
-                    dependencies: [
-                        PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
-                        PackageDependencyDescription(url: "/C", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    products: [
-                        ProductDescription(name: "aexec", type: .executable, targets: ["ATarget"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "ATarget", dependencies: [
-                            .product(name: "BLibrary1", package: "B", condition: PackageConditionDescription(
-                                platformNames: ["linux"],
-                                config: nil
-                            )),
-                            .product(name: "BLibrary2", package: "B", condition: PackageConditionDescription(
-                                platformNames: [],
-                                config: "debug"
-                            )),
-                            .product(name: "CLibrary", package: "C", condition: PackageConditionDescription(
-                                platformNames: ["android"],
-                                config: "release"
-                            )),
+                PackageIdentity2("A"):
+                    (AbsolutePath("/A"),
+                    Manifest.createV4Manifest(
+                        name: "A",
+                        path: "/A",
+                        url: "/A",
+                        dependencies: [
+                            PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(url: "/C", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        products: [
+                            ProductDescription(name: "aexec", type: .executable, targets: ["ATarget"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "ATarget", dependencies: [
+                                .product(name: "BLibrary1", package: "B", condition: PackageConditionDescription(
+                                    platformNames: ["linux"],
+                                    config: nil
+                                )),
+                                .product(name: "BLibrary2", package: "B", condition: PackageConditionDescription(
+                                    platformNames: [],
+                                    config: "debug"
+                                )),
+                                .product(name: "CLibrary", package: "C", condition: PackageConditionDescription(
+                                    platformNames: ["android"],
+                                    config: "release"
+                                )),
+                            ])
                         ])
-                    ]
-                ),
-                Manifest.createV4Manifest(
-                    name: "B",
-                    path: "/B",
-                    url: "/B",
-                    packageKind: .remote,
-                    products: [
-                        ProductDescription(name: "BLibrary1", type: .library(.static), targets: ["BTarget1"]),
-                        ProductDescription(name: "BLibrary2", type: .library(.static), targets: ["BTarget2"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "BTarget1", dependencies: []),
-                        TargetDescription(name: "BTarget2", dependencies: [
-                            .target(name: "BTarget3", condition: PackageConditionDescription(
-                                platformNames: ["macos"],
-                                config: nil
-                            )),
-                        ]),
-                        TargetDescription(name: "BTarget3", dependencies: []),
-                    ]
-                ),
-                Manifest.createV4Manifest(
-                    name: "C",
-                    path: "/C",
-                    url: "/C",
-                    packageKind: .remote,
-                    products: [
-                        ProductDescription(name: "CLibrary", type: .library(.static), targets: ["CTarget"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "CTarget", dependencies: []),
-                    ]
-                ),
+                    ),
+                PackageIdentity2("B"):
+                    (AbsolutePath("/B"),
+                    Manifest.createV4Manifest(
+                        name: "B",
+                        path: "/B",
+                        url: "/B",
+                        packageKind: .remote,
+                        products: [
+                            ProductDescription(name: "BLibrary1", type: .library(.static), targets: ["BTarget1"]),
+                            ProductDescription(name: "BLibrary2", type: .library(.static), targets: ["BTarget2"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "BTarget1", dependencies: []),
+                            TargetDescription(name: "BTarget2", dependencies: [
+                                .target(name: "BTarget3", condition: PackageConditionDescription(
+                                    platformNames: ["macos"],
+                                    config: nil
+                                )),
+                            ]),
+                            TargetDescription(name: "BTarget3", dependencies: []),
+                        ])
+                    ),
+                PackageIdentity2("C"):
+                    (AbsolutePath("/C"),
+                    Manifest.createV4Manifest(
+                        name: "C",
+                        path: "/C",
+                        url: "/C",
+                        packageKind: .remote,
+                        products: [
+                            ProductDescription(name: "CLibrary", type: .library(.static), targets: ["CTarget"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "CTarget", dependencies: []),
+                        ])
+                    ),
             ]
         )
 
@@ -1484,12 +1569,14 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root
-                ),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root)
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1510,24 +1597,27 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fileSystem, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "A",
-                    path: "/A",
-                    url: "/A",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "ATarget", dependencies: ["BTarget"]),
-                        TargetDescription(
-                            name: "BTarget",
-                            type: .system,
-                            pkgConfig: "BTarget",
-                            providers: [
-                                .brew(["BTarget"]),
-                                .apt(["BTarget"]),
-                                .yum(["BTarget"]),
-                            ]
-                        )
-                    ]),
+                PackageIdentity2("A"):
+                    (AbsolutePath("/A"),
+                    Manifest.createV4Manifest(
+                        name: "A",
+                        path: "/A",
+                        url: "/A",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "ATarget", dependencies: ["BTarget"]),
+                            TargetDescription(
+                                name: "BTarget",
+                                type: .system,
+                                pkgConfig: "BTarget",
+                                providers: [
+                                    .brew(["BTarget"]),
+                                    .apt(["BTarget"]),
+                                    .yum(["BTarget"]),
+                                ]
+                            )
+                        ])
+                    ),
             ]
         )
 
@@ -1546,19 +1636,22 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fileSystem, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "A",
-                    path: "/A",
-                    url: "/A",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "ATarget", dependencies: ["BTarget"]),
-                        TargetDescription(
-                            name: "BTarget",
-                            type: .system,
-                            pkgConfig: "BTarget"
-                        )
-                    ]),
+                PackageIdentity2("A"):
+                    (AbsolutePath("/A"),
+                    Manifest.createV4Manifest(
+                        name: "A",
+                        path: "/A",
+                        url: "/A",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "ATarget", dependencies: ["BTarget"]),
+                            TargetDescription(
+                                name: "BTarget",
+                                type: .system,
+                                pkgConfig: "BTarget"
+                            )
+                        ])
+                    ),
             ]
         )
 
@@ -1583,15 +1676,18 @@ final class BuildPlanTests: XCTestCase {
         let graph = try loadPackageGraph(
             fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                    TargetDescription(name: "exe", dependencies: ["lib"]),
-                    TargetDescription(name: "lib", dependencies: []),
-                ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1636,17 +1732,19 @@ final class BuildPlanTests: XCTestCase {
         let graph = try loadPackageGraph(
             fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "app", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: []),
-                        TargetDescription(name: "test", dependencies: ["lib"], type: .test)
-                    ]
-                ),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "app", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                            TargetDescription(name: "test", dependencies: ["lib"], type: .test)
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1727,15 +1825,18 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1770,36 +1871,42 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fileSystem, diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "A",
-                    platforms: [
-                        PlatformDescription(name: "macos", version: "10.13"),
-                    ],
-                    path: "/A",
-                    url: "/A",
-                    v: .v5,
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "ATarget", dependencies: ["BLibrary"]),
-                    ]),
-                Manifest.createManifest(
-                    name: "B",
-                    platforms: [
-                        PlatformDescription(name: "macos", version: "10.12"),
-                    ],
-                    path: "/B",
-                    url: "/B",
-                    v: .v5,
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "BLibrary", type: .library(.automatic), targets: ["BTarget"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "BTarget", dependencies: []),
-                    ]),
+                PackageIdentity2("A"):
+                    (AbsolutePath("/A"),
+                    Manifest.createManifest(
+                        name: "A",
+                        platforms: [
+                            PlatformDescription(name: "macos", version: "10.13"),
+                        ],
+                        path: "/A",
+                        url: "/A",
+                        v: .v5,
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "ATarget", dependencies: ["BLibrary"]),
+                        ])
+                    ),
+                PackageIdentity2("B"):
+                    (AbsolutePath("/B"),
+                    Manifest.createManifest(
+                        name: "B",
+                        platforms: [
+                            PlatformDescription(name: "macos", version: "10.12"),
+                        ],
+                        path: "/B",
+                        url: "/B",
+                        v: .v5,
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "BLibrary", type: .library(.automatic), targets: ["BTarget"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "BTarget", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1832,38 +1939,44 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fileSystem, diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "A",
-                    platforms: [
-                        PlatformDescription(name: "macos", version: "10.13"),
-                        PlatformDescription(name: "ios", version: "10"),
-                    ],
-                    path: "/A",
-                    url: "/A",
-                    v: .v5,
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "ATarget", dependencies: ["BLibrary"]),
-                    ]),
-                Manifest.createManifest(
-                    name: "B",
-                    platforms: [
-                        PlatformDescription(name: "macos", version: "10.14"),
-                        PlatformDescription(name: "ios", version: "11"),
-                    ],
-                    path: "/B",
-                    url: "/B",
-                    v: .v5,
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "BLibrary", type: .library(.automatic), targets: ["BTarget"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "BTarget", dependencies: []),
-                    ]),
+                PackageIdentity2("A"):
+                    (AbsolutePath("/A"),
+                    Manifest.createManifest(
+                        name: "A",
+                        platforms: [
+                            PlatformDescription(name: "macos", version: "10.13"),
+                            PlatformDescription(name: "ios", version: "10"),
+                        ],
+                        path: "/A",
+                        url: "/A",
+                        v: .v5,
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/B", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "ATarget", dependencies: ["BLibrary"]),
+                        ])
+                    ),
+                PackageIdentity2("B"):
+                    (AbsolutePath("/B"),
+                    Manifest.createManifest(
+                        name: "B",
+                        platforms: [
+                            PlatformDescription(name: "macos", version: "10.14"),
+                            PlatformDescription(name: "ios", version: "11"),
+                        ],
+                        path: "/B",
+                        url: "/B",
+                        v: .v5,
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "BLibrary", type: .library(.automatic), targets: ["BTarget"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "BTarget", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -1970,7 +2083,8 @@ final class BuildPlanTests: XCTestCase {
 
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
-            manifests: [aManifest, bManifest]
+            manifests: [ PackageIdentity2("A"): (AbsolutePath("/A"), aManifest),
+                         PackageIdentity2("B"): (AbsolutePath("/B"), bManifest) ]
         )
         XCTAssertNoDiagnostics(diagnostics)
 
@@ -2038,7 +2152,7 @@ final class BuildPlanTests: XCTestCase {
 
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
-            manifests: [aManifest]
+            manifests: [PackageIdentity2("A"): (AbsolutePath("/A"), aManifest)]
         )
         XCTAssertNoDiagnostics(diagnostics)
 
@@ -2064,30 +2178,36 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "PkgA",
-                    path: "/PkgA",
-                    url: "/PkgA",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "swiftlib", type: .library(.automatic), targets: ["swiftlib"]),
-                        ProductDescription(name: "exe", type: .executable, targets: ["exe"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: []),
-                        TargetDescription(name: "swiftlib", dependencies: ["exe"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "PkgB",
-                    path: "/PkgB",
-                    url: "/PkgB",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/PkgA", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "PkgB", dependencies: ["swiftlib"]),
-                    ]),
+                PackageIdentity2("PkgA"):
+                    (AbsolutePath("/PkgA"),
+                    Manifest.createV4Manifest(
+                        name: "PkgA",
+                        path: "/PkgA",
+                        url: "/PkgA",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "swiftlib", type: .library(.automatic), targets: ["swiftlib"]),
+                            ProductDescription(name: "exe", type: .executable, targets: ["exe"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: []),
+                            TargetDescription(name: "swiftlib", dependencies: ["exe"]),
+                        ])
+                    ),
+                PackageIdentity2("PkgB"):
+                    (AbsolutePath("/PkgB"),
+                    Manifest.createV4Manifest(
+                        name: "PkgB",
+                        path: "/PkgB",
+                        url: "/PkgB",
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/PkgA", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "PkgB", dependencies: ["swiftlib"]),
+                        ])
+                    ),
             ],
             explicitProduct: "exe"
         )
@@ -2117,15 +2237,18 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "PkgA",
-                    path: "/PkgA",
-                    url: "/PkgA",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: []),
-                        TargetDescription(name: "Bar", dependencies: ["Foo"]),
-                    ]),
+                PackageIdentity2("PkgA"):
+                    (AbsolutePath("/PkgA"),
+                    Manifest.createV4Manifest(
+                        name: "PkgA",
+                        path: "/PkgA",
+                        url: "/PkgA",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: []),
+                            TargetDescription(name: "Bar", dependencies: ["Foo"]),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -2172,28 +2295,34 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "PkgA",
-                    path: "/PkgA",
-                    url: "/PkgA",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/PkgB", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar", dependencies: ["Foo"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "PkgB",
-                    path: "/PkgB",
-                    url: "/PkgB",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Foo", type: .library(.automatic), targets: ["Foo"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: []),
-                    ]),
+                PackageIdentity2("PkgA"):
+                    (AbsolutePath("/PkgA"),
+                    Manifest.createV4Manifest(
+                        name: "PkgA",
+                        path: "/PkgA",
+                        url: "/PkgA",
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/PkgB", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar", dependencies: ["Foo"]),
+                        ])
+                    ),
+                PackageIdentity2("PkgB"):
+                    (AbsolutePath("/PkgB"),
+                    Manifest.createV4Manifest(
+                        name: "PkgB",
+                        path: "/PkgB",
+                        url: "/PkgB",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Foo", type: .library(.automatic), targets: ["Foo"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -2240,28 +2369,34 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "PkgA",
-                    path: "/PkgA",
-                    url: "/PkgA",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/PkgB", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar", dependencies: ["Foo"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "PkgB",
-                    path: "/PkgB",
-                    url: "/PkgB",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Foo", type: .library(.dynamic), targets: ["Foo"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: []),
-                    ]),
+                PackageIdentity2("PkgA"):
+                    (AbsolutePath("/PkgA"),
+                    Manifest.createV4Manifest(
+                        name: "PkgA",
+                        path: "/PkgA",
+                        url: "/PkgA",
+                        packageKind: .root,
+                        dependencies: [
+                            PackageDependencyDescription(url: "/PkgB", requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar", dependencies: ["Foo"]),
+                        ])
+                    ),
+                PackageIdentity2("PkgB"):
+                    (AbsolutePath("/PkgB"),
+                    Manifest.createV4Manifest(
+                        name: "PkgB",
+                        path: "/PkgB",
+                        url: "/PkgB",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Foo", type: .library(.dynamic), targets: ["Foo"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -2308,16 +2443,18 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: []),
-                    ]
-                ),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -2370,25 +2507,27 @@ final class BuildPlanTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "PkgA",
-                    path: "/PkgA",
-                    url: "/PkgA",
-                    v: .v5_2,
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(
-                            name: "Foo",
-                            resources: [
-                                .init(rule: .copy, path: "foo.txt"),
-                                .init(rule: .process, path: "bar.txt"),
-                            ]
-                        ),
-                        TargetDescription(
-                            name: "Bar"
-                        ),
-                    ]
-                )
+                PackageIdentity2("PkgA"):
+                    (AbsolutePath("/PkgA"),
+                    Manifest.createManifest(
+                        name: "PkgA",
+                        path: "/PkgA",
+                        url: "/PkgA",
+                        v: .v5_2,
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(
+                                name: "Foo",
+                                resources: [
+                                    .init(rule: .copy, path: "foo.txt"),
+                                    .init(rule: .process, path: "bar.txt"),
+                                ]
+                            ),
+                            TargetDescription(
+                                name: "Bar"
+                            ),
+                        ])
+                    ),
             ]
         )
 
@@ -2427,15 +2566,18 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["lib"]),
-                        TargetDescription(name: "lib", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                        ])
+                    ),
             ]
         )
 
@@ -2533,24 +2675,26 @@ final class BuildPlanTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    products: [
-                        ProductDescription(name: "exe", type: .executable, targets: ["exe"]),
-                        ProductDescription(name: "Library", type: .library(.dynamic), targets: ["Library"]),
-                        ProductDescription(name: "CLibrary", type: .library(.dynamic), targets: ["CLibrary"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["Library"]),
-                        TargetDescription(name: "Library", dependencies: ["Framework"]),
-                        TargetDescription(name: "CLibrary", dependencies: ["StaticLibrary"]),
-                        TargetDescription(name: "Framework", path: "Framework.xcframework", type: .binary),
-                        TargetDescription(name: "StaticLibrary", path: "StaticLibrary.xcframework", type: .binary),
-                    ]
-                ),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        products: [
+                            ProductDescription(name: "exe", type: .executable, targets: ["exe"]),
+                            ProductDescription(name: "Library", type: .library(.dynamic), targets: ["Library"]),
+                            ProductDescription(name: "CLibrary", type: .library(.dynamic), targets: ["CLibrary"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["Library"]),
+                            TargetDescription(name: "Library", dependencies: ["Framework"]),
+                            TargetDescription(name: "CLibrary", dependencies: ["StaticLibrary"]),
+                            TargetDescription(name: "Framework", path: "Framework.xcframework", type: .binary),
+                            TargetDescription(name: "StaticLibrary", path: "StaticLibrary.xcframework", type: .binary),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -2633,16 +2777,19 @@ final class BuildPlanTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "exe", dependencies: ["lib", "clib"]),
-                        TargetDescription(name: "lib", dependencies: []),
-                        TargetDescription(name: "clib", dependencies: []),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "exe", dependencies: ["lib", "clib"]),
+                            TargetDescription(name: "lib", dependencies: []),
+                            TargetDescription(name: "clib", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)

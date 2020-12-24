@@ -15,21 +15,26 @@ import PackageModel
 public final class ResolvedPackage: ObjectIdentifierProtocol {
 
     /// The underlying package reference.
-    public let underlyingPackage: Package
+    public let underlying: Package
 
     /// The manifest describing the package.
     public var manifest: Manifest {
-        return underlyingPackage.manifest
+        return self.underlying.manifest
     }
 
     /// The name of the package.
+    @available(*, deprecated)
     public var name: String {
-        return underlyingPackage.name
+        return self.underlying.name
+    }
+
+    public var identity: PackageIdentity2 {
+        return self.underlying.identity
     }
 
     /// The local path of the package.
     public var path: AbsolutePath {
-        return underlyingPackage.path
+        return self.underlying.path
     }
 
     /// The targets contained in the package.
@@ -47,7 +52,7 @@ public final class ResolvedPackage: ObjectIdentifierProtocol {
         targets: [ResolvedTarget],
         products: [ResolvedProduct]
     ) {
-        self.underlyingPackage = package
+        self.underlying = package
         self.dependencies = dependencies
         self.targets = targets
         self.products = products
@@ -56,6 +61,6 @@ public final class ResolvedPackage: ObjectIdentifierProtocol {
 
 extension ResolvedPackage: CustomStringConvertible {
     public var description: String {
-        return "<ResolvedPackage: \(name)>"
+        return "<ResolvedPackage: \(self.identity)>"
     }
 }

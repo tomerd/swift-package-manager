@@ -37,14 +37,17 @@ class GenerateXcodeprojTests: XCTestCase {
             let diagnostics = DiagnosticsEngine()
             let graph = try loadPackageGraph(fs: localFileSystem, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Foo",
-                        path: packagePath.pathString,
-                        url: packagePath.pathString,
-                        packageKind: .root,
-                        targets: [
-                            TargetDescription(name: "DummyModuleName"),
-                        ])
+                    PackageIdentity2("Foo"):
+                        (packagePath,
+                        Manifest.createV4Manifest(
+                            name: "Foo",
+                            path: packagePath.pathString,
+                            url: packagePath.pathString,
+                            packageKind: .root,
+                            targets: [
+                                TargetDescription(name: "DummyModuleName"),
+                            ])
+                        )
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)
@@ -89,14 +92,17 @@ class GenerateXcodeprojTests: XCTestCase {
             let diagnostics = DiagnosticsEngine()
             let graph = try loadPackageGraph(fs: localFileSystem, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Bar",
-                        path: packagePath.pathString,
-                        url: packagePath.pathString,
-                        packageKind: .root,
-                        targets: [
-                            TargetDescription(name: "Bar"),
-                        ])
+                    PackageIdentity2("Bar"):
+                        (packagePath,
+                        Manifest.createV4Manifest(
+                            name: "Bar",
+                            path: packagePath.pathString,
+                            url: packagePath.pathString,
+                            packageKind: .root,
+                            targets: [
+                                TargetDescription(name: "Bar"),
+                            ])
+                        )
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)
@@ -124,14 +130,17 @@ class GenerateXcodeprojTests: XCTestCase {
             let diagnostics = DiagnosticsEngine()
             let graph = try loadPackageGraph(fs: localFileSystem, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Modules",
-                        path: packagePath.pathString,
-                        url: packagePath.pathString,
-                        packageKind: .root,
-                        targets: [
-                            TargetDescription(name: "Modules"),
-                        ])
+                    PackageIdentity2("Modules"):
+                        (packagePath,
+                        Manifest.createV4Manifest(
+                            name: "Modules",
+                            path: packagePath.pathString,
+                            url: packagePath.pathString,
+                            packageKind: .root,
+                            targets: [
+                                TargetDescription(name: "Modules"),
+                            ])
+                        )
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)
@@ -160,14 +169,17 @@ class GenerateXcodeprojTests: XCTestCase {
             let graph = try loadPackageGraph(
                 fs: localFileSystem, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Foo",
-                        path: packagePath.pathString,
-                        url: packagePath.pathString,
-                        packageKind: .root,
-                        targets: [
-                            TargetDescription(name: "DummyModule"),
-                        ])
+                    PackageIdentity2("Foo"):
+                        (packagePath,
+                        Manifest.createV4Manifest(
+                            name: "Foo",
+                            path: packagePath.pathString,
+                            url: packagePath.pathString,
+                            packageKind: .root,
+                            targets: [
+                                TargetDescription(name: "DummyModule"),
+                            ])
+                        )
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)
@@ -195,14 +207,17 @@ class GenerateXcodeprojTests: XCTestCase {
             let graph = try loadPackageGraph(
                 fs: localFileSystem, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Foo",
-                        path: packagePath.pathString,
-                        url: packagePath.pathString,
-                        packageKind: .root,
-                        targets: [
-                            TargetDescription(name: "DummyModule"),
-                        ])
+                    PackageIdentity2("Foo"):
+                        (packagePath,
+                        Manifest.createV4Manifest(
+                            name: "Foo",
+                            path: packagePath.pathString,
+                            url: packagePath.pathString,
+                            packageKind: .root,
+                            targets: [
+                                TargetDescription(name: "DummyModule"),
+                            ])
+                        )
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)
@@ -229,14 +244,17 @@ class GenerateXcodeprojTests: XCTestCase {
             let graph = try loadPackageGraph(
                 fs: localFileSystem, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Foo",
-                        path: packagePath.pathString,
-                        url: packagePath.pathString,
-                        packageKind: .root,
-                        targets: [
-                            TargetDescription(name: "DummyModule"),
-                        ])
+                    PackageIdentity2("Foo"):
+                        (packagePath,
+                        Manifest.createV4Manifest(
+                            name: "Foo",
+                            path: packagePath.pathString,
+                            url: packagePath.pathString,
+                            packageKind: .root,
+                            targets: [
+                                TargetDescription(name: "DummyModule"),
+                            ])
+                        )
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)
@@ -267,14 +285,17 @@ class GenerateXcodeprojTests: XCTestCase {
             let graph = try loadPackageGraph(
                 fs: localFileSystem, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Foo",
-                        path: packagePath.pathString,
-                        url: packagePath.pathString,
-                        packageKind: .root,
-                        targets: [
-                            TargetDescription(name: "DummyModule"),
-                        ])
+                    PackageIdentity2("Foo"):
+                        (packagePath,
+                        Manifest.createV4Manifest(
+                            name: "Foo",
+                            path: packagePath.pathString,
+                            url: packagePath.pathString,
+                            packageKind: .root,
+                            targets: [
+                                TargetDescription(name: "DummyModule"),
+                            ])
+                        )
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)
@@ -310,14 +331,17 @@ class GenerateXcodeprojTests: XCTestCase {
             let graph = try loadPackageGraph(
                 fs: localFileSystem, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Foo",
-                        path: packagePath.pathString,
-                        url: packagePath.pathString,
-                        packageKind: .root,
-                        targets: [
-                            TargetDescription(name: "DummyModule"),
-                        ])
+                    PackageIdentity2("Foo"):
+                        (packagePath,
+                        Manifest.createV4Manifest(
+                            name: "Foo",
+                            path: packagePath.pathString,
+                            url: packagePath.pathString,
+                            packageKind: .root,
+                            targets: [
+                                TargetDescription(name: "DummyModule"),
+                            ])
+                        )
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)
@@ -352,32 +376,40 @@ class GenerateXcodeprojTests: XCTestCase {
             let diagnostics = DiagnosticsEngine()
             let graph = try loadPackageGraph(fs: localFileSystem, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Foo",
-                        path: fooPackagePath.pathString,
-                        url: fooPackagePath.pathString,
-                        dependencies: [
-                            PackageDependencyDescription(name: "Bar", url: barPackagePath.pathString, requirement: .localPackage)
-                        ],
-                        targets: [
-                            TargetDescription(name: "Foo", dependencies: [
-                                .product(name: "Bar", package: "Bar", condition: .init(platformNames: ["ios"]))
-                            ]),
-                        ]),
-                    Manifest.createV4Manifest(
-                        name: "Bar",
-                        path: barPackagePath.pathString,
-                        url: barPackagePath.pathString,
-                        packageKind: .remote,
-                        products: [
-                            ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar1"])
-                        ],
-                        targets: [
-                            TargetDescription(name: "Bar1", dependencies: [
-                                .target(name: "Bar2", condition: .init(config: "debug"))
-                            ]),
-                            TargetDescription(name: "Bar2"),
-                        ])
+                    PackageIdentity2("Foo"):
+                        (fooPackagePath,
+                        Manifest.createV4Manifest(
+                            name: "Foo",
+                            path: fooPackagePath.pathString,
+                            url: fooPackagePath.pathString,
+                            dependencies: [
+                                // FIXME
+                                //PackageDependencyDescription(name: "Bar", url: barPackagePath.pathString, requirement: .localPackage)
+                                PackageDependencyDescription(identity: .init("Bar"), location: URL(string: barPackagePath.pathString)!, requirement: .localPackage)
+                            ],
+                            targets: [
+                                TargetDescription(name: "Foo", dependencies: [
+                                    .product(name: "Bar", package: "Bar", condition: .init(platformNames: ["ios"]))
+                                ]),
+                            ])
+                        ),
+                    PackageIdentity2("Bar"):
+                        (barPackagePath,
+                        Manifest.createV4Manifest(
+                            name: "Bar",
+                            path: barPackagePath.pathString,
+                            url: barPackagePath.pathString,
+                            packageKind: .remote,
+                            products: [
+                                ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar1"])
+                            ],
+                            targets: [
+                                TargetDescription(name: "Bar1", dependencies: [
+                                    .target(name: "Bar2", condition: .init(config: "debug"))
+                                ]),
+                                TargetDescription(name: "Bar2"),
+                            ])
+                        )
                 ]
             )
 

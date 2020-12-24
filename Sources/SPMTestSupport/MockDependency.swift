@@ -10,11 +10,12 @@
 
 import PackageModel
 import TSCBasic
+import struct Foundation.URL
 
 public struct MockDependency {
     public typealias Requirement = PackageDependencyDescription.Requirement
 
-    public let name: String?
+    public let name: String
     public let path: String
     public let requirement: Requirement
     public let products: ProductFilter
@@ -26,17 +27,19 @@ public struct MockDependency {
         self.products = products
     }
 
-    public init(name: String?, path: String, requirement: Requirement, products: ProductFilter = .everything) {
+    /*public init(name: String?, path: String, requirement: Requirement, products: ProductFilter = .everything) {
         self.name = name
         self.path = path
         self.requirement = requirement
         self.products = products
-    }
+    }*/
 
     public func convert(baseURL: AbsolutePath) -> PackageDependencyDescription {
         return PackageDependencyDescription(
-            name: self.name,
-            url: baseURL.appending(RelativePath(self.path)).pathString,
+            //name: self.name,
+            //url: baseURL.appending(RelativePath(self.path)).pathString,
+            identity: PackageIdentity2(self.name),
+            location: URL(string: baseURL.appending(RelativePath(self.path)).pathString)!,
             requirement: self.requirement,
             productFilter: self.products
         )

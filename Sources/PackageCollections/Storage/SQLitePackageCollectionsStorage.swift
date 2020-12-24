@@ -258,7 +258,7 @@ final class SQLitePackageCollectionsStorage: PackageCollectionsStorage, Closable
     }
 
     // TODO: this is PoC for search, need a more performant version of this
-    func findPackage(identifier: PackageIdentity,
+    func findPackage(identifier: PackageIdentity2,
                      collectionIdentifiers: [Model.CollectionIdentifier]?,
                      callback: @escaping (Result<Model.PackageSearchResult.Item, Error>) -> Void) {
         self.list(identifiers: collectionIdentifiers) { result in

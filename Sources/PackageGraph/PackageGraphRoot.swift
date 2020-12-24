@@ -17,19 +17,22 @@ import SourceControl
 /// Represents the input to the package graph root.
 public struct PackageGraphRootInput {
     /// The list of root packages.
-    public let packages: [AbsolutePath]
+    public var manifests: [AbsolutePath: Manifest?]
 
     /// Top level dependencies to the graph.
     public let dependencies: [PackageDependencyDescription]
 
-    /// Dependency mirrors for the graph.
-    public let mirrors: DependencyMirrors
-
     /// Create a package graph root.
-    public init(packages: [AbsolutePath], dependencies: [PackageDependencyDescription] = [], mirrors: DependencyMirrors = [:]) {
-        self.packages = packages
+    public init(manifests: [AbsolutePath: Manifest?], dependencies: [PackageDependencyDescription] = []) {
+        self.manifests = manifests
         self.dependencies = dependencies
-        self.mirrors = mirrors
+    }
+
+    public init(packages: [AbsolutePath], dependencies: [PackageDependencyDescription] = []) {
+        self.manifests = packages.reduce(into: [AbsolutePath: Manifest?]()) { partial, item in
+            partial[item] = nil
+        }
+        self.dependencies = dependencies
     }
 }
 
@@ -37,21 +40,28 @@ public struct PackageGraphRootInput {
 public struct PackageGraphRoot {
 
     /// The list of root manifests.
-    public let manifests: [Manifest]
+    //public let manifests: [Manifest]
 
     /// The root package references.
-    public let packageRefs: [PackageReference]
+    public let packageManifests: [PackageReference: Manifest]
 
     /// The top level dependencies.
     public let dependencies: [PackageDependencyDescription]
 
     /// Create a package graph root.
-    public init(input: PackageGraphRootInput, manifests: [Manifest], explicitProduct: String? = nil) {
-        self.packageRefs = zip(input.packages, manifests).map { (path, manifest) in
-            let identity = PackageIdentity(url: manifest.url)
-            return PackageReference(identity: identity, path: path.pathString, kind: .root)
-        }
-        self.manifests = manifests
+    public init(input: PackageGraphRootInput,/*, manifests: [Manifest],*/ explicitProduct: String? = nil) {
+        let manifests = input.manifests.compactMapValues{  $0 }
+        assert(manifests.count == input.manifests.count, "all manifests expected to be loaded")
+
+
+        self.packageManifests = /*zip(input.packages, manifests)*/ manifests.map { (path, manifest) -> (PackageReference, Manifest) in
+            //let identity = PackageIdentity(url: manifest.url)
+            let identity = PackageIdentity2(path.pathString) // FIXME, should come up with a better alogrithem here
+            return (PackageReference(identity: identity, path: path.pathString, kind: .root), manifest)
+        }.reduce(into: [PackageReference: Manifest](), { (partial, item) in
+            partial[item.0] = item.1
+        })
+        //self.manifests = manifests
 
         // FIXME: Deprecate special casing once the manifest supports declaring used executable products.
         // Special casing explicit products like this is necessary to pass the test suite and satisfy backwards compatibility.
@@ -62,7 +72,7 @@ public struct PackageGraphRoot {
         // at which time the current special casing can be deprecated.
         var adjustedDependencies = input.dependencies
         if let product = explicitProduct {
-            for dependency in manifests.lazy.map({ $0.dependenciesRequired(for: .everything) }).joined() {
+            for dependency in manifests.values.lazy.map({ $0.dependenciesRequired(for: .everything) }).joined() {
                 adjustedDependencies.append(dependency.filtered(by: .specific([product])))
             }
         }
@@ -71,17 +81,17 @@ public struct PackageGraphRoot {
     }
 
     /// Returns the constraints imposed by root manifests + dependencies.
-    public func constraints(mirrors: DependencyMirrors) -> [PackageContainerConstraint] {
-        let constraints = packageRefs.map({
-            PackageContainerConstraint(container: $0, requirement: .unversioned, products: .everything)
-        })
-        return constraints + dependencies.map({
+    public func constraints() -> [PackageContainerConstraint] {
+        let constraints = packageManifests.map{
+            PackageContainerConstraint(package: $0.key, requirement: .unversioned, products: .everything)
+        }
+        return constraints + dependencies.map{
             PackageContainerConstraint(
-                container: $0.createPackageRef(mirrors: mirrors),
+                package: $0.createPackageRef(),
                 requirement: $0.requirement.toConstraintRequirement(),
                 products: $0.productFilter
             )
-        })
+        }
     }
 }
 

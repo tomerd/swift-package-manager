@@ -18,13 +18,13 @@ import TSCBasic
 import struct TSCUtility.Version
 
 public class MockPackageContainer: PackageContainer {
-    public typealias Identifier = PackageReference
+    //public typealias Identifier = PackageReference
 
     public typealias Constraint = PackageContainerConstraint
 
-    public typealias Dependency = (container: Identifier, requirement: PackageRequirement)
+    public typealias Dependency = (container: PackageReference, requirement: PackageRequirement)
 
-    let name: Identifier
+    public let underlying: PackageReference
 
     let dependencies: [String: [Dependency]]
 
@@ -32,10 +32,6 @@ public class MockPackageContainer: PackageContainer {
 
     /// Contains the versions for which the dependencies were requested by resolver using getDependencies().
     public var requestedVersions: Set<Version> = []
-
-    public var identifier: Identifier {
-        return name
-    }
 
     public let _versions: [Version]
     public func toolsVersionsAppropriateVersionsDescending() throws -> [Version] {
@@ -52,9 +48,10 @@ public class MockPackageContainer: PackageContainer {
     }
 
     public func getDependencies(at revision: String, productFilter: ProductFilter) -> [MockPackageContainer.Constraint] {
-        return dependencies[revision]!.map { value in
-            let (name, requirement) = value
-            return MockPackageContainer.Constraint(container: name, requirement: requirement, products: productFilter)
+        return dependencies[revision]!.map { package, requirement in
+            //let (name, requirement) = value
+            //return MockPackageContainer.Constraint(container: name, requirement: requirement, products: productFilter)
+            return MockPackageContainer.Constraint(package: package, requirement: requirement, products: productFilter)
         }
     }
 
@@ -62,9 +59,9 @@ public class MockPackageContainer: PackageContainer {
         return unversionedDeps
     }
 
-    public func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
+    /*public func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
         return name
-    }
+    }*/
 
     public func isToolsVersionCompatible(at version: Version) -> Bool {
         return true
@@ -85,19 +82,19 @@ public class MockPackageContainer: PackageContainer {
         var dependencies: [String: [Dependency]] = [:]
         for (version, deps) in dependenciesByVersion {
             dependencies[version.description] = deps.map {
-                let ref = PackageReference(identity: PackageIdentity(url: $0.container), path: "/\($0.container)")
+                let ref = PackageReference(identity: PackageIdentity2($0.container), path: "/\($0.container)", kind: .remote)
                 return (ref, .versionSet($0.versionRequirement))
             }
         }
-        let ref = PackageReference(identity: PackageIdentity(url: name), path: "/\(name)")
-        self.init(name: ref, dependencies: dependencies)
+        let ref = PackageReference(identity: PackageIdentity2(name), path: "/\(name)", kind: .remote)
+        self.init(package: ref, dependencies: dependencies)
     }
 
     public init(
-        name: Identifier,
+        package: PackageReference,
         dependencies: [String: [Dependency]] = [:]
     ) {
-        self.name = name
+        self.underlying = package
         self._versions = dependencies.keys.compactMap(Version.init(string:)).sorted()
         self.dependencies = dependencies
     }
@@ -109,7 +106,7 @@ public struct MockPackageContainerProvider: PackageContainerProvider {
 
     public init(containers: [MockPackageContainer]) {
         self.containers = containers
-        self.containersByIdentifier = Dictionary(uniqueKeysWithValues: containers.map { ($0.identifier, $0) })
+        self.containersByIdentifier = Dictionary(uniqueKeysWithValues: containers.map { ($0.underlying, $0) })
     }
 
     public func getContainer(
@@ -126,14 +123,16 @@ public struct MockPackageContainerProvider: PackageContainerProvider {
     }
 }
 
+/*
 public extension MockPackageContainer.Constraint {
     init(container identifier: String, requirement: PackageRequirement, products: ProductFilter) {
-        let ref = PackageReference(identity: PackageIdentity(url: identifier), path: "")
-        self.init(container: ref, requirement: requirement, products: products)
+        let ref = PackageReference(identity: PackageIdentity2(identifier), path: "", kind: .remote)
+        self.init(package: ref, requirement: requirement, products: products)
     }
 
     init(container identifier: String, versionRequirement: VersionSetSpecifier, products: ProductFilter) {
-        let ref = PackageReference(identity: PackageIdentity(url: identifier), path: "")
-        self.init(container: ref, versionRequirement: versionRequirement, products: products)
+        let ref = PackageReference(identity: PackageIdentity2(identifier), path: "", kind: .remote)
+        self.init(package: ref, versionRequirement: versionRequirement, products: products)
     }
 }
+*/

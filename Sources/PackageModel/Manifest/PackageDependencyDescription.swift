@@ -9,9 +9,11 @@
 */
 
 import TSCBasic
+import struct Foundation.URL
 
 /// Represents a package dependency.
 public struct PackageDependencyDescription: Equatable, Codable {
+
 
     /// The dependency requirement.
     public enum Requirement: Equatable, Hashable {
@@ -31,18 +33,25 @@ public struct PackageDependencyDescription: Equatable, Codable {
     }
 
     /// The name of the package dependency explicitly defined in the manifest, if any.
-    public let explicitName: String?
+    @available(*, deprecated)
+    public let explicitName: String? = nil
 
-    /// The name of the packagedependency,
+    /// The name of the package dependency,
     /// either explicitly defined in the manifest,
     /// or derived from the URL.
     ///
     /// - SeeAlso: `explicitName`
     /// - SeeAlso: `url`
-    public let name: String
+    @available(*, deprecated)
+    public let name: String = ""
 
     /// The url of the package dependency.
-    public let url: String
+    @available(*, deprecated)
+    public let url: String = ""
+
+    public let identity: PackageIdentity2
+
+    public let location: Foundation.URL
 
     /// The dependency requirement.
     public let requirement: Requirement
@@ -52,14 +61,16 @@ public struct PackageDependencyDescription: Equatable, Codable {
 
     /// Create a package dependency.
     public init(
-        name: String? = nil,
-        url: String,
+        identity: PackageIdentity2,
+        location: Foundation.URL,
+        //name: String? = nil,
+        //url: String,
         requirement: Requirement,
         productFilter: ProductFilter = .everything
     ) {
         // FIXME: SwiftPM can't handle file URLs with file:// scheme so we need to
         // strip that. We need to design a URL data structure for SwiftPM.
-        let filePrefix = "file://"
+        /*let filePrefix = "file://"
         let normalizedURL: String
         if url.hasPrefix(filePrefix) {
             normalizedURL = AbsolutePath(String(url.dropFirst(filePrefix.count))).pathString
@@ -70,13 +81,20 @@ public struct PackageDependencyDescription: Equatable, Codable {
         self.explicitName = name
         self.name = name ?? PackageReference.computeDefaultName(fromURL: normalizedURL)
         self.url = normalizedURL
+         */
+        self.identity = identity
+        self.location = location
         self.requirement = requirement
         self.productFilter = productFilter
     }
 
     /// Returns a new package dependency with the specified products.
     public func filtered(by productFilter: ProductFilter) -> PackageDependencyDescription {
-        PackageDependencyDescription(name: explicitName, url: url, requirement: requirement, productFilter: productFilter)
+        //PackageDependencyDescription(name: explicitName, url: url, requirement: requirement, productFilter: productFilter)
+        PackageDependencyDescription(identity: self.identity,
+                                     location: self.location,
+                                     requirement: self.requirement,
+                                     productFilter: productFilter)
     }
 }
 

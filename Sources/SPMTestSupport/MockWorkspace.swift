@@ -189,7 +189,7 @@ public final class MockWorkspace {
     }
 
     public func checkEdit(
-        packageName: String,
+        package: PackageIdentity2,
         path: AbsolutePath? = nil,
         revision: Revision? = nil,
         checkoutBranch: String? = nil,
@@ -198,7 +198,7 @@ public final class MockWorkspace {
         let ws = self.createWorkspace()
         let diagnostics = DiagnosticsEngine()
         ws.edit(
-            packageName: packageName,
+            package: package,
             path: path,
             revision: revision,
             checkoutBranch: checkoutBranch,
@@ -208,26 +208,26 @@ public final class MockWorkspace {
     }
 
     public func checkUnedit(
-        packageName: String,
+        package: PackageIdentity2,
         roots: [String],
         forceRemove: Bool = false,
         _ result: (DiagnosticsEngine) -> Void
     ) {
         let ws = self.createWorkspace()
         let diagnostics = DiagnosticsEngine()
-        let rootInput = PackageGraphRootInput(packages: rootPaths(for: roots))
+        let rootInput = PackageGraphRootInput(packages: self.rootPaths(for: roots))
         diagnostics.wrap {
-            try ws.unedit(packageName: packageName, forceRemove: forceRemove, root: rootInput, diagnostics: diagnostics)
+            try ws.unedit(package: package, forceRemove: forceRemove, root: rootInput, diagnostics: diagnostics)
         }
         result(diagnostics)
     }
 
-    public func checkResolve(pkg: String, roots: [String], version: TSCUtility.Version, _ result: (DiagnosticsEngine) -> Void) {
+    public func checkResolve(package: PackageIdentity2, roots: [String], version: TSCUtility.Version, _ result: (DiagnosticsEngine) -> Void) {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
-        let rootInput = PackageGraphRootInput(packages: rootPaths(for: roots))
+        let rootInput = PackageGraphRootInput(packages: self.rootPaths(for: roots))
         diagnostics.wrap {
-            try workspace.resolve(packageName: pkg, root: rootInput, version: version, branch: nil, revision: nil, diagnostics: diagnostics)
+            try workspace.resolve(package: package, root: rootInput, version: version, branch: nil, revision: nil, diagnostics: diagnostics)
             result(diagnostics)
         }
     }
@@ -249,14 +249,14 @@ public final class MockWorkspace {
     public func checkUpdate(
         roots: [String] = [],
         deps: [MockDependency] = [],
-        packages: [String] = [],
+        packages: [PackageIdentity2] = [],
         _ result: (DiagnosticsEngine) -> Void
     ) {
         let dependencies = deps.map { $0.convert(baseURL: packagesDir) }
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
         let rootInput = PackageGraphRootInput(
-            packages: rootPaths(for: roots), dependencies: dependencies
+            packages: self.rootPaths(for: roots), dependencies: dependencies
         )
         diagnostics.wrap {
             try workspace.updateDependencies(root: rootInput, packages: packages, diagnostics: diagnostics)
@@ -273,7 +273,7 @@ public final class MockWorkspace {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
         let rootInput = PackageGraphRootInput(
-            packages: rootPaths(for: roots), dependencies: dependencies
+            packages: self.rootPaths(for: roots), dependencies: dependencies
         )
         diagnostics.wrap {
             let changes = try workspace.updateDependencies(root: rootInput, diagnostics: diagnostics, dryRun: true)
@@ -298,9 +298,8 @@ public final class MockWorkspace {
     ) {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
-        let rootInput = PackageGraphRootInput(
-            packages: rootPaths(for: roots), dependencies: dependencies
-        )
+        let rootManifestsPaths = self.rootPaths(for: roots)
+        let rootInput = PackageGraphRootInput(packages: rootManifestsPaths, dependencies: dependencies)
         diagnostics.wrap {
             let graph = try workspace.loadPackageGraph(
                 rootInput: rootInput, forceResolvedVersions: forceResolvedVersions, diagnostics: diagnostics
@@ -319,9 +318,10 @@ public final class MockWorkspace {
         let workspace = self.createWorkspace()
         let pinsStore = try workspace.pinsStore.load()
 
-        let rootInput = PackageGraphRootInput(packages: rootPaths(for: roots.map { $0.name }), dependencies: [])
-        let rootManifests = try temp_await { workspace.loadRootManifests(packages: rootInput.packages, diagnostics: diagnostics, completion: $0) }
-        let root = PackageGraphRoot(input: rootInput, manifests: rootManifests)
+        let rootManifestsPaths = self.rootPaths(for: roots.map { $0.name })
+        let rootManifests = try temp_await { workspace.loadRootManifests(packages: rootManifestsPaths, diagnostics: diagnostics, completion: $0) }
+        let rootInput = PackageGraphRootInput(manifests: rootManifests, dependencies: [])
+        let root = PackageGraphRoot(input: rootInput)
 
         let dependencyManifests = try workspace.loadDependencyManifests(root: root, diagnostics: diagnostics)
 
@@ -344,7 +344,7 @@ public final class MockWorkspace {
         let pinsStore = try workspace.pinsStore.load()
 
         for (ref, state) in pins {
-            pinsStore.pin(packageRef: ref, state: state)
+            pinsStore.pin(package: ref, state: state)
         }
 
         for dependency in managedDependencies {
@@ -382,18 +382,18 @@ public final class MockWorkspace {
             self.managedDependencies = managedDependencies
         }
 
-        public func check(notPresent name: String, file: StaticString = #file, line: UInt = #line) {
-            let dependency = self.managedDependencies[forNameOrIdentity: name]
-            XCTAssert(dependency == nil, "Unexpectedly found \(name) in managed dependencies", file: file, line: line)
+        public func check(notPresent identity: PackageIdentity2, file: StaticString = #file, line: UInt = #line) {
+            let dependency = self.managedDependencies[forIdentity: identity]
+            XCTAssert(dependency == nil, "Unexpectedly found \(identity) in managed dependencies", file: file, line: line)
         }
 
         public func checkEmpty(file: StaticString = #file, line: UInt = #line) {
             XCTAssertEqual(self.managedDependencies.count, 0, file: file, line: line)
         }
 
-        public func check(dependency name: String, at state: State, file: StaticString = #file, line: UInt = #line) {
-            guard let dependency = managedDependencies[forNameOrIdentity: name] else {
-                XCTFail("\(name) does not exists", file: file, line: line)
+        public func check(dependency identity: PackageIdentity2, at state: State, file: StaticString = #file, line: UInt = #line) {
+            guard let dependency = managedDependencies[forIdentity: identity] else {
+                XCTFail("\(identity) does not exists", file: file, line: line)
                 return
             }
             switch state {
@@ -426,13 +426,13 @@ public final class MockWorkspace {
         }
 
         public func checkNotPresent(
-            packageName: String,
+            packageIdentity: PackageIdentity2,
             targetName: String,
             file: StaticString = #file,
             line: UInt = #line
         ) {
-            let artifact = self.managedArtifacts[packageName: packageName, targetName: targetName]
-            XCTAssert(artifact == nil, "Unexpectedly found \(packageName).\(targetName) in managed artifacts", file: file, line: line)
+            let artifact = self.managedArtifacts[package: packageIdentity, target: targetName]
+            XCTAssert(artifact == nil, "Unexpectedly found \(packageIdentity).\(targetName) in managed artifacts", file: file, line: line)
         }
 
         public func checkEmpty(file: StaticString = #file, line: UInt = #line) {
@@ -440,14 +440,14 @@ public final class MockWorkspace {
         }
 
         public func check(
-            packageName: String,
+            packageIdentity: PackageIdentity2,
             targetName: String,
             source: ManagedArtifact.Source,
             file: StaticString = #file,
             line: UInt = #line
         ) {
-            guard let artifact = managedArtifacts[packageName: packageName, targetName: targetName] else {
-                XCTFail("\(packageName).\(targetName) does not exists", file: file, line: line)
+            guard let artifact = managedArtifacts[package: packageIdentity, target: targetName] else {
+                XCTFail("\(packageIdentity).\(targetName) does not exists", file: file, line: line)
                 return
             }
             switch (artifact.source, source) {
@@ -471,11 +471,11 @@ public final class MockWorkspace {
         let dependencies = deps.map { $0.convert(baseURL: packagesDir) }
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
-        let rootInput = PackageGraphRootInput(
-            packages: rootPaths(for: roots), dependencies: dependencies
-        )
-        let rootManifests = try tsc_await { workspace.loadRootManifests(packages: rootInput.packages, diagnostics: diagnostics, completion: $0) }
-        let graphRoot = PackageGraphRoot(input: rootInput, manifests: rootManifests)
+        let rootManifestsPaths = self.rootPaths(for: roots)
+        let rootManifests = try tsc_await { workspace.loadRootManifests(packages: rootManifestsPaths, diagnostics: diagnostics, completion: $0) }
+        let rootInput = PackageGraphRootInput(manifests: rootManifests, dependencies: dependencies)
+
+        let graphRoot = PackageGraphRoot(input: rootInput)
         let manifests = try workspace.loadDependencyManifests(root: graphRoot, diagnostics: diagnostics)
         result(manifests, diagnostics)
     }
@@ -505,12 +505,12 @@ public final class MockWorkspace {
             self.store = store
         }
 
-        public func check(notPresent name: String, file: StaticString = #file, line: UInt = #line) {
-            XCTAssertFalse(self.store.pinsMap.keys.contains(where: { $0.description == name }), "Unexpectedly found \(name) in Package.resolved", file: file, line: line)
+        public func check(notPresent package: PackageIdentity2, file: StaticString = #file, line: UInt = #line) {
+            XCTAssertFalse(self.store.pinsMap.keys.contains(where: { $0 == package }), "Unexpectedly found \(package) in Package.resolved", file: file, line: line)
         }
 
-        public func check(dependency package: String, at state: State, file: StaticString = #file, line: UInt = #line) {
-            guard let pin = store.pinsMap.first(where: { $0.key.description == package })?.value else {
+        public func check(dependency package: PackageIdentity2, at state: State, file: StaticString = #file, line: UInt = #line) {
+            guard let pin = store.pinsMap.first(where: { $0.key == package })?.value else {
                 XCTFail("Pin for \(package) not found", file: file, line: line)
                 return
             }
@@ -529,13 +529,13 @@ public final class MockWorkspace {
             }
         }
 
-        public func check(dependency package: String, url: String, file: StaticString = #file, line: UInt = #line) {
-            guard let pin = store.pinsMap.first(where: { $0.key.description == package })?.value else {
+        public func check(dependency package: PackageIdentity2, url: String, file: StaticString = #file, line: UInt = #line) {
+            guard let pin = store.pinsMap.first(where: { $0.key == package })?.value else {
                 XCTFail("Pin for \(package) not found", file: file, line: line)
                 return
             }
 
-            XCTAssertEqual(pin.packageRef.path, url, file: file, line: line)
+            XCTAssertEqual(pin.package.path, url, file: file, line: line)
         }
     }
 

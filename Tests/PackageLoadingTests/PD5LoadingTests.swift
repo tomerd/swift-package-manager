@@ -63,7 +63,7 @@ class PackageDescription5LoadingTests: PackageDescriptionLoadingTests {
 
             // Check dependencies.
             let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.url, $0) })
-            XCTAssertEqual(deps["/foo1"], PackageDependencyDescription(url: "/foo1", requirement: .upToNextMajor(from: "1.0.0")))
+            XCTAssertEqual(deps["/foo1"], PackageDependencyDescription(identity: PackageIdentity2("foo1"), location: URL(string: "/foo1")!, requirement: .upToNextMajor(from: "1.0.0")))
 
             // Check products.
             let products = Dictionary(uniqueKeysWithValues: manifest.products.map{ ($0.name, $0) })
@@ -347,10 +347,11 @@ class PackageDescription5LoadingTests: PackageDescriptionLoadingTests {
 
             do {
                 _ = try loader.load(
-                    package: manifestPath.parentDirectory,
-                    baseURL: manifestPath.pathString,
-                    toolsVersion: .v5,
-                    packageKind: .local
+                    packageIdentity: PackageIdentity2("fake"), // FIXME
+                    packageKind: .local,
+                    at: manifestPath.parentDirectory,
+                    url: manifestPath.pathString,
+                    toolsVersion: .v5
                 )
             } catch ManifestParseError.invalidManifestFormat(let error, let diagnosticFile) {
                 XCTAssertMatch(error, .contains("expected expression in container literal"))
@@ -377,10 +378,11 @@ class PackageDescription5LoadingTests: PackageDescriptionLoadingTests {
 
             let diagnostics = DiagnosticsEngine()
             _ = try loader.load(
-                package: manifestPath.parentDirectory,
-                baseURL: manifestPath.pathString,
-                toolsVersion: .v5,
+                packageIdentity: PackageIdentity2("fake"), // FIXME
                 packageKind: .local,
+                at: manifestPath.parentDirectory,
+                url: manifestPath.pathString,
+                toolsVersion: .v5,
                 diagnostics: diagnostics
             )
 

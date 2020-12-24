@@ -44,7 +44,7 @@ public final class ManagedDependency {
     }
 
     /// The package reference.
-    public let packageRef: PackageReference
+    public let package: PackageReference
 
     /// The state of the managed dependency.
     public let state: State
@@ -77,11 +77,11 @@ public final class ManagedDependency {
     public internal(set) var basedOn: ManagedDependency?
 
     public init(
-        packageRef: PackageReference,
+        package: PackageReference,
         subpath: RelativePath,
         checkoutState: CheckoutState
     ) {
-        self.packageRef = packageRef
+        self.package = package
         self.state = .checkout(checkoutState)
         self.basedOn = nil
         self.subpath = subpath
@@ -89,24 +89,24 @@ public final class ManagedDependency {
 
     /// Create a dependency present locally on the filesystem.
     public static func local(
-        packageRef: PackageReference
+        package: PackageReference
     ) -> ManagedDependency {
         return ManagedDependency(
-            packageRef: packageRef,
+            package: package,
             state: .local,
             // FIXME: This is just a fake entry, we should fix it.
-            subpath: RelativePath(packageRef.identity.description),
+            subpath: RelativePath(package.identity.description),
             basedOn: nil
         )
     }
 
     private init(
-        packageRef: PackageReference,
+        package: PackageReference,
         state: State,
         subpath: RelativePath,
         basedOn: ManagedDependency?
     ) {
-        self.packageRef = packageRef
+        self.package = package
         self.subpath = subpath
         self.basedOn = basedOn
         self.state = state
@@ -119,7 +119,7 @@ public final class ManagedDependency {
     ) {
         assert(dependency.state.isCheckout)
         self.basedOn = dependency
-        self.packageRef = dependency.packageRef
+        self.package = dependency.package
         self.subpath = subpath
         self.state = .edited(unmanagedPath)
     }
@@ -140,7 +140,7 @@ public final class ManagedDependency {
 extension ManagedDependency: JSONMappable, JSONSerializable, CustomStringConvertible {
     public convenience init(json: JSON) throws {
         try self.init(
-            packageRef: json.get("packageRef"),
+            package: json.get("package"),
             state: json.get("state"),
             subpath: RelativePath(json.get("subpath")),
             basedOn: json.get("basedOn")
@@ -149,15 +149,15 @@ extension ManagedDependency: JSONMappable, JSONSerializable, CustomStringConvert
 
     public func toJSON() -> JSON {
         return .init([
-            "packageRef": packageRef.toJSON(),
-            "subpath": subpath,
-            "basedOn": basedOn.toJSON(),
-            "state": state
+            "package": package.toJSON(),
+            "subpath": self.subpath,
+            "basedOn": self.basedOn.toJSON(),
+            "state": self.state
         ])
     }
 
     public var description: String {
-        return "<ManagedDependency: \(packageRef.name) \(state)>"
+        return "<ManagedDependency: \(self.package.identity) \(self.state)>"
     }
 }
 
@@ -214,38 +214,27 @@ extension ManagedDependency.State: JSONMappable, JSONSerializable {
 public final class ManagedDependencies {
 
     /// The dependencies keyed by the package URL.
-    private var dependencyMap: [String: ManagedDependency]
+    private var dependencyMap: [PackageIdentity2: ManagedDependency]
 
-    init(dependencyMap: [String: ManagedDependency] = [:]) {
+    init(dependencyMap: [PackageIdentity2: ManagedDependency] = [:]) {
         self.dependencyMap = dependencyMap
     }
 
-    public subscript(forURL url: String) -> ManagedDependency? {
-        dependencyMap[url]
-    }
-
-    public subscript(forIdentity identity: PackageIdentity) -> ManagedDependency? {
-        dependencyMap.values.first(where: { $0.packageRef.identity == identity })
-    }
-
-    public subscript(forNameOrIdentity nameOrIdentity: String) -> ManagedDependency? {
-        let lowercasedNameOrIdentity = nameOrIdentity.lowercased()
-        return dependencyMap.values.first(where: {
-            $0.packageRef.name == nameOrIdentity || $0.packageRef.identity.description == lowercasedNameOrIdentity
-        })
+    public subscript(forIdentity identity: PackageIdentity2) -> ManagedDependency? {
+        dependencyMap.values.first(where: { $0.package.identity == identity })
     }
 
     public func add(_ dependency: ManagedDependency) {
-        dependencyMap[dependency.packageRef.path] = dependency
+        dependencyMap[dependency.package.identity] = dependency
     }
 
-    public func remove(forURL url: String) {
-        dependencyMap[url] = nil
+    public func remove(_ identity: PackageIdentity2) {
+        dependencyMap[identity] = nil
     }
 }
 
 extension ManagedDependencies: Collection {
-    public typealias Index = Dictionary<String, ManagedDependency>.Index
+    public typealias Index = Dictionary<PackageIdentity2, ManagedDependency>.Index
     public typealias Element = ManagedDependency
 
     public var startIndex: Index {
@@ -268,7 +257,7 @@ extension ManagedDependencies: Collection {
 extension ManagedDependencies: JSONMappable, JSONSerializable {
     public convenience init(json: JSON) throws {
         let dependencies = try Array<ManagedDependency>(json: json)
-        let dependencyMap = Dictionary(uniqueKeysWithValues: dependencies.lazy.map({ ($0.packageRef.path, $0) }))
+        let dependencyMap = Dictionary(uniqueKeysWithValues: dependencies.lazy.map({ ($0.package.identity, $0) }))
         self.init(dependencyMap: dependencyMap)
     }
 

@@ -36,40 +36,48 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let g = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Foo", type: .library(.automatic), targets: ["Foo"])
-                    ],
-                    targets: [
-                        TargetDescription(
-                            name: "Foo",
-                            settings: [
-                                .init(tool: .swift, name: .define, value: ["CUSTOM"]),
-                                .init(tool: .swift, name: .define, value: ["LINUX"], condition: .init(platformNames: ["linux"])),
-                                .init(tool: .swift, name: .define, value: ["DMACOS"], condition: .init(platformNames: ["linux", "macos"], config: "debug")),
-                            ]
-                        ),
-                        TargetDescription(name: "FooTests", dependencies: ["Foo"], type: .test),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(name: "Foo", url: "/Foo", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar", dependencies: ["Foo"]),
-                        TargetDescription(name: "BarTests", dependencies: ["Bar"], type: .test),
-                        TargetDescription(name: "Sea", dependencies: ["Foo"]),
-                        TargetDescription(name: "Sea2", dependencies: ["Foo"]),
-                        TargetDescription(name: "Sea3", dependencies: ["Foo"]),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Foo", type: .library(.automatic), targets: ["Foo"])
+                        ],
+                        targets: [
+                            TargetDescription(
+                                name: "Foo",
+                                settings: [
+                                    .init(tool: .swift, name: .define, value: ["CUSTOM"]),
+                                    .init(tool: .swift, name: .define, value: ["LINUX"], condition: .init(platformNames: ["linux"])),
+                                    .init(tool: .swift, name: .define, value: ["DMACOS"], condition: .init(platformNames: ["linux", "macos"], config: "debug")),
+                                ]
+                            ),
+                            TargetDescription(name: "FooTests", dependencies: ["Foo"], type: .test),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            //PackageDependencyDescription(name: "Foo", url: "/Foo", requirement: .upToNextMajor(from: "1.0.0"))
+                            PackageDependencyDescription(identity: .init("Foo"), location: URL(string: "/Foo")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar", dependencies: ["Foo"]),
+                            TargetDescription(name: "BarTests", dependencies: ["Bar"], type: .test),
+                            TargetDescription(name: "Sea", dependencies: ["Foo"]),
+                            TargetDescription(name: "Sea2", dependencies: ["Foo"]),
+                            TargetDescription(name: "Sea3", dependencies: ["Foo"]),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -201,17 +209,20 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let g = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    products: [
-                        ProductDescription(name: "Bar", type: .library(.dynamic), targets: ["Foo"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: []),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        products: [
+                            ProductDescription(name: "Bar", type: .library(.dynamic), targets: ["Foo"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: []),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -242,16 +253,19 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let g = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "Sea", dependencies: []),
-                        TargetDescription(name: "Sea2", dependencies: []),
-                        TargetDescription(name: "swift", dependencies: ["Sea", "Sea2"]),
-                    ]),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "Sea", dependencies: []),
+                            TargetDescription(name: "Sea2", dependencies: []),
+                            TargetDescription(name: "swift", dependencies: ["Sea", "Sea2"]),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -285,16 +299,19 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let g = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Pkg",
-                    path: "/Pkg",
-                    url: "/Pkg",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "HelperTool", dependencies: []),
-                        TargetDescription(name: "Library", dependencies: []),
-                        TargetDescription(name: "LibraryTests", dependencies: ["Library", "HelperTool"], type: .test),
-                    ]),
+                PackageIdentity2("Pkg"):
+                    (AbsolutePath("/Pkg"),
+                    Manifest.createV4Manifest(
+                        name: "Pkg",
+                        path: "/Pkg",
+                        url: "/Pkg",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "HelperTool", dependencies: []),
+                            TargetDescription(name: "Library", dependencies: []),
+                            TargetDescription(name: "LibraryTests", dependencies: ["Library", "HelperTool"], type: .test),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -348,23 +365,26 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "a"),
-                        TargetDescription(name: "b", dependencies: ["a"]),
-                        TargetDescription(name: "c", dependencies: ["a"]),
-                        TargetDescription(name: "d", dependencies: ["b"]),
-                        TargetDescription(name: "libd", dependencies: ["d"]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "a"),
+                            TargetDescription(name: "b", dependencies: ["a"]),
+                            TargetDescription(name: "c", dependencies: ["a"]),
+                            TargetDescription(name: "d", dependencies: ["b"]),
+                            TargetDescription(name: "libd", dependencies: ["d"]),
 
-                        TargetDescription(name: "aTests", dependencies: ["a"], type: .test),
-                        TargetDescription(name: "bcTests", dependencies: ["b", "c"], type: .test),
-                        TargetDescription(name: "dTests", dependencies: ["d"], type: .test),
-                        TargetDescription(name: "libdTests", dependencies: ["libd"], type: .test),
-                    ]),
+                            TargetDescription(name: "aTests", dependencies: ["a"], type: .test),
+                            TargetDescription(name: "bcTests", dependencies: ["b", "c"], type: .test),
+                            TargetDescription(name: "dTests", dependencies: ["d"], type: .test),
+                            TargetDescription(name: "libdTests", dependencies: ["libd"], type: .test),
+                        ])
+                    ),
             ]
         )
         XCTAssertNoDiagnostics(diagnostics)
@@ -401,15 +421,18 @@ class PackageGraphTests: XCTestCase {
             let diagnostics = DiagnosticsEngine()
             let graph = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createV4Manifest(
-                        name: "Foo",
-                        path: "/Foo",
-                        url: "/Foo",
-                        packageKind: .root,
-                        swiftLanguageVersions: [SwiftLanguageVersion(string: swiftVersion)!],
-                        targets: [
-                            TargetDescription(name: "a"),
-                        ]),
+                    PackageIdentity2("Foo"):
+                        (AbsolutePath("/Foo"),
+                        Manifest.createV4Manifest(
+                            name: "Foo",
+                            path: "/Foo",
+                            url: "/Foo",
+                            packageKind: .root,
+                            swiftLanguageVersions: [SwiftLanguageVersion(string: swiftVersion)!],
+                            targets: [
+                                TargetDescription(name: "a"),
+                            ])
+                        ),
                 ]
             )
             XCTAssertNoDiagnostics(diagnostics)

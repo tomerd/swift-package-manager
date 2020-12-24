@@ -208,6 +208,9 @@ public final class PackageBuilder {
     /// The product filter to apply to the package.
     private let productFilter: ProductFilter
 
+    /// The identity of the package.
+    private let packageIdentity: PackageIdentity2
+
     /// The path of the package.
     private let packagePath: AbsolutePath
 
@@ -248,9 +251,10 @@ public final class PackageBuilder {
     ///   - createMultipleTestProducts: If enabled, create one test product for
     ///     each test target.
     public init(
+        identity: PackageIdentity2,
+        path: AbsolutePath,
         manifest: Manifest,
         productFilter: ProductFilter,
-        path: AbsolutePath,
         additionalFileRules: [FileRuleDescription] = [],
         remoteArtifacts: [RemoteArtifact] = [],
         xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion],
@@ -260,9 +264,10 @@ public final class PackageBuilder {
         warnAboutImplicitExecutableTargets: Bool = true,
         createREPLProduct: Bool = false
     ) {
+        self.packageIdentity = identity
+        self.packagePath = path
         self.manifest = manifest
         self.productFilter = productFilter
-        self.packagePath = path
         self.additionalFileRules = additionalFileRules
         self.remoteArtifacts = remoteArtifacts
         self.xcTestMinimumDeploymentTargets = xcTestMinimumDeploymentTargets
@@ -273,56 +278,31 @@ public final class PackageBuilder {
         self.warnAboutImplicitExecutableTargets = warnAboutImplicitExecutableTargets
     }
 
-    // FIXME: deprecated 12/2020, remove once clients migrate
-    @available(*, deprecated, message: "use non-blocking version instead")
     public static func loadPackage(
-        packagePath: AbsolutePath,
-        swiftCompiler: AbsolutePath,
-        swiftCompilerFlags: [String],
-        xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion]
-            = MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
-        diagnostics: DiagnosticsEngine,
-        kind: PackageReference.Kind = .root
-    ) throws -> Package {
-        return try temp_await {
-            Self.loadPackage(packagePath: packagePath,
-                             swiftCompiler: swiftCompiler,
-                             swiftCompilerFlags: swiftCompilerFlags,
-                             xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
-                             diagnostics: diagnostics,
-                             kind: kind,
-                             on: .global(),
-                             completion: $0)
-        }
-    }
-    /// Loads a package from a package repository using the resources associated with a particular `swiftc` executable.
-    ///
-    /// - Parameters:
-    ///     - packagePath: The absolute path of the package root.
-    ///     - swiftCompiler: The absolute path of a `swiftc` executable.
-    ///         Its associated resources will be used by the loader.
-    ///     - kind: The kind of package.
-    public static func loadPackage(
-        packagePath: AbsolutePath,
-        swiftCompiler: AbsolutePath,
-        swiftCompilerFlags: [String],
-        xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion]
-            = MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
-        diagnostics: DiagnosticsEngine,
+        identity: PackageIdentity2,
         kind: PackageReference.Kind = .root,
+        at path: AbsolutePath,
+        swiftCompiler: AbsolutePath,
+        swiftCompilerFlags: [String],
+        xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion]
+            = MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
+        diagnostics: DiagnosticsEngine,
+
         on queue: DispatchQueue,
         completion: @escaping (Result<Package, Error>) -> Void
     ) {
-        ManifestLoader.loadManifest(packagePath: packagePath,
+        ManifestLoader.loadManifest(packageIdentity: identity,
+                                    packageKind: kind,
+                                    at: path,
                                     swiftCompiler: swiftCompiler,
                                     swiftCompilerFlags: swiftCompilerFlags,
-                                    packageKind: kind,
                                     on: queue) { result in
             let result = result.tryMap { manifest -> Package in
                 let builder = PackageBuilder(
+                    identity: identity,
+                    path: path,
                     manifest: manifest,
                     productFilter: .everything,
-                    path: packagePath,
                     xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
                     diagnostics: diagnostics)
                 return try builder.construct()
@@ -339,17 +319,19 @@ public final class PackageBuilder {
         let targetSpecialDirs = findTargetSpecialDirs(targets)
 
         return Package(
-            manifest: manifest,
-            path: packagePath,
+            identity: self.packageIdentity,
+            path: self.packagePath,
+            manifest: self.manifest,
             targets: targets,
             products: products,
-            targetSearchPath: packagePath.appending(component: targetSpecialDirs.targetDir),
-            testTargetSearchPath: packagePath.appending(component: targetSpecialDirs.testTargetDir)
+            targetSearchPath: self.packagePath.appending(component: targetSpecialDirs.targetDir),
+            testTargetSearchPath: self.packagePath.appending(component: targetSpecialDirs.testTargetDir)
         )
     }
 
     private func diagnosticLocation() -> DiagnosticLocation {
-        return PackageLocation.Local(name: manifest.name, packagePath: packagePath)
+        // FIXME
+        return PackageLocation.Local(name: self.packageIdentity.description, packagePath: self.packagePath)
     }
 
     /// Computes the special directory where targets are present or should be placed in future.
@@ -462,11 +444,12 @@ public final class PackageBuilder {
             // it's a system library target.
             return [
                 SystemLibraryTarget(
-                    name: manifest.name,
+                    name: self.manifest.name,
                     platforms: self.platforms(),
-                    path: packagePath, isImplicit: true,
-                    pkgConfig: manifest.pkgConfig,
-                    providers: manifest.providers)
+                    path: self.packagePath,
+                    isImplicit: true,
+                    pkgConfig: self.manifest.pkgConfig,
+                    providers: self.manifest.providers)
             ]
         }
 
@@ -474,12 +457,12 @@ public final class PackageBuilder {
         // system target specific configuration.
         guard manifest.pkgConfig == nil else {
             throw ModuleError.invalidManifestConfig(
-                manifest.name, "the 'pkgConfig' property can only be used with a System Module Package")
+                self.packageIdentity.description, "the 'pkgConfig' property can only be used with a System Module Package")
         }
 
         guard manifest.providers == nil else {
             throw ModuleError.invalidManifestConfig(
-                manifest.name, "the 'providers' property can only be used with a System Module Package")
+                self.packageIdentity.description, "the 'providers' property can only be used with a System Module Package")
         }
 
         return try constructV4Targets()
@@ -538,7 +521,7 @@ public final class PackageBuilder {
                 let path = packagePath.appending(relativeSubPath)
                 // Make sure the target is inside the package root.
                 guard path.contains(packagePath) else {
-                    throw ModuleError.targetOutsidePackage(package: manifest.name, target: target.name)
+                    throw ModuleError.targetOutsidePackage(package: self.packageIdentity.description, target: target.name)
                 }
                 if fileSystem.isDirectory(path) {
                     return path
@@ -738,15 +721,15 @@ public final class PackageBuilder {
         }
 
         let sourcesBuilder = TargetSourcesBuilder(
-            packageName: manifest.name,
-            packagePath: packagePath,
+            packageIdentity: self.packageIdentity,
+            packagePath: self.packagePath,
             target: manifestTarget,
             path: potentialModule.path,
-            defaultLocalization: manifest.defaultLocalization,
-            additionalFileRules: additionalFileRules,
-            toolsVersion: manifest.toolsVersion,
-            fs: fileSystem,
-            diags: diagnostics
+            defaultLocalization: self.manifest.defaultLocalization,
+            additionalFileRules: self.additionalFileRules,
+            toolsVersion: self.manifest.toolsVersion,
+            fs: self.fileSystem,
+            diags: self.diagnostics
         )
         let (sources, resources, headers) = try sourcesBuilder.run()
 
@@ -757,7 +740,7 @@ public final class PackageBuilder {
         }
 
         // The name of the bundle, if one is being generated.
-        let bundleName = resources.isEmpty ? nil : manifest.name + "_" + potentialModule.name
+        let bundleName = resources.isEmpty ? nil : self.manifest.name + "_" + potentialModule.name
 
         if sources.relativePaths.isEmpty && resources.isEmpty {
             return nil
@@ -773,7 +756,7 @@ public final class PackageBuilder {
             targetType = .executable
         default:
             targetType = sources.computeTargetType()
-            if targetType == .executable && manifest.toolsVersion >= .vNext && warnAboutImplicitExecutableTargets {
+            if targetType == .executable && self.manifest.toolsVersion >= .vNext && self.warnAboutImplicitExecutableTargets {
                 diagnostics.emit(warning: "in tools version \(ToolsVersion.vNext) and later, use 'executableTarget()' to declare executable targets")
             }
         }
@@ -783,13 +766,13 @@ public final class PackageBuilder {
             return SwiftTarget(
                 name: potentialModule.name,
                 bundleName: bundleName,
-                defaultLocalization: manifest.defaultLocalization,
+                defaultLocalization: self.manifest.defaultLocalization,
                 platforms: self.platforms(isTest: potentialModule.isTest),
                 type: targetType,
                 sources: sources,
                 resources: resources,
                 dependencies: dependencies,
-                swiftVersion: try swiftVersion(),
+                swiftVersion: try self.swiftVersion(),
                 buildSettings: buildSettings
             )
         } else {
@@ -990,7 +973,7 @@ public final class PackageBuilder {
         if let swiftLanguageVersions = manifest.swiftLanguageVersions {
             guard let swiftVersion = swiftLanguageVersions.sorted(by: >).first(where: { $0 <= ToolsVersion.currentToolsVersion }) else {
                 throw ModuleError.incompatibleToolsVersions(
-                    package: manifest.name, required: swiftLanguageVersions, current: .currentToolsVersion)
+                    package: self.packageIdentity.description, required: swiftLanguageVersions, current: .currentToolsVersion)
             }
             computedSwiftVersion = swiftVersion
         } else {
@@ -1060,7 +1043,7 @@ public final class PackageBuilder {
         // It is an error if there are multiple linux main files.
         if testManifestFiles.count > 1 {
             throw ModuleError.multipleTestManifestFilesFound(
-                package: manifest.name, files: testManifestFiles.map({ $0 }))
+                package: self.packageIdentity.description, files: testManifestFiles.map({ $0 }))
         }
         return testManifestFiles.first
     }
@@ -1213,7 +1196,7 @@ public final class PackageBuilder {
                 )
             } else {
                 let replProduct = Product(
-                    name: manifest.name + Product.replProductSuffix,
+                    name: self.manifest.name + Product.replProductSuffix,
                     type: .library(.dynamic),
                     targets: libraryTargets
                 )

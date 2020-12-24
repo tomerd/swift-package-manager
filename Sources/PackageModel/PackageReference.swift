@@ -28,6 +28,7 @@ public struct PackageReference: Codable {
     }
 
     /// Compute the default name of a package given its URL.
+    @available(*, deprecated)
     public static func computeDefaultName(fromURL url: String) -> String {
       #if os(Windows)
         let isSeparator : (Character) -> Bool = { $0 == "/" || $0 == "\\" }
@@ -55,34 +56,36 @@ public struct PackageReference: Codable {
     }
 
     /// The identity of the package.
-    public let identity: PackageIdentity
+    public let identity: PackageIdentity2
 
     /// The name of the package, if available.
+    @available(*, deprecated)
     public var name: String {
         _name ?? Self.computeDefaultName(fromURL: path)
     }
-    private let _name: String?
+    private let _name: String? = nil
 
     /// The path of the package.
     ///
     /// This could be a remote repository, local repository or local package.
+    @available(*, deprecated)
     public let path: String
 
     /// The kind of package: root, local, or remote.
     public let kind: Kind
 
     /// Create a package reference given its identity and repository.
-    public init(identity: PackageIdentity, path: String, name: String? = nil, kind: Kind = .remote) {
-        self._name = name
+    public init(identity: PackageIdentity2, path: String, kind: Kind) {
         self.identity = identity
         self.path = path
         self.kind = kind
     }
 
     /// Create a new package reference object with the given name.
+    /*@available(*, deprecated)
     public func with(newName: String) -> PackageReference {
         return PackageReference(identity: identity, path: path, name: newName, kind: kind)
-    }
+    }*/
 }
 
 extension PackageReference: Equatable {
@@ -105,8 +108,9 @@ extension PackageReference: CustomStringConvertible {
 
 extension PackageReference: JSONMappable, JSONSerializable {
     public init(json: JSON) throws {
-        self._name = json.get("name")
-        self.identity = try json.get("identity")
+        //self._name = json.get("name")
+        // FIXME
+        self.identity = PackageIdentity2(try json.get("identity"))
         self.path = try json.get("path")
 
         // Support previous version of PackageReference that contained an `isLocal` property.
@@ -119,8 +123,9 @@ extension PackageReference: JSONMappable, JSONSerializable {
 
     public func toJSON() -> JSON {
         return .init([
-            "name": name.toJSON(),
-            "identity": identity,
+            //"name": name.toJSON(),
+            // FIXME
+            "identity": identity.description,
             "path": path,
             "kind": kind.rawValue,
         ])

@@ -55,7 +55,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
         }
     }
 
-    public let identifier: PackageReference
+    public let underlying: PackageReference
     private let repository: Repository
     private let mirrors: DependencyMirrors
     private let manifestLoader: ManifestLoaderProtocol
@@ -75,14 +75,14 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
     internal var validToolsVersionsCache = ThreadSafeKeyValueStore<Version, Bool>()
 
     init(
-        identifier: PackageReference,
+        package: PackageReference,
         mirrors: DependencyMirrors,
         repository: Repository,
         manifestLoader: ManifestLoaderProtocol,
         toolsVersionLoader: ToolsVersionLoaderProtocol,
         currentToolsVersion: ToolsVersion
     ) {
-        self.identifier = identifier
+        self.underlying = package
         self.mirrors = mirrors
         self.repository = repository
         self.manifestLoader = manifestLoader
@@ -163,7 +163,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
             }.1
         } catch {
             throw GetDependenciesError(
-                containerIdentifier: identifier.repository.url, reference: version.description, underlyingError: error, suggestion: nil)
+                containerIdentifier: self.underlying.repository.url, reference: version.description, underlyingError: error, suggestion: nil)
         }
     }
 
@@ -181,7 +181,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
                 if let rev = try? repository.resolveRevision(identifier: revision), repository.exists(revision: rev) {
                     // Revision does exist, so something else must be wrong.
                     throw GetDependenciesError(
-                        containerIdentifier: identifier.repository.url, reference: revision, underlyingError: error, suggestion: nil)
+                        containerIdentifier: self.underlying.repository.url, reference: revision, underlyingError: error, suggestion: nil)
                 }
                 else {
                     // Revision does not exist, so we customize the error.
@@ -191,12 +191,12 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
                     let mainBranchExists = (try? repository.resolveRevision(identifier: "main")) != nil
                     let suggestion = (revision == "master" && mainBranchExists) ? "did you mean ‘main’?" : nil
                     throw GetDependenciesError(
-                        containerIdentifier: identifier.repository.url, reference: revision,
+                        containerIdentifier: self.underlying.repository.url, reference: revision,
                         underlyingError: StringError(errorMessage), suggestion: suggestion)
                 }
             }
             // If we get this far without having thrown an error, we wrap and throw the underlying error.
-            throw GetDependenciesError(containerIdentifier: identifier.repository.url, reference: revision, underlyingError: error, suggestion: nil)
+            throw GetDependenciesError(containerIdentifier: self.underlying.repository.url, reference: revision, underlyingError: error, suggestion: nil)
         }
     }
 
@@ -230,7 +230,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
         return []
     }
 
-    public func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
+    /*public func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
         let revision: Revision
         var version: Version?
         switch boundVersion {
@@ -249,7 +249,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
 
         let manifest = try self.loadManifest(at: revision, version: version)
         return self.identifier.with(newName: manifest.name)
-    }
+    }*/
 
     /// Returns true if the tools version is valid and can be used by this
     /// version of the package manager.
@@ -269,23 +269,23 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
     private func loadManifest(at revision: Revision, version: Version?) throws -> Manifest {
         try self.manifestsCache.memoize(revision) {
             let fs = try repository.openFileView(revision: revision)
-            let packageURL = identifier.repository.url
+            let packageURL = self.underlying.repository.url
 
             // Load the tools version.
             let toolsVersion = try toolsVersionLoader.load(at: .root, fileSystem: fs)
 
             // Validate the tools version.
-            try toolsVersion.validateToolsVersion(
-                self.currentToolsVersion, version: revision.identifier, packagePath: packageURL)
+            try toolsVersion.validateToolsVersion(self.currentToolsVersion, version: revision.identifier, packagePath: packageURL)
 
             // Load the manifest.
             // FIXME: this should not block
             return try temp_await {
-                manifestLoader.load(package: AbsolutePath.root,
-                                    baseURL: packageURL,
+                manifestLoader.load(packageIdentity: self.underlying.identity,
+                                    packageKind: self.underlying.kind,
+                                    at: AbsolutePath.root,
+                                    url: packageURL,
                                     version: version,
                                     toolsVersion: toolsVersion,
-                                    packageKind: identifier.kind,
                                     fileSystem: fs,
                                     on: .global(),
                                     completion: $0)
@@ -298,7 +298,7 @@ public class RepositoryPackageContainer: PackageContainer, CustomStringConvertib
     }
 
     public var description: String {
-        return "RepositoryPackageContainer(\(identifier.repository.url.debugDescription))"
+        return "RepositoryPackageContainer(\(self.underlying.repository.url.debugDescription))"
     }
 }
 
@@ -340,15 +340,16 @@ public class RepositoryPackageContainerProvider: PackageContainerProvider {
     }
 
     public func getContainer(
-        for identifier: PackageReference,
+        for package: PackageReference,
         skipUpdate: Bool,
         on queue: DispatchQueue,
         completion: @escaping (Result<PackageContainer, Swift.Error>) -> Void
     ) {
         // If the container is local, just create and return a local package container.
-        if identifier.kind != .remote {
+        if package.kind != .remote {
             return queue.async {
-                let container = LocalPackageContainer(identifier,
+                let container = LocalPackageContainer(
+                    package: package,
                     mirrors: self.mirrors,
                     manifestLoader: self.manifestLoader,
                     toolsVersionLoader: self.toolsVersionLoader,
@@ -359,7 +360,7 @@ public class RepositoryPackageContainerProvider: PackageContainerProvider {
         }
 
         // Resolve the container using the repository manager.
-        repositoryManager.lookup(repository: identifier.repository, skipUpdate: skipUpdate, on: queue) { result in
+        repositoryManager.lookup(repository: package.repository, skipUpdate: skipUpdate, on: queue) { result in
             queue.async {
                 // Create the container wrapper.
                 let result = result.tryMap { handle -> PackageContainer in
@@ -368,7 +369,7 @@ public class RepositoryPackageContainerProvider: PackageContainerProvider {
                     // FIXME: Do we care about holding this open for the lifetime of the container.
                     let repository = try handle.open()
                     return RepositoryPackageContainer(
-                        identifier: identifier,
+                        package: package,
                         mirrors: self.mirrors,
                         repository: repository,
                         manifestLoader: self.manifestLoader,

@@ -294,38 +294,59 @@ extension PackageDependencyDescription {
     fileprivate init(v4 json: JSON, toolsVersion: ToolsVersion, baseURL: String, fileSystem: FileSystem) throws {
         let isBaseURLRemote = URL.scheme(baseURL) != nil
 
-        func fixURL(_ url: String, requirement: Requirement) throws -> String {
+        func fixURL(_ input: String, requirement: Requirement) throws -> Foundation.URL {
             // If base URL is remote (http/ssh), we can't do any "fixing".
             if isBaseURLRemote {
+                guard let url = URL(string: input) else {
+                    throw ManifestParseError.invalidManifestFormat("invalid url \(input)", diagnosticFile: nil)
+                }
                 return url
             }
 
             // If the dependency URL starts with '~/', try to expand it.
-            if url.hasPrefix("~/") {
-                return fileSystem.homeDirectory.appending(RelativePath(String(url.dropFirst(2)))).pathString
+            if input.hasPrefix("~/") {
+                let path = fileSystem.homeDirectory.appending(RelativePath(String(input.dropFirst(2)))).pathString
+                guard let url = URL(string: path) else {
+                    throw ManifestParseError.invalidManifestFormat("invalid url \(path)", diagnosticFile: nil)
+                }
+                return url
             }
 
             // If the dependency URL is not remote, try to "fix" it.
-            if URL.scheme(url) == nil {
+            if URL.scheme(input) == nil {
                 // If the URL has no scheme, we treat it as a path (either absolute or relative to the base URL).
-                return AbsolutePath(url, relativeTo: AbsolutePath(baseURL)).pathString
+                let path = AbsolutePath(input, relativeTo: AbsolutePath(baseURL)).pathString
+                guard let url = URL(string: path) else {
+                    throw ManifestParseError.invalidManifestFormat("invalid url \(path)", diagnosticFile: nil)
+                }
+                return url
             }
 
             if case .localPackage = requirement {
                 do {
-                    return try AbsolutePath(validating: url).pathString
+                    let path = try AbsolutePath(validating: input).pathString
+                    guard let url = URL(string: path) else {
+                        throw ManifestParseError.invalidManifestFormat("invalid url \(path)", diagnosticFile: nil)
+                    }
+                    return url
                 } catch PathValidationError.invalidAbsolutePath(let path) {
                     throw ManifestParseError.invalidManifestFormat("'\(path)' is not a valid path for path-based dependencies; use relative or absolute path instead.", diagnosticFile: nil)
                 }
             }
 
+            guard let url = URL(string: input) else {
+                throw ManifestParseError.invalidManifestFormat("invalid url \(input)", diagnosticFile: nil)
+            }
             return url
         }
 
         let requirement = try Requirement(v4: json.get("requirement"))
-        let url = try fixURL(json.get("url"), requirement: requirement)
-        let name: String? = json.get("name")
-        self.init(name: name, url: url, requirement: requirement)
+        let location = try fixURL(json.get("url"), requirement: requirement)
+        //let name: String? = json.get("name")
+        // FIXME
+        let id: String = try json.get("identity")
+        let identity = PackageIdentity2(id)
+        self.init(identity: identity, location: location, requirement: requirement)
     }
 }
 

@@ -57,16 +57,16 @@ struct ResolverPrecomputationProvider: PackageContainerProvider {
     }
 
     func getContainer(
-        for identifier: PackageReference,
+        for package: PackageReference,
         skipUpdate: Bool,
         on queue: DispatchQueue,
         completion: @escaping (Result<PackageContainer, Error>) -> Void
     ) {
         queue.async {
             // Start by searching manifests from the Workspace's resolved dependencies.
-            if let manifest = self.dependencyManifests.dependencies.first(where: { _, managed, _ in managed.packageRef == identifier }) {
+            if let manifest = self.dependencyManifests.dependencies.first(where: { _, managed, _ in managed.package == package }) {
                 let container = LocalPackageContainer(
-                    package: identifier,
+                    underlying: package,
                     manifest: manifest.manifest,
                     dependency: manifest.dependency,
                     mirrors: self.mirrors,
@@ -76,11 +76,10 @@ struct ResolverPrecomputationProvider: PackageContainerProvider {
             }
 
             // Continue searching from the Workspace's root manifests.
-            // FIXME: We might want to use a dictionary for faster lookups.
-            if let index = self.dependencyManifests.root.packageRefs.firstIndex(of: identifier) {
+            if let manifest = self.dependencyManifests.root.packageManifests[package] {
                 let container = LocalPackageContainer(
-                    package: identifier,
-                    manifest: self.dependencyManifests.root.manifests[index],
+                    underlying: package,
+                    manifest: manifest,
                     dependency: nil,
                     mirrors: self.mirrors,
                     currentToolsVersion: self.currentToolsVersion
@@ -90,13 +89,13 @@ struct ResolverPrecomputationProvider: PackageContainerProvider {
             }
 
             // As we don't have anything else locally, error out.
-            completion(.failure(ResolverPrecomputationError.missingPackage(package: identifier)))
+            completion(.failure(ResolverPrecomputationError.missingPackage(package: package)))
         }
     }
 }
 
 private struct LocalPackageContainer: PackageContainer {
-    let package: PackageReference
+    let underlying: PackageReference
     let manifest: Manifest
     /// The managed dependency if the package is not a root package.
     let dependency: ManagedDependency?
@@ -104,18 +103,19 @@ private struct LocalPackageContainer: PackageContainer {
     let currentToolsVersion: ToolsVersion
 
     // Gets the package reference from the managed dependency or computes it for root packages.
-    var identifier: PackageReference {
-        if let identifier = dependency?.packageRef {
-            return identifier
+    /*@available(*, deprecated)
+    var underlying: PackageReference {
+        if let package = self.dependency?.package {
+            return package
         } else {
-            let identity = PackageIdentity(url: manifest.url)
+            let identity = PackageIdentity(url: self.manifest.url)
             return PackageReference(
                 identity: identity,
-                path: manifest.path.pathString,
+                path: self.manifest.path.pathString,
                 kind: .root
             )
         }
-    }
+    }*/
 
     func versionsAscending() throws -> [Version] {
         if let version = dependency?.state.checkout?.version {
@@ -127,7 +127,7 @@ private struct LocalPackageContainer: PackageContainer {
 
     func isToolsVersionCompatible(at version: Version) -> Bool {
         do {
-            try manifest.toolsVersion.validateToolsVersion(currentToolsVersion, packagePath: "")
+            try self.manifest.toolsVersion.validateToolsVersion(currentToolsVersion, packagePath: "")
             return true
         } catch {
             return false
@@ -145,7 +145,7 @@ private struct LocalPackageContainer: PackageContainer {
     func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
         // Because of the implementation of `reversedVersions`, we should only get the exact same version.
         precondition(dependency?.checkoutState?.version == version)
-        return manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+        return self.manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
     }
 
     func getDependencies(at revision: String, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
@@ -153,11 +153,11 @@ private struct LocalPackageContainer: PackageContainer {
         if let checkoutState = dependency?.checkoutState,
             checkoutState.version == nil,
             checkoutState.revision.identifier == revision {
-            return manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+            return self.manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
         }
 
         throw ResolverPrecomputationError.differentRequirement(
-            package: self.package,
+            package: self.underlying,
             state: self.dependency?.state,
             requirement: .revision(revision)
         )
@@ -167,8 +167,8 @@ private struct LocalPackageContainer: PackageContainer {
         // Throw an error when the dependency is not unversioned to fail resolution.
         guard dependency?.state.isCheckout != true else {
             throw ResolverPrecomputationError.differentRequirement(
-                package: package,
-                state: dependency?.state,
+                package: self.underlying,
+                state: self.dependency?.state,
                 requirement: .unversioned
             )
         }
@@ -176,9 +176,10 @@ private struct LocalPackageContainer: PackageContainer {
         return manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
     }
 
+    /*
     func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
-        return identifier
-    }
+        return self.identifier
+    }*/
 }
 
 private extension ManagedDependency.State {

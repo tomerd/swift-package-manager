@@ -22,7 +22,7 @@ public struct TargetSourcesBuilder {
     let diags: DiagnosticsEngine
 
     /// The name of the package.
-    public let packageName: String
+    public let packageIdentity: PackageIdentity2
 
     /// The path of the package.
     public let packagePath: AbsolutePath
@@ -50,7 +50,7 @@ public struct TargetSourcesBuilder {
 
     /// Create a new target builder.
     public init(
-        packageName: String,
+        packageIdentity: PackageIdentity2,
         packagePath: AbsolutePath,
         target: TargetDescription,
         path: AbsolutePath,
@@ -60,7 +60,7 @@ public struct TargetSourcesBuilder {
         fs: FileSystem = localFileSystem,
         diags: DiagnosticsEngine
     ) {
-        self.packageName = packageName
+        self.packageIdentity = packageIdentity
         self.packagePath = packagePath
         self.target = target
         self.defaultLocalization = defaultLocalization
@@ -416,7 +416,8 @@ public struct TargetSourcesBuilder {
     }
 
     private var diagnosticLocation: DiagnosticLocation {
-        return PackageLocation.Local(name: packageName, packagePath: packagePath)
+        // FIXME
+        return PackageLocation.Local(name: self.packageIdentity.description, packagePath: self.packagePath)
     }
 }
 

@@ -65,6 +65,12 @@ public final class ThreadSafeKeyValueStore<Key, Value> where Key: Hashable {
             try self.underlying.mapValues(transform)
         }
     }
+
+    public func get() -> [Key: Value] {
+        self.lock.withLock {
+            self.underlying
+        }
+    }
 }
 
 /// Thread-safe array like structure

@@ -217,20 +217,23 @@ private func swiftArgs(
 public func loadPackageGraph(
     fs: FileSystem,
     diagnostics: DiagnosticsEngine = DiagnosticsEngine(),
-    manifests: [Manifest],
+    manifests: [PackageIdentity2: (AbsolutePath, Manifest)],
     explicitProduct: String? = nil,
     shouldCreateMultipleTestProducts: Bool = false,
     createREPLProduct: Bool = false
 ) throws -> PackageGraph {
-    let rootManifests = manifests.filter { $0.packageKind == .root }
-    let externalManifests = manifests.filter { $0.packageKind != .root }
-    let packages = rootManifests.map { $0.path }
-    let input = PackageGraphRootInput(packages: packages)
-    let graphRoot = PackageGraphRoot(input: input, manifests: rootManifests, explicitProduct: explicitProduct)
+    let rootManifestsWithIdentities = manifests.filter { $0.value.1.packageKind == .root }
+    let externalManifestsWithIdentities = manifests.filter { $0.value.1.packageKind != .root }
+    let rootManifests: [AbsolutePath: Manifest?] = rootManifestsWithIdentities.values.reduce(into: [AbsolutePath: Manifest]()) { partial, item in
+        partial[item.0] = item.1
+    }
+    let input = PackageGraphRootInput(manifests: rootManifests)
+    let graphRoot = PackageGraphRoot(input: input,
+                                     explicitProduct: explicitProduct)
 
     return try PackageGraph.load(
         root: graphRoot,
-        externalManifests: externalManifests,
+        externalManifests: externalManifestsWithIdentities,
         diagnostics: diagnostics,
         fileSystem: fs,
         shouldCreateMultipleTestProducts: shouldCreateMultipleTestProducts,

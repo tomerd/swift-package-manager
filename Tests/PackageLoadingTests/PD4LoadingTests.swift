@@ -142,12 +142,13 @@ class PackageDescription4LoadingTests: PackageDescriptionLoadingTests {
             """
        loadManifest(stream.bytes) { manifest in
             let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.url, $0) })
-            XCTAssertEqual(deps["/foo1"], PackageDependencyDescription(url: "/foo1", requirement: .upToNextMajor(from: "1.0.0")))
-            XCTAssertEqual(deps["/foo2"], PackageDependencyDescription(url: "/foo2", requirement: .upToNextMajor(from: "1.0.0")))
-            XCTAssertEqual(deps["/foo3"], PackageDependencyDescription(url: "/foo3", requirement: .upToNextMinor(from: "1.0.0")))
-            XCTAssertEqual(deps["/foo4"], PackageDependencyDescription(url: "/foo4", requirement: .exact("1.0.0")))
-            XCTAssertEqual(deps["/foo5"], PackageDependencyDescription(url: "/foo5", requirement: .branch("master")))
-            XCTAssertEqual(deps["/foo6"], PackageDependencyDescription(url: "/foo6", requirement: .revision("58e9de4e7b79e67c72a46e164158e3542e570ab6")))
+            // FIXME
+            XCTAssertEqual(deps["/foo1"], PackageDependencyDescription(identity: .init("foo1"), location: URL(string: "/foo1")!, requirement: .upToNextMajor(from: "1.0.0")))
+            XCTAssertEqual(deps["/foo2"], PackageDependencyDescription(identity: .init("foo2"), location: URL(string: "/foo2")!, requirement: .upToNextMajor(from: "1.0.0")))
+            XCTAssertEqual(deps["/foo3"], PackageDependencyDescription(identity: .init("foo3"), location: URL(string: "/foo3")!, requirement: .upToNextMinor(from: "1.0.0")))
+            XCTAssertEqual(deps["/foo4"], PackageDependencyDescription(identity: .init("foo4"), location: URL(string: "/foo4")!, requirement: .exact("1.0.0")))
+            XCTAssertEqual(deps["/foo5"], PackageDependencyDescription(identity: .init("foo5"), location: URL(string: "/foo5")!, requirement: .branch("master")))
+            XCTAssertEqual(deps["/foo6"], PackageDependencyDescription(identity: .init("foo6"), location: URL(string: "/foo6")!, requirement: .revision("58e9de4e7b79e67c72a46e164158e3542e570ab6")))
         }
     }
 
@@ -348,9 +349,13 @@ class PackageDescription4LoadingTests: PackageDescriptionLoadingTests {
 
         let diagnostics = DiagnosticsEngine()
         let manifest = try manifestLoader.load(
-            package: .root, baseURL: "/foo",
-            toolsVersion: .v4, packageKind: .root,
-            fileSystem: fs, diagnostics: diagnostics
+            packageIdentity: PackageIdentity2("fake"), // FIXME
+            packageKind: .root,
+            at: .root,
+            url: "/foo",
+            toolsVersion: .v4,
+            fileSystem: fs,
+            diagnostics: diagnostics
         )
 
         XCTAssertEqual(manifest.name, "Trivial")

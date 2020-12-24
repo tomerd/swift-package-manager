@@ -30,43 +30,54 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let g = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Foo", type: .library(.automatic), targets: ["Foo"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["FooDep"]),
-                        TargetDescription(name: "FooDep", dependencies: []),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Foo", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    products: [
-                        ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar", dependencies: ["Foo"], path: "./")
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Baz",
-                    path: "/Baz",
-                    url: "/Baz",
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    targets: [
-                        TargetDescription(name: "Baz", dependencies: ["Bar"]),
-                        TargetDescription(name: "BazTests", dependencies: ["Baz"], type: .test),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Foo", type: .library(.automatic), targets: ["Foo"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["FooDep"]),
+                            TargetDescription(name: "FooDep", dependencies: []),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Foo"), location: URL(string: "/Foo")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        products: [
+                            ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar", dependencies: ["Foo"], path: "./")
+                        ])
+                     ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Baz"),
+                    Manifest.createV4Manifest(
+                        name: "Baz",
+                        path: "/Baz",
+                        url: "/Baz",
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        targets: [
+                            TargetDescription(name: "Baz", dependencies: ["Bar"]),
+                            TargetDescription(name: "BazTests", dependencies: ["Baz"], type: .test),
+                        ])
+                    ),
             ]
         )
 
@@ -91,30 +102,37 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let g = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["Bar", "CBar"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"]),
-                        ProductDescription(name: "CBar", type: .library(.automatic), targets: ["CBar"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar", dependencies: ["CBar"]),
-                        TargetDescription(name: "CBar", type: .system),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["Bar", "CBar"]),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"]),
+                            ProductDescription(name: "CBar", type: .library(.automatic), targets: ["CBar"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar", dependencies: ["CBar"]),
+                            TargetDescription(name: "CBar", type: .system),
+                        ])
+                    ),
             ]
         )
 
@@ -137,45 +155,57 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["Bar"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .local,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Baz", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    products: [
-                        ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar", dependencies: ["Baz"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Baz",
-                    path: "/Baz",
-                    url: "/Baz",
-                    packageKind: .local,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    products: [
-                        ProductDescription(name: "Baz", type: .library(.automatic), targets: ["Baz"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Baz", dependencies: ["Bar"]),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["Bar"]),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .local,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Baz"), location: URL(string: "/Baz")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        products: [
+                            ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar", dependencies: ["Baz"]),
+                        ])
+                    ),
+                PackageIdentity2("Baz"):
+                    (AbsolutePath("/Baz"),
+                    Manifest.createV4Manifest(
+                        name: "Baz",
+                        path: "/Baz",
+                        url: "/Baz",
+                        packageKind: .local,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        products: [
+                            ProductDescription(name: "Baz", type: .library(.automatic), targets: ["Baz"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Baz", dependencies: ["Bar"]),
+                        ])
+                    ),
             ]
         )
 
@@ -192,17 +222,21 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Foo", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Foo"), location: URL(string: "/Foo")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo"),
+                        ])
+                    ),
             ]
         )
 
@@ -222,30 +256,37 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         let g = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Foo", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar", dependencies: ["Foo"]),
-                        TargetDescription(name: "BarTests", dependencies: ["Bar"], type: .test),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Foo", type: .library(.automatic), targets: ["Foo"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: []),
-                        TargetDescription(name: "FooTests", dependencies: ["Foo"], type: .test),
-                    ]),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Foo"), location: URL(string: "/Foo")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar", dependencies: ["Foo"]),
+                            TargetDescription(name: "BarTests", dependencies: ["Bar"], type: .test),
+                        ])
+                    ),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Foo", type: .library(.automatic), targets: ["Foo"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: []),
+                            TargetDescription(name: "FooTests", dependencies: ["Foo"], type: .test),
+                        ])
+                    ),
             ]
         )
 
@@ -266,25 +307,32 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0"))
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "Bar"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .upToNextMajor(from: "1.0.0"))
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
             ]
         )
 
@@ -302,52 +350,65 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Fourth",
-                    path: "/Fourth",
-                    url: "/Fourth",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Fourth", type: .library(.automatic), targets: ["First"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "First"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Third",
-                    path: "/Third",
-                    url: "/Third",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Third", type: .library(.automatic), targets: ["First"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "First"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Second",
-                    path: "/Second",
-                    url: "/Second",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Second", type: .library(.automatic), targets: ["First"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "First"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "First",
-                    path: "/First",
-                    url: "/First",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Second", requirement: .upToNextMajor(from: "1.0.0")),
-                        PackageDependencyDescription(url: "/Third", requirement: .upToNextMajor(from: "1.0.0")),
-                        PackageDependencyDescription(url: "/Fourth", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "First", dependencies: ["Second", "Third", "Fourth"]),
-                    ]),
+                PackageIdentity2("Fourth"):
+                    (AbsolutePath("/Fourth"),
+                    Manifest.createV4Manifest(
+                        name: "Fourth",
+                        path: "/Fourth",
+                        url: "/Fourth",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Fourth", type: .library(.automatic), targets: ["First"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "First"),
+                        ])
+                    ),
+                PackageIdentity2("Third"):
+                    (AbsolutePath("/Third"),
+                    Manifest.createV4Manifest(
+                        name: "Third",
+                        path: "/Third",
+                        url: "/Third",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Third", type: .library(.automatic), targets: ["First"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "First"),
+                        ])
+                    ),
+                PackageIdentity2("Second"):
+                    (AbsolutePath("/Second"),
+                    Manifest.createV4Manifest(
+                        name: "Second",
+                        path: "/Second",
+                        url: "/Second",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Second", type: .library(.automatic), targets: ["First"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "First"),
+                        ])
+                    ),
+                PackageIdentity2("First"):
+                    (AbsolutePath("/First"),
+                    Manifest.createV4Manifest(
+                        name: "First",
+                        path: "/First",
+                        url: "/First",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Second"), location: URL(string: "/Second")!, requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(identity: .init("Third"), location: URL(string: "/Third")!, requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(identity: .init("Fourth"), location: URL(string: "/Fourth")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "First", dependencies: ["Second", "Third", "Fourth"]),
+                        ])
+                    ),
             ]
         )
 
@@ -367,52 +428,65 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Fourth",
-                    path: "/Fourth",
-                    url: "/Fourth",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Fourth", type: .library(.automatic), targets: ["Bar"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Third",
-                    path: "/Third",
-                    url: "/Third",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Third", type: .library(.automatic), targets: ["Bar"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Second",
-                    path: "/Second",
-                    url: "/Second",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Second", type: .library(.automatic), targets: ["Foo"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "First",
-                    path: "/First",
-                    url: "/First",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Second", requirement: .upToNextMajor(from: "1.0.0")),
-                        PackageDependencyDescription(url: "/Third", requirement: .upToNextMajor(from: "1.0.0")),
-                        PackageDependencyDescription(url: "/Fourth", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["Second", "Third", "Fourth"]),
-                    ]),
+                PackageIdentity2("Fourth"):
+                    (AbsolutePath("/Fourth"),
+                    Manifest.createV4Manifest(
+                        name: "Fourth",
+                        path: "/Fourth",
+                        url: "/Fourth",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Fourth", type: .library(.automatic), targets: ["Bar"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
+                PackageIdentity2("Third"):
+                    (AbsolutePath("/Third"),
+                    Manifest.createV4Manifest(
+                        name: "Third",
+                        path: "/Third",
+                        url: "/Third",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Third", type: .library(.automatic), targets: ["Bar"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
+                PackageIdentity2("Second"):
+                    (AbsolutePath("/Second"),
+                    Manifest.createV4Manifest(
+                        name: "Second",
+                        path: "/Second",
+                        url: "/Second",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Second", type: .library(.automatic), targets: ["Foo"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo"),
+                        ])
+                    ),
+                PackageIdentity2("First"):
+                    (AbsolutePath("/First"),
+                    Manifest.createV4Manifest(
+                        name: "First",
+                        path: "/First",
+                        url: "/First",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Second"), location: URL(string: "/Second")!, requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(identity: .init("Third"), location: URL(string: "/Third")!, requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(identity: .init("Fourth"), location: URL(string: "/Fourth")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["Second", "Third", "Fourth"]),
+                        ])
+                    ),
             ]
         )
 
@@ -433,59 +507,74 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Fourth",
-                    path: "/Fourth",
-                    url: "/Fourth",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Fourth", type: .library(.automatic), targets: ["First"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "First"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Third",
-                    path: "/Third",
-                    url: "/Third",
-                    packageKind: .local,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Fourth", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    products: [
-                        ProductDescription(name: "Third", type: .library(.automatic), targets: ["Third"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Third", dependencies: ["Fourth"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Second",
-                    path: "/Second",
-                    url: "/Second",
-                    packageKind: .local,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Third", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    products: [
-                        ProductDescription(name: "Second", type: .library(.automatic), targets: ["Second"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Second", dependencies: ["Third"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "First",
-                    path: "/First",
-                    url: "/First",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Second", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    products: [
-                        ProductDescription(name: "First", type: .library(.automatic), targets: ["First"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "First", dependencies: ["Second"]),
-                    ]),
+                PackageIdentity2("Fourth"):
+                    (AbsolutePath("/Fourth"),
+                    Manifest.createV4Manifest(
+                        name: "Fourth",
+                        path: "/Fourth",
+                        url: "/Fourth",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Fourth", type: .library(.automatic), targets: ["First"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "First"),
+                        ])
+                    ),
+                PackageIdentity2("Third"):
+                    (AbsolutePath("/Third"),
+                    Manifest.createV4Manifest(
+                        name: "Third",
+                        path: "/Third",
+                        url: "/Third",
+                        packageKind: .local,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Fourth"), location: URL(string: "/Fourth")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        products: [
+                            ProductDescription(name: "Third", type: .library(.automatic), targets: ["Third"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Third", dependencies: ["Fourth"]),
+                        ])
+                    ),
+                PackageIdentity2("Second"):
+                    (AbsolutePath("/Second"),
+                    Manifest.createV4Manifest(
+                        name: "Second",
+                        path: "/Second",
+                        url: "/Second",
+                        packageKind: .local,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Third"), location: URL(string: "/Third")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        products: [
+                            ProductDescription(name: "Second", type: .library(.automatic), targets: ["Second"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Second", dependencies: ["Third"]),
+                        ])
+                    ),
+                PackageIdentity2("First"):
+                    (AbsolutePath("/First"),
+                    Manifest.createV4Manifest(
+                        name: "First",
+                        path: "/First",
+                        url: "/First",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Second"), location: URL(string: "/Second")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        products: [
+                            ProductDescription(name: "First", type: .library(.automatic), targets: ["First"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "First", dependencies: ["Second"]),
+                        ])
+                    ),
             ]
         )
 
@@ -503,28 +592,35 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["Bar"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["Bar"]),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
             ]
         )
 
@@ -542,14 +638,17 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["Barx"]),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["Barx"]),
+                        ])
+                    ),
             ]
         )
 
@@ -569,55 +668,68 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_2,
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(name: "Bar", url: "/Bar", requirement: .branch("master")),
-                        PackageDependencyDescription(url: "/BizPath", requirement: .exact("1.2.3")),
-                        PackageDependencyDescription(url: "/FizPath", requirement: .upToNextMajor(from: "1.1.2")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["BarLib", "Biz", "FizLib"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .remote,
-                    products: [
-                        ProductDescription(name: "BarLib", type: .library(.automatic), targets: ["BarLib"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "BarLib"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Biz",
-                    path: "/BizPath",
-                    url: "/BizPath",
-                    version: "1.2.3",
-                    packageKind: .remote,
-                    products: [
-                        ProductDescription(name: "Biz", type: .library(.automatic), targets: ["Biz"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Biz"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Fiz",
-                    path: "/FizPath",
-                    url: "/FizPath",
-                    version: "1.2.3",
-                    packageKind: .remote,
-                    products: [
-                        ProductDescription(name: "FizLib", type: .library(.automatic), targets: ["FizLib"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "FizLib"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_2,
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .branch("master")),
+                            PackageDependencyDescription(identity: .init("BizPath"), location: URL(string: "/BizPath")!, requirement: .exact("1.2.3")),
+                            PackageDependencyDescription(identity: .init("FizPath"), location: URL(string: "/FizPath")!, requirement: .upToNextMajor(from: "1.1.2")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["BarLib", "Biz", "FizLib"]),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .remote,
+                        products: [
+                            ProductDescription(name: "BarLib", type: .library(.automatic), targets: ["BarLib"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "BarLib"),
+                        ])
+                    ),
+                PackageIdentity2("Biz"):
+                    (AbsolutePath("/Biz"),
+                    Manifest.createV4Manifest(
+                        name: "Biz",
+                        path: "/BizPath",
+                        url: "/BizPath",
+                        version: "1.2.3",
+                        packageKind: .remote,
+                        products: [
+                            ProductDescription(name: "Biz", type: .library(.automatic), targets: ["Biz"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Biz"),
+                        ])
+                    ),
+                PackageIdentity2("Fiz"):
+                    (AbsolutePath("/Fiz"),
+                    Manifest.createV4Manifest(
+                        name: "Fiz",
+                        path: "/FizPath",
+                        url: "/FizPath",
+                        version: "1.2.3",
+                        packageKind: .remote,
+                        products: [
+                            ProductDescription(name: "FizLib", type: .library(.automatic), targets: ["FizLib"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "FizLib"),
+                        ])
+                    ),
             ]
         )
 
@@ -647,29 +759,37 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_2,
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(name: "UnBar", url: "/Bar", requirement: .branch("master")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: [.product(name: "BarProduct", package: "UnBar")]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "UnBar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .remote,
-                    products: [
-                        ProductDescription(name: "BarProduct", type: .library(.automatic), targets: ["Bar"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_2,
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            //PackageDependencyDescription(name: "UnBar", url: "/Bar", requirement: .branch("master")),
+                            PackageDependencyDescription(identity: .init("UnBar"), location: URL(string: "/Bar")!, requirement: .branch("master")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: [.product(name: "BarProduct", package: "UnBar")]),
+                        ])
+                    ),
+                PackageIdentity2("UnBar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "UnBar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .remote,
+                        products: [
+                            ProductDescription(name: "BarProduct", type: .library(.automatic), targets: ["Bar"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
             ]
         )
 
@@ -688,52 +808,65 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0")),
-                        PackageDependencyDescription(url: "/Baz", requirement: .upToNextMajor(from: "1.0.0")),
-                        PackageDependencyDescription(url: "/Biz", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["BarLibrary"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Biz",
-                    path: "/Biz",
-                    url: "/Biz",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "biz", type: .executable, targets: ["Biz"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Biz"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "BarLibrary", type: .library(.automatic), targets: ["Bar"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Baz",
-                    path: "/Baz",
-                    url: "/Baz",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "BazLibrary", type: .library(.automatic), targets: ["Baz"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Baz"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Bar"), location: URL(string:"/Bar")!, requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(identity: .init("Baz"), location: URL(string: "/Baz")!, requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(identity: .init("Biz"), location: URL(string: "/Biz")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["BarLibrary"]),
+                        ])
+                    ),
+                PackageIdentity2("Biz"):
+                    (AbsolutePath("/Biz"),
+                    Manifest.createV4Manifest(
+                        name: "Biz",
+                        path: "/Biz",
+                        url: "/Biz",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "biz", type: .executable, targets: ["Biz"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Biz"),
+                        ])
+                    ),
+                PackageIdentity2("Biz"):
+                    (AbsolutePath("/Biz"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "BarLibrary", type: .library(.automatic), targets: ["Bar"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
+                PackageIdentity2("Baz"):
+                    (AbsolutePath("/Baz"),
+                    Manifest.createV4Manifest(
+                        name: "Baz",
+                        path: "/Baz",
+                        url: "/Baz",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "BazLibrary", type: .library(.automatic), targets: ["Baz"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Baz"),
+                        ])
+                    ),
             ]
         )
 
@@ -754,22 +887,29 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Foo", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .local),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Foo"), location: URL(string: "/Foo")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .local)
+                    ),
             ]
         )
 
@@ -789,45 +929,56 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Start",
-                    path: "/Start",
-                    url: "/Start",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Dep1", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["BazLibrary"]),
-                        TargetDescription(name: "Bar"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Dep1",
-                    path: "/Dep1",
-                    url: "/Dep1",
-                    packageKind: .local,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Dep2", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    products: [
-                        ProductDescription(name: "BazLibrary", type: .library(.automatic), targets: ["Baz"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Baz", dependencies: ["FooLibrary"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Dep2",
-                    path: "/Dep2",
-                    url: "/Dep2",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "FooLibrary", type: .library(.automatic), targets: ["Foo"]),
-                        ProductDescription(name: "BamLibrary", type: .library(.automatic), targets: ["Bam"]),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo"),
-                        TargetDescription(name: "Bam"),
-                    ]),
+                PackageIdentity2("Start"):
+                    (AbsolutePath("/Start"),
+                    Manifest.createV4Manifest(
+                        name: "Start",
+                        path: "/Start",
+                        url: "/Start",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Dep1"), location: URL(string: "/Dep1")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["BazLibrary"]),
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
+                PackageIdentity2("Dep1"):
+                    (AbsolutePath("/Dep1"),
+                    Manifest.createV4Manifest(
+                        name: "Dep1",
+                        path: "/Dep1",
+                        url: "/Dep1",
+                        packageKind: .local,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Dep2"), location: URL(string: "/Dep2")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        products: [
+                            ProductDescription(name: "BazLibrary", type: .library(.automatic), targets: ["Baz"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Baz", dependencies: ["FooLibrary"]),
+                        ])
+                    ),
+                PackageIdentity2("Dep2"):
+                    (AbsolutePath("/Dep2"),
+                    Manifest.createV4Manifest(
+                        name: "Dep2",
+                        path: "/Dep2",
+                        url: "/Dep2",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "FooLibrary", type: .library(.automatic), targets: ["Foo"]),
+                            ProductDescription(name: "BamLibrary", type: .library(.automatic), targets: ["Bam"]),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo"),
+                            TargetDescription(name: "Bam"),
+                        ])
+                    ),
             ]
         )
 
@@ -846,40 +997,50 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0")),
-                        PackageDependencyDescription(url: "/Baz", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["Bar"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Bar"),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Baz",
-                    path: "/Baz",
-                    url: "/Baz",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Baz"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Baz"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(identity: .init("Baz"), location: URL(string: "/Baz")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["Bar"]),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Bar"),
+                        ])
+                    ),
+                PackageIdentity2("Baz"):
+                    (AbsolutePath("/Baz"),
+                    Manifest.createV4Manifest(
+                        name: "Baz",
+                        path: "/Baz",
+                        url: "/Baz",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Baz"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Baz"),
+                        ])
+                    ),
             ]
         )
 
@@ -900,50 +1061,57 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Bar", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["Bar"]),
-                        TargetDescription(name: "Foo2", dependencies: ["TransitiveBar"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar", "Bar2", "Bar3"]),
-                        ProductDescription(name: "TransitiveBar", type: .library(.automatic), targets: ["TransitiveBar"]),
-                    ],
-                    targets: [
-                        TargetDescription(
-                            name: "Bar",
-                            settings: [
-                                .init(tool: .swift, name: .unsafeFlags, value: ["-Icfoo", "-L", "cbar"]),
-                                .init(tool: .c, name: .unsafeFlags, value: ["-Icfoo", "-L", "cbar"]),
-                            ]
-                        ),
-                        TargetDescription(
-                            name: "Bar2",
-                            settings: [
-                                .init(tool: .swift, name: .unsafeFlags, value: ["-Icfoo", "-L", "cbar"]),
-                                .init(tool: .c, name: .unsafeFlags, value: ["-Icfoo", "-L", "cbar"]),
-                            ]
-                        ),
-                        TargetDescription(
-                            name: "Bar3"
-                        ),
-                        TargetDescription(
-                            name: "TransitiveBar",
-                            dependencies: ["Bar2"]
-                        ),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Dep2"), location: URL(string: "/Bar")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["Bar"]),
+                            TargetDescription(name: "Foo2", dependencies: ["TransitiveBar"]),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Bar", type: .library(.automatic), targets: ["Bar", "Bar2", "Bar3"]),
+                            ProductDescription(name: "TransitiveBar", type: .library(.automatic), targets: ["TransitiveBar"]),
+                        ],
+                        targets: [
+                            TargetDescription(
+                                name: "Bar",
+                                settings: [
+                                    .init(tool: .swift, name: .unsafeFlags, value: ["-Icfoo", "-L", "cbar"]),
+                                    .init(tool: .c, name: .unsafeFlags, value: ["-Icfoo", "-L", "cbar"]),
+                                ]
+                            ),
+                            TargetDescription(
+                                name: "Bar2",
+                                settings: [
+                                    .init(tool: .swift, name: .unsafeFlags, value: ["-Icfoo", "-L", "cbar"]),
+                                    .init(tool: .c, name: .unsafeFlags, value: ["-Icfoo", "-L", "cbar"]),
+                                ]
+                            ),
+                            TargetDescription(
+                                name: "Bar3"
+                            ),
+                            TargetDescription(
+                                name: "TransitiveBar",
+                                dependencies: ["Bar2"]
+                            ),
+                        ])
+                    ),
             ]
         )
 
@@ -964,28 +1132,36 @@ class PackageGraphTests: XCTestCase {
         let diagnostics = DiagnosticsEngine()
         _ = try loadPackageGraph(fs: fs, diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(name: "Baar", url: "/Bar", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: ["Baar"]),
-                    ]),
-                Manifest.createV4Manifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    packageKind: .local,
-                    products: [
-                        ProductDescription(name: "Baar", type: .library(.automatic), targets: ["Baar"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Baar"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            //PackageDependencyDescription(name: "Baar", url: "/Bar", requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(identity: .init("Baar"), location: URL(string: "/Bar")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: ["Baar"]),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createV4Manifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        packageKind: .local,
+                        products: [
+                            ProductDescription(name: "Baar", type: .library(.automatic), targets: ["Baar"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Baar"),
+                        ])
+                    ),
             ]
         )
 
@@ -1013,44 +1189,49 @@ class PackageGraphTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createV4Manifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    dependencies: [
-                        PackageDependencyDescription(url: "/Biz", requirement: .localPackage),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Foo", dependencies: [
-                            .target(name: "Bar", condition: PackageConditionDescription(
-                                platformNames: ["linux"],
-                                config: nil
-                            )),
-                            .byName(name: "Baz", condition: PackageConditionDescription(
-                                platformNames: [],
-                                config: "debug"
-                            )),
-                            .product(name: "Biz", package: "Biz", condition: PackageConditionDescription(
-                                platformNames: ["watchos", "ios"],
-                                config: "release"
-                            ))
-                        ]),
-                        TargetDescription(name: "Bar"),
-                        TargetDescription(name: "Baz"),
-                    ]
-                ),
-                Manifest.createV4Manifest(
-                    name: "Biz",
-                    path: "/Biz",
-                    url: "/Biz",
-                    packageKind: .remote,
-                    products: [
-                        ProductDescription(name: "Biz", type: .library(.automatic), targets: ["Biz"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "Biz"),
-                    ]
-                ),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createV4Manifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(identity: .init("Biz"), location: URL(string: "/Biz")!, requirement: .localPackage),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Foo", dependencies: [
+                                .target(name: "Bar", condition: PackageConditionDescription(
+                                    platformNames: ["linux"],
+                                    config: nil
+                                )),
+                                .byName(name: "Baz", condition: PackageConditionDescription(
+                                    platformNames: [],
+                                    config: "debug"
+                                )),
+                                .product(name: "Biz", package: "Biz", condition: PackageConditionDescription(
+                                    platformNames: ["watchos", "ios"],
+                                    config: "release"
+                                ))
+                            ]),
+                            TargetDescription(name: "Bar"),
+                            TargetDescription(name: "Baz"),
+                        ])
+                    ),
+                PackageIdentity2("Biz"):
+                    (AbsolutePath("/Biz"),
+                    Manifest.createV4Manifest(
+                        name: "Biz",
+                        path: "/Biz",
+                        url: "/Biz",
+                        packageKind: .remote,
+                        products: [
+                            ProductDescription(name: "Biz", type: .library(.automatic), targets: ["Biz"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "Biz"),
+                        ])
+                    ),
             ]
         )
 
@@ -1098,75 +1279,92 @@ class PackageGraphTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Root",
-                    path: "/Root",
-                    url: "/Root",
-                    v: .v5_2,
-                    packageKind: .root,
-                    dependencies: [
-                        PackageDependencyDescription(name: "Immediate", url: "/Immediate", requirement: .upToNextMajor(from: "1.0.0")),
-                    ],
-                    targets: [
-                        TargetDescription(name: "Root", dependencies: [
-                            .product(name: "ImmediateUsed", package: "Immediate")
-                        ]),
-                    ]
-                ),
-                Manifest.createManifest(
-                    name: "Immediate",
-                    path: "/Immediate",
-                    url: "/Immediate",
-                    v: .v5_2,
-                    packageKind: .local,
-                    dependencies: [
-                        PackageDependencyDescription(
-                            name: "Transitive",
-                            url: "/Transitive",
-                            requirement: .upToNextMajor(from: "1.0.0")
-                        ),
-                        PackageDependencyDescription(
-                            name: "Nonexistent",
-                            url: "/Nonexistent",
-                            requirement: .upToNextMajor(from: "1.0.0")
-                        )
-                    ],
-                    products: [
-                        ProductDescription(name: "ImmediateUsed", type: .library(.automatic), targets: ["ImmediateUsed"]),
-                        ProductDescription(name: "ImmediateUnused", type: .library(.automatic), targets: ["ImmediateUnused"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "ImmediateUsed", dependencies: [
-                            .product(name: "TransitiveUsed", package: "Transitive")
-                        ]),
-                        TargetDescription(name: "ImmediateUnused", dependencies: [
-                            .product(name: "TransitiveUnused", package: "Transitive"),
-                            .product(name: "Nonexistent", package: "Nonexistent")
-                        ]),
-                    ]
-                ),
-                Manifest.createManifest(
-                    name: "Transitive",
-                    path: "/Transitive",
-                    url: "/Transitive",
-                    v: .v5_2,
-                    packageKind: .local,
-                    dependencies: [
-                        PackageDependencyDescription(
-                            name: "Nonexistent",
-                            url: "/Nonexistent",
-                            requirement: .upToNextMajor(from: "1.0.0")
-                        )
-                    ],
-                    products: [
-                        ProductDescription(name: "TransitiveUsed", type: .library(.automatic), targets: ["TransitiveUsed"])
-                    ],
-                    targets: [
-                        TargetDescription(name: "TransitiveUsed"),
-                        TargetDescription(name: "TransitiveUnused", dependencies: [
-                            .product(name: "Nonexistent", package: "Nonexistent")
+                PackageIdentity2("Root"):
+                    (AbsolutePath("/Root"),
+                    Manifest.createManifest(
+                        name: "Root",
+                        path: "/Root",
+                        url: "/Root",
+                        v: .v5_2,
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            //PackageDependencyDescription(name: "Immediate", url: "/Immediate", requirement: .upToNextMajor(from: "1.0.0")),
+                            PackageDependencyDescription(identity: .init("Immediate"), location: URL(string: "/Immediate")!, requirement: .upToNextMajor(from: "1.0.0")),
+                        ],
+                        targets: [
+                            TargetDescription(name: "Root", dependencies: [
+                                .product(name: "ImmediateUsed", package: "Immediate")
+                            ]),
                         ])
-                ]),
+                    ),
+                PackageIdentity2("Immediate"):
+                    (AbsolutePath("/Immediate"),
+                    Manifest.createManifest(
+                        name: "Immediate",
+                        path: "/Immediate",
+                        url: "/Immediate",
+                        v: .v5_2,
+                        packageKind: .local,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(
+                                //name: "Transitive",
+                                //url: "/Transitive",
+                                identity: .init("Transitive"),
+                                location: URL(string: "/Transitive")!,
+                                requirement: .upToNextMajor(from: "1.0.0")
+                            ),
+                            PackageDependencyDescription(
+                                //name: "Nonexistent",
+                                //url: "/Nonexistent",
+                                identity: .init("Nonexistent"),
+                                location: URL(string: "/Nonexistent")!,
+                                requirement: .upToNextMajor(from: "1.0.0")
+                            )
+                        ],
+                        products: [
+                            ProductDescription(name: "ImmediateUsed", type: .library(.automatic), targets: ["ImmediateUsed"]),
+                            ProductDescription(name: "ImmediateUnused", type: .library(.automatic), targets: ["ImmediateUnused"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "ImmediateUsed", dependencies: [
+                                .product(name: "TransitiveUsed", package: "Transitive")
+                            ]),
+                            TargetDescription(name: "ImmediateUnused", dependencies: [
+                                .product(name: "TransitiveUnused", package: "Transitive"),
+                                .product(name: "Nonexistent", package: "Nonexistent")
+                            ]),
+                        ])
+                    ),
+                PackageIdentity2("Transitive"):
+                    (AbsolutePath("/Transitive"),
+                    Manifest.createManifest(
+                        name: "Transitive",
+                        path: "/Transitive",
+                        url: "/Transitive",
+                        v: .v5_2,
+                        packageKind: .local,
+                        dependencies: [
+                            // FIXME
+                            PackageDependencyDescription(
+                                //name: "Nonexistent",
+                                //url: "/Nonexistent",
+                                identity: .init("Nonexistent"),
+                                location: URL(string: "/Nonexistent")!,
+                                requirement: .upToNextMajor(from: "1.0.0")
+                            )
+                        ],
+                        products: [
+                            ProductDescription(name: "TransitiveUsed", type: .library(.automatic), targets: ["TransitiveUsed"])
+                        ],
+                        targets: [
+                            TargetDescription(name: "TransitiveUsed"),
+                            TargetDescription(name: "TransitiveUnused", dependencies: [
+                                .product(name: "Nonexistent", package: "Nonexistent")
+                            ])
+                        ])
+                    ),
             ]
         )
 

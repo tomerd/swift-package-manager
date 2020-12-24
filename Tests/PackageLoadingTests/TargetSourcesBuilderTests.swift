@@ -46,7 +46,7 @@ class TargetSourcesBuilderTests: XCTestCase {
         let diags = DiagnosticsEngine()
 
         let builder = TargetSourcesBuilder(
-            packageName: "",
+            packageIdentity: PackageIdentity2(""), // FIXME
             packagePath: .root,
             target: target,
             path: .root,
@@ -90,7 +90,7 @@ class TargetSourcesBuilderTests: XCTestCase {
         let diags = DiagnosticsEngine()
 
         let builder = TargetSourcesBuilder(
-            packageName: "",
+            packageIdentity: PackageIdentity2(""), // FIXME
             packagePath: .root,
             target: target,
             path: .root,
@@ -466,7 +466,7 @@ class TargetSourcesBuilderTests: XCTestCase {
     ) {
         let diagnostics = DiagnosticsEngine()
         let builder = TargetSourcesBuilder(
-            packageName: "",
+            packageIdentity: PackageIdentity2(""), // FIXME
             packagePath: .root,
             target: target,
             path: .root,

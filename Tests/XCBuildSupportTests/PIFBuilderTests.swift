@@ -39,38 +39,47 @@ class PIFBuilderTests: XCTestCase {
                 fs: fs,
                 diagnostics: diagnostics,
                 manifests: [
-                    Manifest.createManifest(
-                        name: "B",
-                        path: "/B",
-                        url: "/B",
-                        v: .v5_2,
-                        packageKind: .remote,
-                        products: [
-                            .init(name: "bexe", type: .executable, targets: ["B1"]),
-                            .init(name: "blib", type: .library(.static), targets: ["B2"]),
-                        ],
-                        targets: [
-                            .init(name: "B2", dependencies: []),
-                            .init(name: "B1", dependencies: ["B2"]),
-                        ]),
-                    Manifest.createManifest(
-                        name: "A",
-                        path: "/A",
-                        url: "/A",
-                        v: .v5_2,
-                        packageKind: .root,
-                        dependencies: [
-                            .init(name: "B", url: "/B", requirement: .branch("master")),
-                        ],
-                        products: [
-                            .init(name: "alib", type: .library(.static), targets: ["A2"]),
-                            .init(name: "aexe", type: .executable, targets: ["A1"]),
-                        ],
-                        targets: [
-                            .init(name: "A1", dependencies: ["A3", "A2", .product(name: "blib", package: "B")]),
-                            .init(name: "A2", dependencies: []),
-                            .init(name: "A3", dependencies: []),
-                        ]),
+                    PackageIdentity2("B"):
+                        (AbsolutePath("/B"),
+                        Manifest.createManifest(
+                            name: "B",
+                            path: "/B",
+                            url: "/B",
+                            v: .v5_2,
+                            packageKind: .remote,
+                            products: [
+                                // FIXME
+                                .init(name: "bexe", type: .executable, targets: ["B1"]),
+                                .init(name: "blib", type: .library(.static), targets: ["B2"]),
+                            ],
+                            targets: [
+                                .init(name: "B2", dependencies: []),
+                                .init(name: "B1", dependencies: ["B2"]),
+                            ])
+                        ),
+                        PackageIdentity2("A"):
+                            (AbsolutePath("/A"),
+                             Manifest.createManifest(
+                            name: "A",
+                            path: "/A",
+                            url: "/A",
+                            v: .v5_2,
+                            packageKind: .root,
+                            dependencies: [
+                                 // FIXME
+                                //.init(name: "B", url: "/B", requirement: .branch("master")),
+                                .init(identity: .init("B"), location: URL(string: "/B")!, requirement: .branch("master")),
+                            ],
+                            products: [
+                                .init(name: "alib", type: .library(.static), targets: ["A2"]),
+                                .init(name: "aexe", type: .executable, targets: ["A1"]),
+                            ],
+                            targets: [
+                                .init(name: "A1", dependencies: ["A3", "A2", .product(name: "blib", package: "B")]),
+                                .init(name: "A2", dependencies: []),
+                                .init(name: "A3", dependencies: []),
+                            ])
+                             ),
                 ]
             )
 
@@ -111,39 +120,47 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    defaultLocalization: "fr",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_2,
-                    packageKind: .root,
-                    dependencies: [
-                        .init(name: "Bar", url: "/Bar", requirement: .branch("master")),
-                    ],
-                    targets: [
-                        .init(name: "foo", dependencies: [.product(name: "BarLib", package: "Bar")]),
-                        .init(name: "FooTests", type: .test),
-                    ]),
-                Manifest.createManifest(
-                    name: "Bar",
-                    platforms: [
-                        PlatformDescription(name: "macos", version: "10.14"),
-                        PlatformDescription(name: "ios", version: "12"),
-                        PlatformDescription(name: "tvos", version: "11"),
-                        PlatformDescription(name: "watchos", version: "6"),
-                    ],
-                    path: "/Bar",
-                    url: "/Bar",
-                    v: .v5_2,
-                    packageKind: .remote,
-                    products: [
-                        .init(name: "BarLib", type: .library(.automatic), targets: ["BarLib"]),
-                    ],
-                    targets: [
-                        .init(name: "BarLib"),
-                        .init(name: "BarTests", type: .test),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        defaultLocalization: "fr",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_2,
+                        packageKind: .root,
+                        dependencies: [
+                            // FIXME
+                            //.init(name: "Bar", url: "/Bar", requirement: .branch("master")),
+                            .init(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .branch("master")),
+                        ],
+                        targets: [
+                            .init(name: "foo", dependencies: [.product(name: "BarLib", package: "Bar")]),
+                            .init(name: "FooTests", type: .test),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createManifest(
+                        name: "Bar",
+                        platforms: [
+                            PlatformDescription(name: "macos", version: "10.14"),
+                            PlatformDescription(name: "ios", version: "12"),
+                            PlatformDescription(name: "tvos", version: "11"),
+                            PlatformDescription(name: "watchos", version: "6"),
+                        ],
+                        path: "/Bar",
+                        url: "/Bar",
+                        v: .v5_2,
+                        packageKind: .remote,
+                        products: [
+                            .init(name: "BarLib", type: .library(.automatic), targets: ["BarLib"]),
+                        ],
+                        targets: [
+                            .init(name: "BarLib"),
+                            .init(name: "BarTests", type: .test),
+                        ])
+                    ),
             ],
             shouldCreateMultipleTestProducts: true
         )
@@ -381,49 +398,57 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_2,
-                    packageKind: .root,
-                    swiftLanguageVersions: [.v4_2, .v5],
-                    dependencies: [
-                        .init(name: "Bar", url: "/Bar", requirement: .branch("master")),
-                    ],
-                    targets: [
-                        .init(name: "foo", dependencies: [
-                            "FooLib",
-                            "SystemLib",
-                            "cfoo",
-                            .product(name: "bar", package: "Bar"),
-                            .product(name: "cbar", package: "Bar")
-                        ]),
-                        .init(name: "cfoo"),
-                        .init(name: "SystemLib", type: .system, pkgConfig: "Foo"),
-                        .init(name: "FooLib", dependencies: [
-                            .product(name: "BarLib", package: "Bar"),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_2,
+                        packageKind: .root,
+                        swiftLanguageVersions: [.v4_2, .v5],
+                        dependencies: [
+                            // FIXME
+                            //.init(name: "Bar", url: "/Bar", requirement: .branch("master")),
+                            .init(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .branch("master")),
+                        ],
+                        targets: [
+                            .init(name: "foo", dependencies: [
+                                "FooLib",
+                                "SystemLib",
+                                "cfoo",
+                                .product(name: "bar", package: "Bar"),
+                                .product(name: "cbar", package: "Bar")
+                            ]),
+                            .init(name: "cfoo"),
+                            .init(name: "SystemLib", type: .system, pkgConfig: "Foo"),
+                            .init(name: "FooLib", dependencies: [
+                                .product(name: "BarLib", package: "Bar"),
+                            ])
                         ])
-                    ]),
-                Manifest.createManifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    v: .v4_2,
-                    packageKind: .remote,
-                    cLanguageStandard: "c11",
-                    cxxLanguageStandard: "c++14",
-                    swiftLanguageVersions: [.v4_2],
-                    products: [
-                        .init(name: "bar", type: .executable, targets: ["bar"]),
-                        .init(name: "cbar", type: .executable, targets: ["cbar"]),
-                        .init(name: "BarLib", type: .library(.static), targets: ["BarLib"]),
-                    ],
-                    targets: [
-                        .init(name: "bar", dependencies: ["BarLib"]),
-                        .init(name: "cbar"),
-                        .init(name: "BarLib"),
-                    ]),
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createManifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        v: .v4_2,
+                        packageKind: .remote,
+                        cLanguageStandard: "c11",
+                        cxxLanguageStandard: "c++14",
+                        swiftLanguageVersions: [.v4_2],
+                        products: [
+                            .init(name: "bar", type: .executable, targets: ["bar"]),
+                            .init(name: "cbar", type: .executable, targets: ["cbar"]),
+                            .init(name: "BarLib", type: .library(.static), targets: ["BarLib"]),
+                        ],
+                        targets: [
+                            .init(name: "bar", dependencies: ["BarLib"]),
+                            .init(name: "cbar"),
+                            .init(name: "BarLib"),
+                        ])
+                    ),
             ]
         )
 
@@ -707,49 +732,57 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_2,
-                    packageKind: .root,
-                    swiftLanguageVersions: [.v4_2, .v5],
-                    dependencies: [
-                        .init(name: "Bar", url: "/Bar", requirement: .branch("master")),
-                    ],
-                    targets: [
-                        .init(name: "FooTests", dependencies: [
-                            "foo",
-                            "FooLib",
-                            .product(name: "bar", package: "Bar"),
-                            "SystemLib",
-                        ], type: .test),
-                        .init(name: "CFooTests", type: .test),
-                        .init(name: "foo"),
-                        .init(name: "SystemLib", type: .system, pkgConfig: "Foo"),
-                        .init(name: "FooLib", dependencies: [
-                            .product(name: "BarLib", package: "Bar"),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_2,
+                        packageKind: .root,
+                        swiftLanguageVersions: [.v4_2, .v5],
+                        dependencies: [
+                            // FIXME
+                            //.init(name: "Bar", url: "/Bar", requirement: .branch("master")),
+                            .init(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .branch("master")),
+                        ],
+                        targets: [
+                            .init(name: "FooTests", dependencies: [
+                                "foo",
+                                "FooLib",
+                                .product(name: "bar", package: "Bar"),
+                                "SystemLib",
+                            ], type: .test),
+                            .init(name: "CFooTests", type: .test),
+                            .init(name: "foo"),
+                            .init(name: "SystemLib", type: .system, pkgConfig: "Foo"),
+                            .init(name: "FooLib", dependencies: [
+                                .product(name: "BarLib", package: "Bar"),
+                            ])
                         ])
-                    ]),
-                Manifest.createManifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    v: .v4_2,
-                    packageKind: .remote,
-                    cLanguageStandard: "c11",
-                    cxxLanguageStandard: "c++14",
-                    swiftLanguageVersions: [.v4_2],
-                    products: [
-                        .init(name: "bar", type: .executable, targets: ["bar"]),
-                        .init(name: "BarLib", type: .library(.static), targets: ["BarLib"]),
-                    ],
-                    targets: [
-                        .init(name: "bar", dependencies: ["BarLib"]),
-                        .init(name: "BarTests", dependencies: ["BarLib"], type: .test),
-                        .init(name: "CBarTests", type: .test),
-                        .init(name: "BarLib"),
-                    ]),
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createManifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        v: .v4_2,
+                        packageKind: .remote,
+                        cLanguageStandard: "c11",
+                        cxxLanguageStandard: "c++14",
+                        swiftLanguageVersions: [.v4_2],
+                        products: [
+                            .init(name: "bar", type: .executable, targets: ["bar"]),
+                            .init(name: "BarLib", type: .library(.static), targets: ["BarLib"]),
+                        ],
+                        targets: [
+                            .init(name: "bar", dependencies: ["BarLib"]),
+                            .init(name: "BarTests", dependencies: ["BarLib"], type: .test),
+                            .init(name: "CBarTests", type: .test),
+                            .init(name: "BarLib"),
+                        ])
+                    ),
             ],
             shouldCreateMultipleTestProducts: true
         )
@@ -935,42 +968,50 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_2,
-                    packageKind: .root,
-                    swiftLanguageVersions: [.v4_2, .v5],
-                    dependencies: [
-                        .init(name: "Bar", url: "/Bar", requirement: .branch("master")),
-                    ],
-                    products: [
-                        .init(name: "FooLib1", type: .library(.static), targets: ["FooLib1"]),
-                        .init(name: "FooLib2", type: .library(.automatic), targets: ["FooLib2"]),
-                    ],
-                    targets: [
-                        .init(name: "FooLib1", dependencies: ["SystemLib", "FooLib2"]),
-                        .init(name: "FooLib2", dependencies: [
-                            .product(name: "BarLib", package: "Bar"),
-                        ]),
-                        .init(name: "SystemLib", type: .system, pkgConfig: "Foo"),
-                    ]),
-                Manifest.createManifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    v: .v4_2,
-                    packageKind: .remote,
-                    cLanguageStandard: "c11",
-                    cxxLanguageStandard: "c++14",
-                    swiftLanguageVersions: [.v4_2],
-                    products: [
-                        .init(name: "BarLib", type: .library(.dynamic), targets: ["BarLib"]),
-                    ],
-                    targets: [
-                        .init(name: "BarLib"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_2,
+                        packageKind: .root,
+                        swiftLanguageVersions: [.v4_2, .v5],
+                        dependencies: [
+                            // FIXME
+                            //.init(name: "Bar", url: "/Bar", requirement: .branch("master")),
+                            .init(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .branch("master")),
+                        ],
+                        products: [
+                            .init(name: "FooLib1", type: .library(.static), targets: ["FooLib1"]),
+                            .init(name: "FooLib2", type: .library(.automatic), targets: ["FooLib2"]),
+                        ],
+                        targets: [
+                            .init(name: "FooLib1", dependencies: ["SystemLib", "FooLib2"]),
+                            .init(name: "FooLib2", dependencies: [
+                                .product(name: "BarLib", package: "Bar"),
+                            ]),
+                            .init(name: "SystemLib", type: .system, pkgConfig: "Foo"),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createManifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        v: .v4_2,
+                        packageKind: .remote,
+                        cLanguageStandard: "c11",
+                        cxxLanguageStandard: "c++14",
+                        swiftLanguageVersions: [.v4_2],
+                        products: [
+                            .init(name: "BarLib", type: .library(.dynamic), targets: ["BarLib"]),
+                        ],
+                        targets: [
+                            .init(name: "BarLib"),
+                        ])
+                    ),
             ]
         )
 
@@ -1131,38 +1172,46 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_2,
-                    packageKind: .root,
-                    cxxLanguageStandard: "c++14",
-                    swiftLanguageVersions: [.v4_2, .v5],
-                    dependencies: [
-                        .init(name: "Bar", url: "/Bar", requirement: .branch("master")),
-                    ],
-                    targets: [
-                        .init(name: "FooLib1", dependencies: ["SystemLib", "FooLib2"]),
-                        .init(name: "FooLib2", dependencies: [
-                            .product(name: "BarLib", package: "Bar"),
-                        ]),
-                        .init(name: "SystemLib", type: .system, pkgConfig: "Foo"),
-                    ]),
-                Manifest.createManifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    v: .v4_2,
-                    packageKind: .remote,
-                    cLanguageStandard: "c11",
-                    swiftLanguageVersions: [.v4_2],
-                    products: [
-                        .init(name: "BarLib", type: .library(.dynamic), targets: ["BarLib"]),
-                    ],
-                    targets: [
-                        .init(name: "BarLib"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_2,
+                        packageKind: .root,
+                        cxxLanguageStandard: "c++14",
+                        swiftLanguageVersions: [.v4_2, .v5],
+                        dependencies: [
+                            // FIXME
+                            //.init(name: "Bar", url: "/Bar", requirement: .branch("master")),
+                            .init(identity: .init("Bar"), location: URL(string: "/Bar")!, requirement: .branch("master")),
+                        ],
+                        targets: [
+                            .init(name: "FooLib1", dependencies: ["SystemLib", "FooLib2"]),
+                            .init(name: "FooLib2", dependencies: [
+                                .product(name: "BarLib", package: "Bar"),
+                            ]),
+                            .init(name: "SystemLib", type: .system, pkgConfig: "Foo"),
+                        ])
+                    ),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createManifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        v: .v4_2,
+                        packageKind: .remote,
+                        cLanguageStandard: "c11",
+                        swiftLanguageVersions: [.v4_2],
+                        products: [
+                            .init(name: "BarLib", type: .library(.dynamic), targets: ["BarLib"]),
+                        ],
+                        targets: [
+                            .init(name: "BarLib"),
+                        ])
+                    ),
             ]
         )
 
@@ -1421,20 +1470,23 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    v: .v4_2,
-                    packageKind: .root,
-                    cLanguageStandard: "c11",
-                    swiftLanguageVersions: [.v4_2],
-                    products: [
-                        .init(name: "BarLib", type: .library(.dynamic), targets: ["BarLib"]),
-                    ],
-                    targets: [
-                        .init(name: "BarLib"),
-                    ]),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createManifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        v: .v4_2,
+                        packageKind: .root,
+                        cLanguageStandard: "c11",
+                        swiftLanguageVersions: [.v4_2],
+                        products: [
+                            .init(name: "BarLib", type: .library(.dynamic), targets: ["BarLib"]),
+                        ],
+                        targets: [
+                            .init(name: "BarLib"),
+                        ])
+                    ),
             ]
         )
 
@@ -1468,20 +1520,23 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Bar",
-                    path: "/Bar",
-                    url: "/Bar",
-                    v: .v4_2,
-                    packageKind: .root,
-                    cLanguageStandard: "c11",
-                    swiftLanguageVersions: [.v4_2],
-                    products: [
-                        .init(name: "BarLib", type: .library(.dynamic), targets: ["BarLib"]),
-                    ],
-                    targets: [
-                        .init(name: "BarLib"),
-                    ]),
+                PackageIdentity2("Bar"):
+                    (AbsolutePath("/Bar"),
+                    Manifest.createManifest(
+                        name: "Bar",
+                        path: "/Bar",
+                        url: "/Bar",
+                        v: .v4_2,
+                        packageKind: .root,
+                        cLanguageStandard: "c11",
+                        swiftLanguageVersions: [.v4_2],
+                        products: [
+                            .init(name: "BarLib", type: .library(.dynamic), targets: ["BarLib"]),
+                        ],
+                        targets: [
+                            .init(name: "BarLib"),
+                        ])
+                    ),
             ]
         )
         
@@ -1519,18 +1574,21 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_2,
-                    packageKind: .root,
-                    cxxLanguageStandard: "c++14",
-                    swiftLanguageVersions: [.v4_2, .v5],
-                    targets: [
-                        .init(name: "SystemLib1", type: .system),
-                        .init(name: "SystemLib2", type: .system, pkgConfig: "Foo"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_2,
+                        packageKind: .root,
+                        cxxLanguageStandard: "c++14",
+                        swiftLanguageVersions: [.v4_2, .v5],
+                        targets: [
+                            .init(name: "SystemLib1", type: .system),
+                            .init(name: "SystemLib2", type: .system, pkgConfig: "Foo"),
+                        ])
+                    ),
             ]
         )
 
@@ -1632,21 +1690,24 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_3,
-                    packageKind: .root,
-                    products: [
-                        .init(name: "FooLib", type: .library(.automatic), targets: ["FooLib"]),
-                    ],
-                    targets: [
-                        .init(name: "foo", dependencies: ["BinaryLibrary"]),
-                        .init(name: "FooLib", dependencies: ["BinaryLibrary"]),
-                        .init(name: "FooTests", dependencies: ["BinaryLibrary"], type: .test),
-                        .init(name: "BinaryLibrary", path: "BinaryLibrary.xcframework", type: .binary)
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_3,
+                        packageKind: .root,
+                        products: [
+                            .init(name: "FooLib", type: .library(.automatic), targets: ["FooLib"]),
+                        ],
+                        targets: [
+                            .init(name: "foo", dependencies: ["BinaryLibrary"]),
+                            .init(name: "FooLib", dependencies: ["BinaryLibrary"]),
+                            .init(name: "FooTests", dependencies: ["BinaryLibrary"], type: .test),
+                            .init(name: "BinaryLibrary", path: "BinaryLibrary.xcframework", type: .binary)
+                        ])
+                    ),
             ],
             shouldCreateMultipleTestProducts: true
         )
@@ -1695,26 +1756,29 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_3,
-                    packageKind: .root,
-                    products: [
-                        .init(name: "FooLib", type: .library(.automatic), targets: ["FooLib"]),
-                    ],
-                    targets: [
-                        .init(name: "foo", resources: [
-                            .init(rule: .process, path: "Resources")
-                        ]),
-                        .init(name: "FooLib", resources: [
-                            .init(rule: .process, path: "Resources")
-                        ]),
-                        .init(name: "FooTests", resources: [
-                            .init(rule: .process, path: "Resources")
-                        ], type: .test),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_3,
+                        packageKind: .root,
+                        products: [
+                            .init(name: "FooLib", type: .library(.automatic), targets: ["FooLib"]),
+                        ],
+                        targets: [
+                            .init(name: "foo", resources: [
+                                .init(rule: .process, path: "Resources")
+                            ]),
+                            .init(name: "FooLib", resources: [
+                                .init(rule: .process, path: "Resources")
+                            ]),
+                            .init(name: "FooTests", resources: [
+                                .init(rule: .process, path: "Resources")
+                            ], type: .test),
+                        ])
+                    ),
             ],
             shouldCreateMultipleTestProducts: true
         )
@@ -1903,80 +1967,83 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5,
-                    packageKind: .root,
-                    products: [
-                        .init(name: "FooLib", type: .library(.automatic), targets: ["FooLib"]),
-                    ],
-                    targets: [
-                        .init(name: "foo", settings: [
-                            .init(
-                                tool: .c,
-                                name: .define,
-                                value: ["ENABLE_BEST_MODE"]),
-                            .init(
-                                tool: .cxx,
-                                name: .headerSearchPath,
-                                value: ["some/path"],
-                                condition: .init(platformNames: ["macos"])),
-                            .init(
-                                tool: .linker,
-                                name: .linkedLibrary,
-                                value: ["z"],
-                                condition: .init(config: "debug")),
-                            .init(
-                                tool: .swift,
-                                name: .unsafeFlags,
-                                value: ["-secret", "value"],
-                                condition: .init(platformNames: ["macos", "linux"], config: "release")),
-                        ]),
-                        .init(name: "FooLib", settings: [
-                            .init(
-                                tool: .c,
-                                name: .define,
-                                value: ["ENABLE_BEST_MODE"]),
-                            .init(
-                                tool: .cxx,
-                                name: .headerSearchPath,
-                                value: ["some/path"],
-                                condition: .init(platformNames: ["macos"])),
-                            .init(
-                                tool: .linker,
-                                name: .linkedLibrary,
-                                value: ["z"],
-                                condition: .init(config: "debug")),
-                            .init(
-                                tool: .swift,
-                                name: .unsafeFlags,
-                                value: ["-secret", "value"],
-                                condition: .init(platformNames: ["macos", "linux"], config: "release")),
-                        ]),
-                        .init(name: "FooTests", type: .test, settings: [
-                            .init(
-                                tool: .c,
-                                name: .define,
-                                value: ["ENABLE_BEST_MODE"]),
-                            .init(
-                                tool: .cxx,
-                                name: .headerSearchPath,
-                                value: ["some/path"],
-                                condition: .init(platformNames: ["macos"])),
-                            .init(
-                                tool: .linker,
-                                name: .linkedLibrary,
-                                value: ["z"],
-                                condition: .init(config: "debug")),
-                            .init(
-                                tool: .swift,
-                                name: .unsafeFlags,
-                                value: ["-secret", "value"],
-                                condition: .init(platformNames: ["macos", "linux"], config: "release")),
-                        ]),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5,
+                        packageKind: .root,
+                        products: [
+                            .init(name: "FooLib", type: .library(.automatic), targets: ["FooLib"]),
+                        ],
+                        targets: [
+                            .init(name: "foo", settings: [
+                                .init(
+                                    tool: .c,
+                                    name: .define,
+                                    value: ["ENABLE_BEST_MODE"]),
+                                .init(
+                                    tool: .cxx,
+                                    name: .headerSearchPath,
+                                    value: ["some/path"],
+                                    condition: .init(platformNames: ["macos"])),
+                                .init(
+                                    tool: .linker,
+                                    name: .linkedLibrary,
+                                    value: ["z"],
+                                    condition: .init(config: "debug")),
+                                .init(
+                                    tool: .swift,
+                                    name: .unsafeFlags,
+                                    value: ["-secret", "value"],
+                                    condition: .init(platformNames: ["macos", "linux"], config: "release")),
+                            ]),
+                            .init(name: "FooLib", settings: [
+                                .init(
+                                    tool: .c,
+                                    name: .define,
+                                    value: ["ENABLE_BEST_MODE"]),
+                                .init(
+                                    tool: .cxx,
+                                    name: .headerSearchPath,
+                                    value: ["some/path"],
+                                    condition: .init(platformNames: ["macos"])),
+                                .init(
+                                    tool: .linker,
+                                    name: .linkedLibrary,
+                                    value: ["z"],
+                                    condition: .init(config: "debug")),
+                                .init(
+                                    tool: .swift,
+                                    name: .unsafeFlags,
+                                    value: ["-secret", "value"],
+                                    condition: .init(platformNames: ["macos", "linux"], config: "release")),
+                            ]),
+                            .init(name: "FooTests", type: .test, settings: [
+                                .init(
+                                    tool: .c,
+                                    name: .define,
+                                    value: ["ENABLE_BEST_MODE"]),
+                                .init(
+                                    tool: .cxx,
+                                    name: .headerSearchPath,
+                                    value: ["some/path"],
+                                    condition: .init(platformNames: ["macos"])),
+                                .init(
+                                    tool: .linker,
+                                    name: .linkedLibrary,
+                                    value: ["z"],
+                                    condition: .init(config: "debug")),
+                                .init(
+                                    tool: .swift,
+                                    name: .unsafeFlags,
+                                    value: ["-secret", "value"],
+                                    condition: .init(platformNames: ["macos", "linux"], config: "release")),
+                            ]),
+                        ])
+                    ),
             ],
             shouldCreateMultipleTestProducts: true
         )
@@ -2123,20 +2190,23 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_3,
-                    packageKind: .root,
-                    targets: [
-                        .init(name: "foo", dependencies: [
-                            .target(name: "FooLib1", condition: .init(platformNames: ["macos"])),
-                            .target(name: "FooLib2", condition: .init(platformNames: ["ios"])),
-                        ]),
-                        .init(name: "FooLib1"),
-                        .init(name: "FooLib2"),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_3,
+                        packageKind: .root,
+                        targets: [
+                            .init(name: "foo", dependencies: [
+                                .target(name: "FooLib1", condition: .init(platformNames: ["macos"])),
+                                .target(name: "FooLib2", condition: .init(platformNames: ["ios"])),
+                            ]),
+                            .init(name: "FooLib1"),
+                            .init(name: "FooLib2"),
+                        ])
+                    ),
             ],
             shouldCreateMultipleTestProducts: true
         )
@@ -2188,18 +2258,21 @@ class PIFBuilderTests: XCTestCase {
             fs: fs,
             diagnostics: diagnostics,
             manifests: [
-                Manifest.createManifest(
-                    name: "Foo",
-                    platforms: [
-                        PlatformDescription(name: "macos", version: "10.14", options: ["best"]),
-                    ],
-                    path: "/Foo",
-                    url: "/Foo",
-                    v: .v5_3,
-                    packageKind: .root,
-                    targets: [
-                        .init(name: "foo", dependencies: []),
-                    ]),
+                PackageIdentity2("Foo"):
+                    (AbsolutePath("/Foo"),
+                    Manifest.createManifest(
+                        name: "Foo",
+                        platforms: [
+                            PlatformDescription(name: "macos", version: "10.14", options: ["best"]),
+                        ],
+                        path: "/Foo",
+                        url: "/Foo",
+                        v: .v5_3,
+                        packageKind: .root,
+                        targets: [
+                            .init(name: "foo", dependencies: []),
+                        ])
+                    ),
             ],
             shouldCreateMultipleTestProducts: true
         )

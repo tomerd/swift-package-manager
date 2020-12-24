@@ -294,7 +294,7 @@ public struct PackageCollections: PackageCollectionsProtocol {
     }
 
     func findPackage(
-        identifier: PackageIdentity,
+        identifier: PackageIdentity2,
         callback: @escaping (Result<PackageCollectionsModel.PackageSearchResult.Item, Error>) -> Void
     ) {
         self.storage.sources.list { result in

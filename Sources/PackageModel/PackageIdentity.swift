@@ -26,7 +26,21 @@ internal protocol PackageIdentityProvider: CustomStringConvertible {
     init(_ string: String)
 }
 
+// FIXME: temp for PoC
+public struct PackageIdentity2: Hashable, CustomStringConvertible, Codable, Comparable {
+    public let description: String
+
+    public init(_ string: String) {
+        self.description = string
+    }
+
+    public static func < (lhs: PackageIdentity2, rhs: PackageIdentity2) -> Bool {
+        return lhs.description < rhs.description
+    }
+}
+
 /// The canonical identifier for a package, based on its source location.
+@available(*, deprecated)
 public struct PackageIdentity: Hashable, CustomStringConvertible {
     /// The underlying type used to create package identities.
     internal static var provider: PackageIdentityProvider.Type = LegacyPackageIdentity.self

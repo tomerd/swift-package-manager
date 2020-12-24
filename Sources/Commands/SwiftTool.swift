@@ -271,7 +271,6 @@ public class SwiftTool {
         } else {
             packages = [try getPackageRoot()]
         }
-
         return PackageGraphRootInput(packages: packages)
     }
 

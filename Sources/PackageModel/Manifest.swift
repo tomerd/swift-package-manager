@@ -27,12 +27,14 @@ public final class Manifest: ObjectIdentifierProtocol {
     // to the repository state, it shouldn't matter where it is.
     //
     /// The path of the manifest file.
+    @available(*, deprecated, message: "do not use")
     public let path: AbsolutePath
 
     // FIXME: This doesn't belong here, we want the Manifest to be purely tied
     // to the repository state, it shouldn't matter where it is.
     //
     /// The repository URL the manifest was loaded from.
+    @available(*, deprecated, message: "do not use")
     public let url: String
 
     /// The version this package was loaded from, if known.
@@ -45,6 +47,7 @@ public final class Manifest: ObjectIdentifierProtocol {
     public let toolsVersion: ToolsVersion
 
     /// The name of the package.
+    @available(*, deprecated, message: "do not use")
     public let name: String
 
     /// The default localization for resources.
@@ -234,20 +237,21 @@ public final class Manifest: ObjectIdentifierProtocol {
     /// Finds the package dependency referenced by the specified target dependency.
     /// - Returns: Returns `nil` if the dependency is a target dependency, if it is a product dependency but has no
     /// package name (for tools versions less than 5.2), or if there were no dependencies with the provided name.
+    // FIXME: change targetDependency to support .byIdentity etc
     public func packageDependency(
         referencedBy targetDependency: TargetDescription.Dependency
     ) -> PackageDependencyDescription? {
-        let packageName: String
+        let packageIdentity: PackageIdentity2
 
         switch targetDependency {
         case .product(_, package: let name?, _),
              .byName(name: let name, _):
-            packageName = name
+            packageIdentity = PackageIdentity2(name)
         default:
             return nil
         }
 
-        return dependencies.first(where: { $0.name == packageName })
+        return dependencies.first(where: { $0.identity == packageIdentity })
     }
 
     /// Registers a required product with a particular dependency if possible, or registers it as unknown.

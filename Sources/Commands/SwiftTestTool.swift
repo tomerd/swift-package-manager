@@ -12,11 +12,12 @@ import class Foundation.ProcessInfo
 
 import ArgumentParser
 import Basics
-import TSCBasic
-import SPMBuildCore
 import Build
-import TSCUtility
 import PackageGraph
+import PackageModel
+import SPMBuildCore
+import TSCBasic
+import TSCUtility
 import Workspace
 
 import func TSCLibc.exit
@@ -224,9 +225,19 @@ public struct SwiftTestTool: SwiftCommand {
         case .codeCovPath:
             let workspace = try swiftTool.getActiveWorkspace()
             let root = try swiftTool.getWorkspaceRoot()
-            let rootManifest = try temp_await {
-                workspace.loadRootManifests(packages: root.packages, diagnostics: swiftTool.diagnostics, completion: $0)                
-            }[0]
+            guard let rootManifestPath = root.manifests.keys.first else {
+                print("error: Could not find root manifest")
+                throw Diagnostics.fatalError
+            }
+            guard let manifest = (try temp_await {
+                workspace.loadRootManifests(packages: [rootManifestPath],
+                                            diagnostics: swiftTool.diagnostics,
+                                            completion: $0)
+            }[rootManifestPath]) else {
+                print("error: Could not find root manifest")
+                throw Diagnostics.fatalError
+            }
+
             let buildParameters = try swiftTool.buildParametersForTest()
             print(codeCovAsJSONPath(buildParameters: buildParameters, packageName: rootManifest.name))
 
