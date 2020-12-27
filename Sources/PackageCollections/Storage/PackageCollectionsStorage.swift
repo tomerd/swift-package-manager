@@ -59,7 +59,7 @@ public protocol PackageCollectionsStorage {
     ///   - identifier: The package identifier
     ///   - collectionIdentifiers: Optional. The identifiers of the `PackageCollection`s
     ///   - callback: The closure to invoke when result becomes available
-    func findPackage(identifier: PackageIdentity,
+    func findPackage(identifier: PackageIdentity2,
                      collectionIdentifiers: [PackageCollectionsModel.CollectionIdentifier]?,
                      callback: @escaping (Result<PackageCollectionsModel.PackageSearchResult.Item, Error>) -> Void)
 

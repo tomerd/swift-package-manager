@@ -22,21 +22,21 @@ enum PackageGraphError: Swift.Error {
     case productDependencyNotFound(name: String, target: String)
 
     /// The product dependency was found but the package name did not match.
-    case productDependencyIncorrectPackage(name: String, package: String)
+    case productDependencyIncorrectPackage(name: String, package: PackageIdentity2)
 
     /// The package dependency name does not match the package name.w
-    case incorrectPackageDependencyName(dependencyName: String, dependencyURL: String, packageName: String)
+    case incorrectPackageDependencyName(dependencyName: String, dependencyURL: String, package: PackageIdentity2)
 
     /// The product dependency was found but the package name was not referenced correctly (tools version > 5.2).
     case productDependencyMissingPackage(
         productName: String,
         targetName: String,
-        packageName: String,
+        package: PackageIdentity2,
         packageDependency: PackageDependencyDescription
     )
 
     /// A product was found in multiple packages.
-    case duplicateProduct(product: String, packages: [String])
+    case duplicateProduct(product: String, packages: [PackageIdentity2])
 }
 
 /// A collection of packages.
@@ -190,26 +190,28 @@ extension PackageGraphError: CustomStringConvertible {
         case .productDependencyMissingPackage(
                 let productName,
                 let targetName,
-                let packageName,
+                let packageIdentity,
                 let packageDependency
             ):
 
             var solutionSteps: [String] = []
 
+            // FIXME: this is likely wrong
             // If the package dependency name is the same as the package name, or if the product name and package name
             // don't correspond, we need to rewrite the target dependency to explicit specify the package name.
-            if packageDependency.name == packageName || productName != packageName {
+            if packageDependency.identity == packageIdentity || productName != packageIdentity.description {
                 solutionSteps.append("""
-                    reference the package in the target dependency with '.product(name: "\(productName)", package: \
-                    "\(packageName)")'
+                    reference the package in the target dependency with '.product(identity: "\(productName)", package: \
+                    "\(packageIdentity)")'
                     """)
             }
 
+            // FIXME: this is likely wrong
             // If the name of the product and the package are the same, or if the package dependency implicit name
             // deduced from the URL is not correct, we need to rewrite the package dependency declaration to specify the
             // package name.
-            if productName == packageName || packageDependency.name != packageName {
-                let dependencySwiftRepresentation = packageDependency.swiftRepresentation(overridingName: packageName)
+            if productName == packageIdentity.description || packageDependency.identity != packageIdentity {
+                let dependencySwiftRepresentation = packageDependency.swiftRepresentation(overridingIdentity: packageIdentity)
                 solutionSteps.append("""
                     provide the name of the package dependency with '\(dependencySwiftRepresentation)'
                     """)
@@ -219,23 +221,22 @@ extension PackageGraphError: CustomStringConvertible {
             return "dependency '\(productName)' in target '\(targetName)' requires explicit declaration; \(solution)"
 
         case .duplicateProduct(let product, let packages):
+            let packages = packages.map{ $0.description }
             return "multiple products named '\(product)' in: \(packages.joined(separator: ", "))"
         }
     }
 }
 
 fileprivate extension PackageDependencyDescription {
-    func swiftRepresentation(overridingName: String? = nil) -> String {
+    func swiftRepresentation(overridingIdentity: PackageIdentity2) -> String {
         var parameters: [String] = []
 
-        if let name = overridingName ?? explicitName {
-            parameters.append("name: \"\(name)\"")
-        }
+        parameters.append("identity: \"\(identity)\"")
 
-        if requirement == .localPackage {
-            parameters.append("path: \"\(url)\"")
+        if self.requirement == .localPackage {
+            parameters.append("path: \"\(self.url)\"")
         } else {
-            parameters.append("url: \"\(url)\"")
+            parameters.append("url: \"\(self.url)\"")
 
             switch requirement {
             case .branch(let branch):

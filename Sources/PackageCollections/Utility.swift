@@ -52,10 +52,11 @@ internal extension Result {
 extension PackageReference {
     /// Initializes a `PackageReference` from `RepositorySpecifier`
     init(repository: RepositorySpecifier, kind: PackageReference.Kind = .remote) {
+        // FIXME
         self.init(
-            identity: PackageIdentity(url: repository.url),
-            path: repository.url,
-            kind: kind
+            identity: PackageIdentity2(repository.url),
+            kind: kind,
+            path: repository.url
         )
     }
 }

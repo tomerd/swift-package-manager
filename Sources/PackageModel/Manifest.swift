@@ -27,12 +27,14 @@ public final class Manifest: ObjectIdentifierProtocol {
     // to the repository state, it shouldn't matter where it is.
     //
     /// The path of the manifest file.
+    @available(*, deprecated)
     public let path: AbsolutePath
 
     // FIXME: This doesn't belong here, we want the Manifest to be purely tied
     // to the repository state, it shouldn't matter where it is.
     //
     /// The repository URL the manifest was loaded from.
+    @available(*, deprecated)
     public let url: String
 
     /// The version this package was loaded from, if known.
@@ -45,12 +47,14 @@ public final class Manifest: ObjectIdentifierProtocol {
     public let toolsVersion: ToolsVersion
 
     /// The name of the package.
+    @available(*, deprecated)
     public let name: String
 
     /// The default localization for resources.
     public let defaultLocalization: String?
 
     /// Whether kind of package this manifest is from.
+    @available(*, deprecated)
     public let packageKind: PackageReference.Kind
 
     /// The declared platforms in the manifest.
@@ -89,6 +93,7 @@ public final class Manifest: ObjectIdentifierProtocol {
     /// Dependencies required for building particular product filters.
     private var _requiredDependencies = ThreadSafeKeyValueStore<ProductFilter, [PackageDependencyDescription]>()
 
+    @available(*, deprecated)
     public init(
         name: String,
         defaultLocalization: String? = nil,
@@ -126,6 +131,42 @@ public final class Manifest: ObjectIdentifierProtocol {
         self.products = products
         self.targets = targets
         self.targetMap = Dictionary(targets.lazy.map({ ($0.name, $0) }), uniquingKeysWith: { $1 })
+    }
+
+    public init(
+        defaultLocalization: String? = nil,
+        platforms: [PlatformDescription],
+        version: TSCUtility.Version? = nil,
+        revision: String? = nil,
+        toolsVersion: ToolsVersion,
+        pkgConfig: String? = nil,
+        providers: [SystemPackageProviderDescription]? = nil,
+        cLanguageStandard: String? = nil,
+        cxxLanguageStandard: String? = nil,
+        swiftLanguageVersions: [SwiftLanguageVersion]? = nil,
+        dependencies: [PackageDependencyDescription] = [],
+        products: [ProductDescription] = [],
+        targets: [TargetDescription] = []
+    ) {
+        self.defaultLocalization = defaultLocalization
+        self.platforms = platforms
+        self.version = version
+        self.revision = revision
+        self.toolsVersion = toolsVersion
+        self.pkgConfig = pkgConfig
+        self.providers = providers
+        self.cLanguageStandard = cLanguageStandard
+        self.cxxLanguageStandard = cxxLanguageStandard
+        self.swiftLanguageVersions = swiftLanguageVersions
+        self.dependencies = dependencies
+        self.products = products
+        self.targets = targets
+        self.targetMap = Dictionary(targets.lazy.map({ ($0.name, $0) }), uniquingKeysWith: { $1 })
+        // FIXME
+        self.name = "FIXME"
+        self.url = "FIXME"
+        self.path = AbsolutePath("/FIXME")
+        self.packageKind = .remote
     }
 
     /// Returns the targets required for a particular product filter.
@@ -195,12 +236,12 @@ public final class Manifest: ObjectIdentifierProtocol {
         keepUnused: Bool = false
     ) -> [PackageDependencyDescription] {
 
-        var registry: (known: [String: ProductFilter], unknown: Set<String>) = ([:], [])
-        let availablePackages = Set(dependencies.lazy.map({ $0.name }))
+        var registry: (known: [PackageIdentity2: ProductFilter], unknown: Set<String>) = ([:], [])
+        let availablePackages = Set(dependencies.lazy.map{ $0.identity })
 
         for target in targets {
             for targetDependency in target.dependencies {
-                register(targetDependency: targetDependency, registry: &registry, availablePackages: availablePackages)
+                self.register(targetDependency: targetDependency, registry: &registry, availablePackages: availablePackages)
             }
         }
 
@@ -237,17 +278,19 @@ public final class Manifest: ObjectIdentifierProtocol {
     public func packageDependency(
         referencedBy targetDependency: TargetDescription.Dependency
     ) -> PackageDependencyDescription? {
-        let packageName: String
+        let packageIdentity: PackageIdentity2
 
         switch targetDependency {
-        case .product(_, package: let name?, _),
-             .byName(name: let name, _):
-            packageName = name
+        case .product(_, packageIdentity: let identity?, _):
+            packageIdentity = identity
+        case .byName(name: let name, _):
+            // FIXME: is this okay?
+            packageIdentity = PackageIdentity2(name)
         default:
             return nil
         }
 
-        return dependencies.first(where: { $0.name == packageName })
+        return dependencies.first(where: { $0.identity == packageIdentity })
     }
 
     /// Registers a required product with a particular dependency if possible, or registers it as unknown.
@@ -258,21 +301,21 @@ public final class Manifest: ObjectIdentifierProtocol {
     ///   - availablePackages: The set of available packages.
     private func register(
         targetDependency: TargetDescription.Dependency,
-        registry: inout (known: [String: ProductFilter], unknown: Set<String>),
-        availablePackages: Set<String>
+        registry: inout (known: [PackageIdentity2: ProductFilter], unknown: Set<String>),
+        availablePackages: Set<PackageIdentity2>
     ) {
         switch targetDependency {
         case .target:
             break
         case .product(let product, let package, _):
             if let package = package { // ≥ 5.2
-                if !register(
+                if !self.register(
                     product: product,
                     inPackage: package,
                     registry: &registry.known,
                     availablePackages: availablePackages) {
-                        // This is an invalid manifest condition diagnosed later. (No such package.)
-                        // Treating it as unknown gracefully allows resolution to continue for now.
+                    // This is an invalid manifest condition diagnosed later. (No such package.)
+                    // Treating it as unknown gracefully allows resolution to continue for now.
                     registry.unknown.insert(product)
                 }
             } else { // < 5.2
@@ -289,9 +332,10 @@ public final class Manifest: ObjectIdentifierProtocol {
                 }
             } else { // ≥ 5.2
                 // If a by‐name entry is a product, it must be in a package of the same name.
-                if !register(
+                if !self.register(
                     product: product,
-                    inPackage: product,
+                    // FIXME: is this okay?
+                    inPackage: PackageIdentity2(product),
                     registry: &registry.known,
                     availablePackages: availablePackages) {
                         // If it doesn’t match a package, it should be a target, not a product.
@@ -320,9 +364,9 @@ public final class Manifest: ObjectIdentifierProtocol {
     /// - Returns: `true` if the particular dependency was found and the product was registered; `false` if no matching dependency was found and the product has not yet been handled.
     private func register(
         product: String,
-        inPackage package: String,
-        registry: inout [String: ProductFilter],
-        availablePackages: Set<String>
+        inPackage package: PackageIdentity2,
+        registry: inout [PackageIdentity2: ProductFilter],
+        availablePackages: Set<PackageIdentity2>
     ) -> Bool {
         if let existing = registry[package] {
             registry[package] = existing.union(.specific([product]))
@@ -338,7 +382,7 @@ public final class Manifest: ObjectIdentifierProtocol {
 
 extension Manifest: CustomStringConvertible {
     public var description: String {
-        return "<Manifest: \(name)>"
+        return "<Manifest: \(self.name)>"
     }
 }
 
@@ -356,13 +400,13 @@ extension Manifest: Codable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(name, forKey: .name)
+        //try container.encode(name, forKey: .name)
 
         // Hide the keys that users shouldn't see when
         // we're encoding for the dump-package command.
         if encoder.userInfo[Manifest.dumpPackageKey] == nil {
-            try container.encode(path, forKey: .path)
-            try container.encode(url, forKey: .url)
+            //try container.encode(path, forKey: .path)
+            //try container.encode(url, forKey: .url)
             try container.encode(version, forKey: .version)
             try container.encode(targetMap, forKey: .targetMap)
         }
@@ -377,6 +421,6 @@ extension Manifest: Codable {
         try container.encode(products, forKey: .products)
         try container.encode(targets, forKey: .targets)
         try container.encode(platforms, forKey: .platforms)
-        try container.encode(packageKind, forKey: .packageKind)
+        //try container.encode(packageKind, forKey: .packageKind)
     }
 }

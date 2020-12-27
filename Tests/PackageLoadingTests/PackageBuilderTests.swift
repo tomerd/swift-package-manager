@@ -932,7 +932,7 @@ class PackageBuilderTests: XCTestCase {
                 module.check(c99name: "Foo", type: .library)
                 module.checkSources(root: "/Sources/Foo", paths: "Foo.swift")
                 module.check(targetDependencies: ["Bar", "Baz"])
-                module.check(productDependencies: [.init(name: "Bam", package: nil)])
+                module.check(productDependencies: [.init(name: "Bam", packageIdentity: nil)])
             }
 
             for target in ["Bar", "Baz"] {
@@ -2186,6 +2186,8 @@ final class PackageBuilderTester {
     @discardableResult
     init(
         _ manifest: Manifest,
+        packageIdentity: PackageIdentity2? = nil,
+        packageKind: PackageReference.Kind? = nil,
         path: AbsolutePath = .root,
         remoteArtifacts: [RemoteArtifact] = [],
         shouldCreateMultipleTestProducts: Bool = false,
@@ -2199,9 +2201,11 @@ final class PackageBuilderTester {
         do {
             // FIXME: We should allow customizing root package boolean.
             let builder = PackageBuilder(
+                identity: packageIdentity ?? PackageIdentity2(manifest.name),
+                kind: packageKind ?? manifest.packageKind,
+                path: path,
                 manifest: manifest,
                 productFilter: .everything,
-                path: path,
                 remoteArtifacts: remoteArtifacts,
                 xcTestMinimumDeploymentTargets: Self.xcTestMinimumDeploymentTargets,
                 fileSystem: fs,
@@ -2345,7 +2349,7 @@ final class PackageBuilderTester {
             }
             for (idx, element) in depsToCheck.enumerated() {
                 let rhs = productDependencies[idx]
-                guard element.name == rhs.name && element.package == rhs.package else {
+                guard element.name == rhs.name && element.packageIdentity == rhs.packageIdentity else {
                     return XCTFail("Incorrect product dependencies", file: file, line: line)
                 }
             }

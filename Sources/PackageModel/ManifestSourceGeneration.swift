@@ -42,7 +42,7 @@ fileprivate extension SourceCodeFragment {
     init(from manifest: Manifest) {
         var params: [SourceCodeFragment] = []
         
-        params.append(SourceCodeFragment(key: "name", string: manifest.name))
+        //params.append(SourceCodeFragment(key: "name", string: manifest.name))
         
         if let defaultLoc = manifest.defaultLocalization {
             params.append(SourceCodeFragment(key: "defaultLocalization", string: defaultLoc))
@@ -117,9 +117,11 @@ fileprivate extension SourceCodeFragment {
     /// Instantiates a SourceCodeFragment to represent a single package dependency.
     init(from dependency: PackageDependencyDescription) {
         var params: [SourceCodeFragment] = []
-        if let explicitName = dependency.explicitName {
+        // FIXME: confirm this okay
+        params.append(SourceCodeFragment(key: "identity", string: dependency.identity.description))
+        /*if let explicitName = dependency.explicitName {
             params.append(SourceCodeFragment(key: "name", string: explicitName))
-        }
+        }*/
         if dependency.requirement != .localPackage {
             params.append(SourceCodeFragment(key: "url", string: dependency.url))
         }
@@ -257,10 +259,11 @@ fileprivate extension SourceCodeFragment {
             }
             self.init(enum: "target", subnodes: params)
             
-        case .product(name: let name, package: let packageName, condition: let condition):
+        case .product(name: let name, packageIdentity: let packageIdentity, condition: let condition):
             params.append(SourceCodeFragment(key: "name", string: name))
-            if let packageName = packageName {
-                params.append(SourceCodeFragment(key: "package", string: packageName))
+            if let packageIdentity = packageIdentity {
+                // FIXME?
+                params.append(SourceCodeFragment(key: "package", string: packageIdentity.description))
             }
             if let condition = condition {
                 params.append(SourceCodeFragment(key: "condition", subnode: SourceCodeFragment(from: condition)))

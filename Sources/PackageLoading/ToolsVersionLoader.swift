@@ -44,18 +44,27 @@ public protocol ToolsVersionLoaderProtocol {
 }
 
 extension Manifest {
-    /// Returns the manifest at the given package path.
-    ///
-    /// Version specific manifest is chosen if present, otherwise path to regular
-    /// manifest is returned.
+    @available(*, deprecated)
     public static func path(
         atPackagePath packagePath: AbsolutePath,
         currentToolsVersion: ToolsVersion = .currentToolsVersion,
         fileSystem: FileSystem
     ) throws -> AbsolutePath {
+        try Self.path(at: packagePath, currentToolsVersion: currentToolsVersion, fileSystem: fileSystem)
+    }
+
+    /// Returns the manifest at the given package path.
+    ///
+    /// Version specific manifest is chosen if present, otherwise path to regular
+    /// manifest is returned.
+    public static func path(
+        at manifestPath: AbsolutePath,
+        currentToolsVersion: ToolsVersion = .currentToolsVersion,
+        fileSystem: FileSystem
+    ) throws -> AbsolutePath {
         // Look for a version-specific manifest.
         for versionSpecificKey in Versioning.currentVersionSpecificKeys {
-            let versionSpecificPath = packagePath.appending(component: Manifest.basename + versionSpecificKey + ".swift")
+            let versionSpecificPath = manifestPath.appending(component: Manifest.basename + versionSpecificKey + ".swift")
             if fileSystem.isFile(versionSpecificPath) {
                 return versionSpecificPath
             }
@@ -64,8 +73,8 @@ extension Manifest {
         // Otherwise, check if there is a version-specific manifest that has
         // a higher tools version than the main Package.swift file.
         let contents: [String]
-        do { contents = try fileSystem.getDirectoryContents(packagePath) } catch {
-            throw ToolsVersionLoader.Error.inaccessiblePackage(path: packagePath, reason: String(describing: error))
+        do { contents = try fileSystem.getDirectoryContents(manifestPath) } catch {
+            throw ToolsVersionLoader.Error.inaccessiblePackage(path: manifestPath, reason: String(describing: error))
         }
         let regex = try! RegEx(pattern: #"^Package@swift-(\d+)(?:\.(\d+))?(?:\.(\d+))?.swift$"#)
 
@@ -83,12 +92,12 @@ extension Manifest {
             return (ToolsVersion(version: Version(major, minor, patch)), file)
         }, uniquingKeysWith: { $1 })
 
-        let regularManifest = packagePath.appending(component: filename)
+        let regularManifest = manifestPath.appending(component: filename)
         let toolsVersionLoader = ToolsVersionLoader(currentToolsVersion: currentToolsVersion)
 
         // Find the version-specific manifest that satisfies the current tools version.
         if let versionSpecificCandidate = versionSpecificManifests.keys.sorted(by: >).first(where: { $0 <= currentToolsVersion }) {
-            let versionSpecificManifest = packagePath.appending(component: versionSpecificManifests[versionSpecificCandidate]!)
+            let versionSpecificManifest = manifestPath.appending(component: versionSpecificManifests[versionSpecificCandidate]!)
 
             // Compare the tools version of this manifest with the regular
             // manifest and use the version-specific manifest if it has
@@ -322,7 +331,7 @@ public struct ToolsVersionLoader: ToolsVersionLoaderProtocol {
 
     public func load(at path: AbsolutePath, fileSystem: FileSystem) throws -> ToolsVersion {
         // The file which contains the tools version.
-        let file = try Manifest.path(atPackagePath: path, currentToolsVersion: currentToolsVersion, fileSystem: fileSystem)
+        let file = try Manifest.path(at: path, currentToolsVersion: self.currentToolsVersion, fileSystem: fileSystem)
         guard fileSystem.isFile(file) else {
             // FIXME: We should return an error from here but Workspace tests rely on this in order to work.
             // This doesn't really cause issues (yet) in practice though.

@@ -34,13 +34,11 @@ public class Target: ObjectIdentifierProtocol, PolymorphicCodableProtocol {
         /// The name of the product dependency.
         public let name: String
 
-        /// The name of the package containing the product.
-        public let package: String?
+        public let packageIdentity: PackageIdentity2?
 
-        /// Creates a product reference instance.
-        public init(name: String, package: String?) {
+        public init(name: String, packageIdentity: PackageIdentity2?) {
             self.name = name
-            self.package = package
+            self.packageIdentity = packageIdentity
         }
     }
 

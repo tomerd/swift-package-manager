@@ -33,56 +33,51 @@ enum ResolverPrecomputationError: Error {
 /// performing a full resolution.
 struct ResolverPrecomputationProvider: PackageContainerProvider {
     /// The package graph inputs.
-    let root: PackageGraphRoot
+    let root: PackageGraphRoot54
 
     /// The managed manifests to make available to the resolver.
     let dependencyManifests: Workspace.DependencyManifests
 
     /// The dependency mirrors.
-    let mirrors: DependencyMirrors
+    //let mirrors: DependencyMirrors
 
     /// The tools version currently in use.
     let currentToolsVersion: ToolsVersion
 
     init(
-        root: PackageGraphRoot,
+        root: PackageGraphRoot54,
         dependencyManifests: Workspace.DependencyManifests,
-        mirrors: DependencyMirrors,
         currentToolsVersion: ToolsVersion = ToolsVersion.currentToolsVersion
     ) {
         self.root = root
         self.dependencyManifests = dependencyManifests
-        self.mirrors = mirrors
         self.currentToolsVersion = currentToolsVersion
     }
 
     func getContainer(
-        for identifier: PackageReference,
+        for package: PackageReference,
         skipUpdate: Bool,
         on queue: DispatchQueue,
         completion: @escaping (Result<PackageContainer, Error>) -> Void
     ) {
         queue.async {
             // Start by searching manifests from the Workspace's resolved dependencies.
-            if let manifest = self.dependencyManifests.dependencies.first(where: { _, managed, _ in managed.packageRef == identifier }) {
+            if let manifest = self.dependencyManifests.dependencies.first(where: { _, managed, _ in managed.package == package }) {
                 let container = LocalPackageContainer(
-                    package: identifier,
+                    package: package,
                     manifest: manifest.manifest,
                     dependency: manifest.dependency,
-                    mirrors: self.mirrors,
                     currentToolsVersion: self.currentToolsVersion
                 )
                 return completion(.success(container))
             }
 
             // Continue searching from the Workspace's root manifests.
-            // FIXME: We might want to use a dictionary for faster lookups.
-            if let index = self.dependencyManifests.root.packageRefs.firstIndex(of: identifier) {
+            if let manifest = self.dependencyManifests.root.packageManifests[package] {
                 let container = LocalPackageContainer(
-                    package: identifier,
-                    manifest: self.dependencyManifests.root.manifests[index],
+                    package: package,
+                    manifest: manifest,
                     dependency: nil,
-                    mirrors: self.mirrors,
                     currentToolsVersion: self.currentToolsVersion
                 )
 
@@ -90,7 +85,7 @@ struct ResolverPrecomputationProvider: PackageContainerProvider {
             }
 
             // As we don't have anything else locally, error out.
-            completion(.failure(ResolverPrecomputationError.missingPackage(package: identifier)))
+            completion(.failure(ResolverPrecomputationError.missingPackage(package: package)))
         }
     }
 }
@@ -100,25 +95,11 @@ private struct LocalPackageContainer: PackageContainer {
     let manifest: Manifest
     /// The managed dependency if the package is not a root package.
     let dependency: ManagedDependency?
-    let mirrors: DependencyMirrors
+    //let mirrors: DependencyMirrors
     let currentToolsVersion: ToolsVersion
 
-    // Gets the package reference from the managed dependency or computes it for root packages.
-    var identifier: PackageReference {
-        if let identifier = dependency?.packageRef {
-            return identifier
-        } else {
-            let identity = PackageIdentity(url: manifest.url)
-            return PackageReference(
-                identity: identity,
-                path: manifest.path.pathString,
-                kind: .root
-            )
-        }
-    }
-
     func versionsAscending() throws -> [Version] {
-        if let version = dependency?.state.checkout?.version {
+        if let version = self.dependency?.state.checkout?.version {
             return [version]
         } else {
             return []
@@ -145,7 +126,7 @@ private struct LocalPackageContainer: PackageContainer {
     func getDependencies(at version: Version, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
         // Because of the implementation of `reversedVersions`, we should only get the exact same version.
         precondition(dependency?.checkoutState?.version == version)
-        return manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+        return manifest.dependencyConstraints(productFilter: productFilter)
     }
 
     func getDependencies(at revision: String, productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
@@ -153,7 +134,7 @@ private struct LocalPackageContainer: PackageContainer {
         if let checkoutState = dependency?.checkoutState,
             checkoutState.version == nil,
             checkoutState.revision.identifier == revision {
-            return manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+            return manifest.dependencyConstraints(productFilter: productFilter)
         }
 
         throw ResolverPrecomputationError.differentRequirement(
@@ -167,17 +148,36 @@ private struct LocalPackageContainer: PackageContainer {
         // Throw an error when the dependency is not unversioned to fail resolution.
         guard dependency?.state.isCheckout != true else {
             throw ResolverPrecomputationError.differentRequirement(
-                package: package,
-                state: dependency?.state,
+                package: self.package,
+                state: self.dependency?.state,
                 requirement: .unversioned
             )
         }
 
-        return manifest.dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+        return manifest.dependencyConstraints(productFilter: productFilter)
     }
 
+    // FIXME: do we need this
     func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
-        return identifier
+        return self.identifier
+    }
+
+    // FIXME: what is this for exactly?
+    // Gets the package reference from the managed dependency or computes it for root packages.
+    var identifier: PackageReference {
+        if let identifier = dependency?.package {
+            return identifier
+        } else {
+            //let identity = PackageIdentity(url: manifest.url)
+            //let path = manifest.path.pathString
+            let identity = self.package.identity
+            let path =  self.package.path
+            return PackageReference(
+                identity: identity,
+                kind: .root,
+                path: path
+            )
+        }
     }
 }
 

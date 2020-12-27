@@ -25,16 +25,17 @@ final class PinsStoreTests: XCTestCase {
     func testBasics() throws {
         let fooPath = AbsolutePath("/foo")
         let barPath = AbsolutePath("/bar")
-        let foo = PackageIdentity(path: fooPath)
-        let bar = PackageIdentity(path: barPath)
+        // FIXME
+        let foo = PackageIdentity2(fooPath.pathString)
+        let bar = PackageIdentity2(barPath.pathString)
         let fooRepo = RepositorySpecifier(url: fooPath.pathString)
         let barRepo = RepositorySpecifier(url: barPath.pathString)
         let revision = Revision(identifier: "81513c8fd220cf1ed1452b98060cd80d3725c5b7")
-        let fooRef = PackageReference(identity: foo, path: fooRepo.url)
-        let barRef = PackageReference(identity: bar, path: barRepo.url)
+        let fooRef = PackageReference(identity: foo, kind: .remote, path: fooRepo.url)
+        let barRef = PackageReference(identity: bar, kind: .remote, path: barRepo.url)
 
         let state = CheckoutState(revision: revision, version: v1)
-        let pin = PinsStore.Pin(packageRef: fooRef, state: state)
+        let pin = PinsStore.Pin(package: fooRef, state: state)
         // We should be able to round trip from JSON.
         XCTAssertEqual(try PinsStore.Pin(json: pin.toJSON()), pin)
 
@@ -45,7 +46,7 @@ final class PinsStoreTests: XCTestCase {
         XCTAssert(!fs.exists(pinsFile))
         XCTAssert(store.pins.map{$0}.isEmpty)
 
-        store.pin(packageRef: fooRef, state: state)
+        store.pin(package: fooRef, state: state)
         try store.saveState()
 
         XCTAssert(fs.exists(pinsFile))
@@ -57,19 +58,19 @@ final class PinsStoreTests: XCTestCase {
             XCTAssert(s.pins.map{$0}.count == 1)
             XCTAssertEqual(s.pinsMap[bar], nil)
             let fooPin = s.pinsMap[foo]!
-            XCTAssertEqual(fooPin.packageRef, fooRef)
+            XCTAssertEqual(fooPin.package, fooRef)
             XCTAssertEqual(fooPin.state.version, v1)
             XCTAssertEqual(fooPin.state.revision, revision)
             XCTAssertEqual(fooPin.state.description, v1.description)
         }
 
         // We should be able to pin again.
-        store.pin(packageRef: fooRef, state: state)
+        store.pin(package: fooRef, state: state)
         store.pin(
-            packageRef: fooRef,
+            package: fooRef,
             state: CheckoutState(revision: revision, version: "1.0.2")
         )
-        store.pin(packageRef: barRef, state: state)
+        store.pin(package: barRef, state: state)
         try store.saveState()
 
         store = try PinsStore(pinsFile: pinsFile, fileSystem: fs)
@@ -78,7 +79,7 @@ final class PinsStoreTests: XCTestCase {
         // Test branch pin.
         do {
             store.pin(
-                packageRef: barRef,
+                package: barRef,
                 state: CheckoutState(revision: revision, branch: "develop")
             )
             try store.saveState()
@@ -93,7 +94,7 @@ final class PinsStoreTests: XCTestCase {
 
         // Test revision pin.
         do {
-            store.pin(packageRef: barRef, state: CheckoutState(revision: revision))
+            store.pin(package: barRef, state: CheckoutState(revision: revision))
             try store.saveState()
             store = try PinsStore(pinsFile: pinsFile, fileSystem: fs)
 
@@ -152,10 +153,11 @@ final class PinsStoreTests: XCTestCase {
         XCTAssertFalse(fs.exists(pinsFile))
 
         let fooPath = AbsolutePath("/foo")
-        let foo = PackageIdentity(path: fooPath)
-        let fooRef = PackageReference(identity: foo, path: fooPath.pathString)
+        // FIXME
+        let foo = PackageIdentity2(fooPath.pathString)
+        let fooRef = PackageReference(identity: foo,  kind: .remote, path: fooPath.pathString)
         let revision = Revision(identifier: "81513c8fd220cf1ed1452b98060cd80d3725c5b7")
-        store.pin(packageRef: fooRef, state: CheckoutState(revision: revision, version: v1))
+        store.pin(package: fooRef, state: CheckoutState(revision: revision, version: v1))
 
         XCTAssert(!fs.exists(pinsFile))
 

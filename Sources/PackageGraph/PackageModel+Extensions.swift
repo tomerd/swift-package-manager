@@ -13,8 +13,8 @@ import SourceControl
 
 extension PackageDependencyDescription {
     /// Create the package reference object for the dependency.
-    public func createPackageRef(mirrors: DependencyMirrors) -> PackageReference {
-        let effectiveURL = mirrors.effectiveURL(forURL: url)
+    public func createPackageRef(/*mirrors: DependencyMirrors*/) -> PackageReference {
+        //let effectiveURL = mirrors.effectiveURL(forURL: url)
 
         // FIXME: The identity of a package dependency is currently based on
         //        on a name computed from the package's effective URL.  This
@@ -23,22 +23,22 @@ extension PackageDependencyDescription {
         //        We should instead use the declared URL of a package dependency
         //        as its identity, as it will be needed for supporting package
         //        registries.
-        let identity = PackageIdentity(url: effectiveURL)
+        //let identity = PackageIdentity(url: effectiveURL)
         
         return PackageReference(
-            identity: identity,
-            path: effectiveURL,
-            kind: requirement == .localPackage ? .local : .remote
+            identity: self.identity,
+            kind: requirement == .localPackage ? .local : .remote,
+            path: self.url
         )
     }
 }
 
 extension Manifest {
     /// Constructs constraints of the dependencies in the raw package.
-    public func dependencyConstraints(productFilter: ProductFilter, mirrors: DependencyMirrors) -> [PackageContainerConstraint] {
+    public func dependencyConstraints(productFilter: ProductFilter/*, mirrors: DependencyMirrors*/) -> [PackageContainerConstraint] {
         return dependenciesRequired(for: productFilter).map({
             return PackageContainerConstraint(
-                container: $0.createPackageRef(mirrors: mirrors),
+                package: $0.createPackageRef(/*mirrors: mirrors*/),
                 requirement: $0.requirement.toConstraintRequirement(),
                 products: $0.productFilter)
         })
@@ -49,7 +49,7 @@ extension PackageContainerConstraint {
     internal func nodes() -> [DependencyResolutionNode] {
         switch products {
         case .everything:
-            return [.root(package: identifier)]
+            return [.root(package: self.package)]
         case .specific:
             switch products {
             case .everything:
@@ -57,9 +57,9 @@ extension PackageContainerConstraint {
                 return []
             case .specific(let set):
                 if set.isEmpty { // Pointing at the package without a particular product.
-                    return [.empty(package: identifier)]
+                    return [.empty(package:  self.package)]
                 } else {
-                    return set.sorted().map { .product($0, package: identifier) }
+                    return set.sorted().map { .product($0, package:  self.package) }
                 }
             }
         }
@@ -72,6 +72,6 @@ extension PackageReference {
     /// This should only be accessed when the reference is not local.
     public var repository: RepositorySpecifier {
         precondition(kind == .remote)
-        return RepositorySpecifier(url: path)
+        return RepositorySpecifier(url: self.path)
     }
 }

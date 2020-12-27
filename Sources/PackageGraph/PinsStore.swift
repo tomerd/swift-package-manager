@@ -8,26 +8,27 @@
  See http://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
+import Basics
 import TSCBasic
 import TSCUtility
 import SourceControl
 import PackageModel
 
 public final class PinsStore {
-    public typealias PinsMap = [PackageIdentity: PinsStore.Pin]
+    public typealias PinsMap = [PackageIdentity2: PinsStore.Pin]
 
     public struct Pin: Equatable {
         /// The package reference of the pinned dependency.
-        public let packageRef: PackageReference
+        public let package: PackageReference
 
         /// The pinned state.
         public let state: CheckoutState
 
         public init(
-            packageRef: PackageReference,
+            package: PackageReference,
             state: CheckoutState
         ) {
-            self.packageRef = packageRef
+            self.package = package
             self.state = state
         }
     }
@@ -82,11 +83,11 @@ public final class PinsStore {
     ///   - packageRef: The package reference to pin.
     ///   - state: The state to pin at.
     public func pin(
-        packageRef: PackageReference,
+        package: PackageReference,
         state: CheckoutState
     ) {
-        pinsMap[packageRef.identity] = Pin(
-            packageRef: packageRef,
+        pinsMap[package.identity] = Pin(
+            package: package,
             state: state
         )
     }
@@ -95,7 +96,7 @@ public final class PinsStore {
     ///
     /// This will replace any previous pin with same package name.
     public func add(_ pin: Pin) {
-        pinsMap[pin.packageRef.identity] = pin
+        pinsMap[pin.package.identity] = pin
     }
 
     /// Unpin all of the currently pinnned dependencies.
@@ -125,7 +126,7 @@ extension PinsStore: JSONSerializable {
     /// Saves the current state of pins.
     public func toJSON() -> JSON {
         return JSON([
-            "pins": pins.sorted(by: { $0.packageRef.identity < $1.packageRef.identity }).toJSON(),
+            "pins": pins.sorted(by: { $0.package.identity < $1.package.identity }).toJSON(),
         ])
     }
 }
@@ -133,20 +134,31 @@ extension PinsStore: JSONSerializable {
 extension PinsStore.Pin: JSONMappable, JSONSerializable {
     /// Create an instance from JSON data.
     public init(json: JSON) throws {
-        let name: String? = json.get("package")
+        //let name: String? = json.get("package")
         let url: String = try json.get("repositoryURL")
-        let identity = PackageIdentity(url: url)
-        let ref = PackageReference(identity: identity, path: url)
-        self.packageRef = name.flatMap(ref.with(newName:)) ?? ref
+        //let identity = PackageIdentity(url: url)
+        let identity: PackageIdentity2
+        // backwards compatibility
+        if let id = json.get("identity") as PackageIdentity2? {
+            identity = id
+        } else if let name = json.get("package") as String? {
+            identity = PackageIdentity2(name)
+        } else {
+            throw InternalError("invalid pins file, unknown package identity")
+        }
+        let ref = PackageReference(identity: identity, kind: .remote, path: url)
+        //self.packageRef = name.flatMap(ref.with(newName:)) ?? ref
+        self.package = ref
         self.state = try json.get("state")
     }
 
     /// Convert the pin to JSON.
     public func toJSON() -> JSON {
         return .init([
-            "package": packageRef.name.toJSON(),
-            "repositoryURL": packageRef.path,
-            "state": state
+            "identity": self.package.identity,
+            //"package": self.packageRef.name.toJSON(),
+            "repositoryURL": self.package.path,
+            "state": self.state
         ])
     }
 }
@@ -155,6 +167,6 @@ extension PinsStore.Pin: JSONMappable, JSONSerializable {
 
 extension PinsStore: SimplePersistanceProtocol {
     public func restore(from json: JSON) throws {
-        self.pinsMap = try Dictionary(json.get("pins").map({ ($0.packageRef.identity, $0) }), uniquingKeysWith: { first, _ in throw StringError("duplicated entry for package \"\(first.packageRef.name)\"") })
+        self.pinsMap = try Dictionary(json.get("pins").map({ ($0.package.identity, $0) }), uniquingKeysWith: { first, _ in throw StringError("duplicated entry for package \"\(first.package.identity)\"") })
     }
 }

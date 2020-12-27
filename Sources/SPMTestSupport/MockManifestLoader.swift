@@ -72,13 +72,26 @@ public final class MockManifestLoader: ManifestLoaderProtocol {
 }
 
 extension ManifestLoader {
-    public func load(package path: TSCBasic.AbsolutePath,
-              baseURL: String,
-              toolsVersion: PackageModel.ToolsVersion,
-              packageKind: PackageModel.PackageReference.Kind,
-              fileSystem: PackageLoading.FileSystem? = nil,
-              diagnostics: TSCBasic.DiagnosticsEngine? = nil
+    public func load(
+        packageIdentity: PackageIdentity2 = .init("test"),
+        packageKind: PackageModel.PackageReference.Kind,
+        at path: TSCBasic.AbsolutePath,
+        //baseURL: String,
+        toolsVersion: PackageModel.ToolsVersion,
+        fileSystem: PackageLoading.FileSystem = localFileSystem,
+        diagnostics: TSCBasic.DiagnosticsEngine = DiagnosticsEngine() // FIXME
     ) throws -> Manifest{
-        try tsc_await { self.load(package: path, baseURL: baseURL, toolsVersion: toolsVersion, packageKind: packageKind, fileSystem: fileSystem, diagnostics: diagnostics, on: .global(), completion: $0) }
+        return try tsc_await {
+            self.load(packageIdentity: packageIdentity,
+                      packageKind: packageKind,
+                      at: path,
+                      //baseURL: baseURL,
+                      toolsVersion: toolsVersion,
+                      fileSystem: fileSystem,
+                      diagnostics: diagnostics,
+                      on: .global(),
+                      completion: $0)
+
+        }
     }
 }

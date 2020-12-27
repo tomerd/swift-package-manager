@@ -115,17 +115,17 @@ public final class MockWorkspace {
             try repo.commit()
 
             let versions: [String?] = packageKind == .remote ? package.versions : [nil]
-            let manifestPath = packagePath.appending(component: Manifest.filename)
+            //let manifestPath = packagePath.appending(component: Manifest.filename)
             for version in versions {
                 let v = version.flatMap(Version.init(string:))
                 manifests[.init(url: url, version: v)] = Manifest(
-                    name: package.name,
+                    //name: package.name,
                     platforms: package.platforms,
-                    path: manifestPath,
-                    url: url,
+                    //path: manifestPath,
+                    //url: url,
                     version: v,
                     toolsVersion: toolsVersion,
-                    packageKind: packageKind,
+                    //packageKind: packageKind,
                     dependencies: package.dependencies.map { $0.convert(baseURL: packagesDir) },
                     products: package.products.map { ProductDescription(name: $0.name, type: .library(.automatic), targets: $0.targets) },
                     targets: package.targets.map { $0.convert() }
@@ -215,19 +215,27 @@ public final class MockWorkspace {
     ) {
         let ws = self.createWorkspace()
         let diagnostics = DiagnosticsEngine()
-        let rootInput = PackageGraphRootInput(packages: rootPaths(for: roots))
+        let packages = self.rootPaths(for: roots)
         diagnostics.wrap {
-            try ws.unedit(packageName: packageName, forceRemove: forceRemove, root: rootInput, diagnostics: diagnostics)
+            try ws.unedit(packageIdentity: PackageIdentity2(packageName),
+                          root: packages,
+                          forceRemove: forceRemove,
+                          diagnostics: diagnostics)
         }
         result(diagnostics)
     }
 
-    public func checkResolve(pkg: String, roots: [String], version: TSCUtility.Version, _ result: (DiagnosticsEngine) -> Void) {
+    public func checkResolve(packageName: String, roots: [String], version: TSCUtility.Version, _ result: (DiagnosticsEngine) -> Void) {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
-        let rootInput = PackageGraphRootInput(packages: rootPaths(for: roots))
+        let packages = self.rootPaths(for: roots)
         diagnostics.wrap {
-            try workspace.resolve(packageName: pkg, root: rootInput, version: version, branch: nil, revision: nil, diagnostics: diagnostics)
+            try workspace.resolve(packageIdentity: PackageIdentity2(packageName),
+                                  root: packages,
+                                  version: version,
+                                  branch: nil,
+                                  revision: nil,
+                                  diagnostics: diagnostics)
             result(diagnostics)
         }
     }
@@ -255,11 +263,10 @@ public final class MockWorkspace {
         let dependencies = deps.map { $0.convert(baseURL: packagesDir) }
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
-        let rootInput = PackageGraphRootInput(
-            packages: rootPaths(for: roots), dependencies: dependencies
-        )
+        let packages = self.rootPaths(for: roots)
         diagnostics.wrap {
-            try workspace.updateDependencies(root: rootInput, packages: packages, diagnostics: diagnostics)
+            // FIXME deps
+            try workspace.updateDependencies(packages: packages, diagnostics: diagnostics)
             result(diagnostics)
         }
     }
@@ -272,11 +279,13 @@ public final class MockWorkspace {
         let dependencies = deps.map { $0.convert(baseURL: packagesDir) }
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
-        let rootInput = PackageGraphRootInput(
-            packages: rootPaths(for: roots), dependencies: dependencies
-        )
+        let packages = self.rootPaths(for: roots)
         diagnostics.wrap {
-            let changes = try workspace.updateDependencies(root: rootInput, diagnostics: diagnostics, dryRun: true)
+            // FIXME deps
+            let changes = try workspace.updateDependencies(packages: packages,
+                                                           packagesFilter: [],
+                                                           diagnostics: diagnostics,
+                                                           dryRun: true)
             result(changes, diagnostics)
         }
     }
@@ -298,12 +307,14 @@ public final class MockWorkspace {
     ) {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
-        let rootInput = PackageGraphRootInput(
-            packages: rootPaths(for: roots), dependencies: dependencies
-        )
+        let packages = self.rootPaths(for: roots)
+        // FIXME deps
         diagnostics.wrap {
             let graph = try workspace.loadPackageGraph(
-                rootInput: rootInput, forceResolvedVersions: forceResolvedVersions, diagnostics: diagnostics
+                packages: packages,
+                //dependencies: dependencies,
+                forceResolvedVersions: forceResolvedVersions,
+                diagnostics: diagnostics
             )
             result(graph, diagnostics)
         }
@@ -319,9 +330,9 @@ public final class MockWorkspace {
         let workspace = self.createWorkspace()
         let pinsStore = try workspace.pinsStore.load()
 
-        let rootInput = PackageGraphRootInput(packages: rootPaths(for: roots.map { $0.name }), dependencies: [])
-        let rootManifests = try temp_await { workspace.loadRootManifests(packages: rootInput.packages, diagnostics: diagnostics, completion: $0) }
-        let root = PackageGraphRoot(input: rootInput, manifests: rootManifests)
+        let packages = self.rootPaths(for: roots.map { $0.name })
+        let rootManifests = try temp_await { workspace.loadRootManifests(from: packages, diagnostics: diagnostics, completion: $0) }
+        let root = PackageGraphRoot54(packageManifests: rootManifests, dependencies: [])
 
         let dependencyManifests = try workspace.loadDependencyManifests(root: root, diagnostics: diagnostics)
 
@@ -344,7 +355,7 @@ public final class MockWorkspace {
         let pinsStore = try workspace.pinsStore.load()
 
         for (ref, state) in pins {
-            pinsStore.pin(packageRef: ref, state: state)
+            pinsStore.pin(package: ref, state: state)
         }
 
         for dependency in managedDependencies {
@@ -383,7 +394,8 @@ public final class MockWorkspace {
         }
 
         public func check(notPresent name: String, file: StaticString = #file, line: UInt = #line) {
-            let dependency = self.managedDependencies[forNameOrIdentity: name]
+            let identity = PackageIdentity2(name)
+            let dependency = self.managedDependencies[identity]
             XCTAssert(dependency == nil, "Unexpectedly found \(name) in managed dependencies", file: file, line: line)
         }
 
@@ -392,7 +404,8 @@ public final class MockWorkspace {
         }
 
         public func check(dependency name: String, at state: State, file: StaticString = #file, line: UInt = #line) {
-            guard let dependency = managedDependencies[forNameOrIdentity: name] else {
+            let identity = PackageIdentity2(name)
+            guard let dependency = managedDependencies[identity] else {
                 XCTFail("\(name) does not exists", file: file, line: line)
                 return
             }
@@ -431,7 +444,8 @@ public final class MockWorkspace {
             file: StaticString = #file,
             line: UInt = #line
         ) {
-            let artifact = self.managedArtifacts[packageName: packageName, targetName: targetName]
+            let packageIdentity = PackageIdentity2(packageName)
+            let artifact = self.managedArtifacts[package: packageIdentity, targetName: targetName]
             XCTAssert(artifact == nil, "Unexpectedly found \(packageName).\(targetName) in managed artifacts", file: file, line: line)
         }
 
@@ -446,7 +460,8 @@ public final class MockWorkspace {
             file: StaticString = #file,
             line: UInt = #line
         ) {
-            guard let artifact = managedArtifacts[packageName: packageName, targetName: targetName] else {
+            let packageIdentity = PackageIdentity2(packageName)
+            guard let artifact = managedArtifacts[package: packageIdentity, targetName: targetName] else {
                 XCTFail("\(packageName).\(targetName) does not exists", file: file, line: line)
                 return
             }
@@ -471,11 +486,9 @@ public final class MockWorkspace {
         let dependencies = deps.map { $0.convert(baseURL: packagesDir) }
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
-        let rootInput = PackageGraphRootInput(
-            packages: rootPaths(for: roots), dependencies: dependencies
-        )
-        let rootManifests = try tsc_await { workspace.loadRootManifests(packages: rootInput.packages, diagnostics: diagnostics, completion: $0) }
-        let graphRoot = PackageGraphRoot(input: rootInput, manifests: rootManifests)
+        let packages = self.rootPaths(for: roots)
+        let rootManifests = try tsc_await { workspace.loadRootManifests(from: packages, diagnostics: diagnostics, completion: $0) }
+        let graphRoot = PackageGraphRoot54(packageManifests: rootManifests, dependencies: dependencies)
         let manifests = try workspace.loadDependencyManifests(root: graphRoot, diagnostics: diagnostics)
         result(manifests, diagnostics)
     }
@@ -535,7 +548,7 @@ public final class MockWorkspace {
                 return
             }
 
-            XCTAssertEqual(pin.packageRef.path, url, file: file, line: line)
+            XCTAssertEqual(pin.package.path, url, file: file, line: line)
         }
     }
 

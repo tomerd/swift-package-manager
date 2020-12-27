@@ -25,8 +25,9 @@ class PackageDescriptionLoadingTests: XCTestCase {
 
     func loadManifestThrowing(
         _ contents: ByteString,
-        toolsVersion: ToolsVersion? = nil,
+        packageIdentity: PackageIdentity2 = .init("test"),
         packageKind: PackageReference.Kind = .local,
+        toolsVersion: ToolsVersion? = nil,
         line: UInt = #line,
         body: (Manifest) -> Void
     ) throws {
@@ -35,10 +36,11 @@ class PackageDescriptionLoadingTests: XCTestCase {
         let manifestPath = AbsolutePath.root.appending(component: Manifest.filename)
         try fs.writeFileContents(manifestPath, bytes: contents)
         let m = try manifestLoader.load(
-            package: AbsolutePath.root,
-            baseURL: "/foo",
-            toolsVersion: toolsVersion,
+            packageIdentity: packageIdentity,
             packageKind: packageKind,
+            at: AbsolutePath.root,
+            //baseURL: "/foo",
+            toolsVersion: toolsVersion,
             fileSystem: fs)
         guard m.toolsVersion == toolsVersion else {
             return XCTFail("Invalid manfiest version")
@@ -48,8 +50,9 @@ class PackageDescriptionLoadingTests: XCTestCase {
 
     func loadManifest(
         _ contents: ByteString,
-        toolsVersion: ToolsVersion? = nil,
+        packageIdentity: PackageIdentity2 = .init("test"),
         packageKind: PackageReference.Kind = .local,
+        toolsVersion: ToolsVersion? = nil,
         line: UInt = #line,
         body: (Manifest) -> Void
     ) {
@@ -57,8 +60,9 @@ class PackageDescriptionLoadingTests: XCTestCase {
             let toolsVersion = toolsVersion ?? self.toolsVersion
             try loadManifestThrowing(
                 contents,
-                toolsVersion: toolsVersion,
+                packageIdentity: packageIdentity,
                 packageKind: packageKind,
+                toolsVersion: toolsVersion,
                 line: line,
                 body: body
             )
@@ -72,8 +76,9 @@ class PackageDescriptionLoadingTests: XCTestCase {
 
     func XCTAssertManifestLoadNoThrows(
         _ contents: ByteString,
-        toolsVersion: ToolsVersion? = nil,
+        packageIdentity: PackageIdentity2 = .init("test"),
         packageKind: PackageReference.Kind = .local,
+        toolsVersion: ToolsVersion? = nil,
         file: StaticString = #file,
         line: UInt = #line,
         onSuccess: ((Manifest, DiagnosticsEngineResult) -> Void)? = nil
@@ -82,9 +87,10 @@ class PackageDescriptionLoadingTests: XCTestCase {
 
         do {
             let manifest = try loadManifest(
-                contents,
-                toolsVersion: toolsVersion ?? self.toolsVersion,
+                contents: contents,
+                packageIdentity: packageIdentity,
                 packageKind: packageKind,
+                toolsVersion: toolsVersion ?? self.toolsVersion,
                 diagnostics: diagnostics,
                 file: file,
                 line: line)
@@ -101,8 +107,9 @@ class PackageDescriptionLoadingTests: XCTestCase {
 
     func XCTAssertManifestLoadThrows(
         _ contents: ByteString,
-        toolsVersion: ToolsVersion? = nil,
+        packageIdentity: PackageIdentity2 = .init("test"),
         packageKind: PackageReference.Kind = .local,
+        toolsVersion: ToolsVersion? = nil,
         file: StaticString = #file,
         line: UInt = #line,
         onCatch: ((Error, DiagnosticsEngineResult) -> Void)? = nil
@@ -111,9 +118,10 @@ class PackageDescriptionLoadingTests: XCTestCase {
 
         do {
             let manifest = try loadManifest(
-                contents,
-                toolsVersion: toolsVersion ?? self.toolsVersion,
+                contents: contents,
+                packageIdentity: packageIdentity,
                 packageKind: packageKind,
+                toolsVersion: toolsVersion ?? self.toolsVersion,
                 diagnostics: diagnostics,
                 file: file,
                 line: line)
@@ -131,13 +139,19 @@ class PackageDescriptionLoadingTests: XCTestCase {
     func XCTAssertManifestLoadThrows<E: Error & Equatable>(
         _ expectedError: E,
         _ contents: ByteString,
-        toolsVersion: ToolsVersion? = nil,
+        packageIdentity: PackageIdentity2 = .init("test"),
         packageKind: PackageReference.Kind = .local,
+        toolsVersion: ToolsVersion? = nil,
         file: StaticString = #file,
         line: UInt = #line,
         onCatch: ((DiagnosticsEngineResult) -> Void)? = nil
     ) {
-        XCTAssertManifestLoadThrows(contents, toolsVersion: toolsVersion, file: file, line: line) { error, result in
+        XCTAssertManifestLoadThrows(contents,
+                                    packageIdentity: packageIdentity,
+                                    packageKind: packageKind,
+                                    toolsVersion: toolsVersion,
+                                    file: file,
+                                    line: line) { error, result in
             if let typedError = error as? E, typedError == expectedError {
                 // Everything okay
             } else {
@@ -149,10 +163,11 @@ class PackageDescriptionLoadingTests: XCTestCase {
     }
 
     func loadManifest(
-        _ contents: ByteString,
-        toolsVersion: ToolsVersion?,
+        contents: ByteString,
+        packageIdentity: PackageIdentity2 = .init("test"),
         packageKind: PackageReference.Kind,
-        diagnostics: DiagnosticsEngine?,
+        toolsVersion: ToolsVersion?,
+        diagnostics: DiagnosticsEngine,
         file: StaticString = #file,
         line: UInt = #line
     ) throws -> Manifest {
@@ -161,10 +176,11 @@ class PackageDescriptionLoadingTests: XCTestCase {
         let manifestPath = AbsolutePath.root.appending(component: Manifest.filename)
         try fileSystem.writeFileContents(manifestPath, bytes: contents)
         let manifest = try manifestLoader.load(
-            package: AbsolutePath.root,
-            baseURL: "/foo",
-            toolsVersion: toolsVersion,
+            packageIdentity: packageIdentity,
             packageKind: packageKind,
+            at: AbsolutePath.root,
+            //baseURL: "/foo",
+            toolsVersion: toolsVersion,
             fileSystem: fileSystem,
             diagnostics: diagnostics)
 

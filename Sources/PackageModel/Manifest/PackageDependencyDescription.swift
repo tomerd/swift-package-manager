@@ -31,7 +31,8 @@ public struct PackageDependencyDescription: Equatable, Codable {
     }
 
     /// The name of the package dependency explicitly defined in the manifest, if any.
-    public let explicitName: String?
+    //@available(*, deprecated)
+    //public let explicitName: String?
 
     /// The name of the packagedependency,
     /// either explicitly defined in the manifest,
@@ -39,10 +40,23 @@ public struct PackageDependencyDescription: Equatable, Codable {
     ///
     /// - SeeAlso: `explicitName`
     /// - SeeAlso: `url`
-    public let name: String
+    //@available(*, deprecated, message: "use identity instead")
+    //public let name: String
+
+    // FIXME: remove - used in tests
+    @available(*, deprecated, message: "use identity instead")
+    public var name: String {
+        get {
+            self.identity.description
+        }
+    }
 
     /// The url of the package dependency.
+    @available(*, deprecated, message: "use location instead")
     public let url: String
+
+    public let identity: PackageIdentity2
+    public let location: String
 
     /// The dependency requirement.
     public let requirement: Requirement
@@ -50,7 +64,23 @@ public struct PackageDependencyDescription: Equatable, Codable {
     /// The products requested of the package dependency.
     public let productFilter: ProductFilter
 
+    public var kind: PackageReference.Kind {
+        get {
+            switch self.requirement {
+            case .localPackage:
+                return .local
+            case .branch,
+                 .exact,
+                 .range,
+                 .revision:
+                return .remote
+            }
+        }
+    }
+
     /// Create a package dependency.
+    // FIXME: remove  - used in tests
+    @available(*, deprecated, message: "use :identity:location instead")
     public init(
         name: String? = nil,
         url: String,
@@ -67,16 +97,37 @@ public struct PackageDependencyDescription: Equatable, Codable {
             normalizedURL = url
         }
 
-        self.explicitName = name
-        self.name = name ?? PackageReference.computeDefaultName(fromURL: normalizedURL)
+        //self.explicitName = name
+        //self.name = name ?? LegacyPackageIdentity.computeDefaultName(fromURL: normalizedURL)
+        let name = name ?? LegacyPackageIdentity.computeDefaultName(fromURL: normalizedURL)
         self.url = normalizedURL
         self.requirement = requirement
         self.productFilter = productFilter
+        // FIXME
+        self.identity = .init(name)
+        self.location = self.url
+    }
+
+    public init(
+        identity: PackageIdentity2,
+        location: String,
+        requirement: Requirement,
+        productFilter: ProductFilter = .everything
+    ) {
+        self.identity = identity
+        self.location = location
+        self.requirement = requirement
+        self.productFilter = productFilter
+        // FIXME
+        //self.name = identity.description
+        //self.explicitName = identity.description
+        self.url = location
     }
 
     /// Returns a new package dependency with the specified products.
     public func filtered(by productFilter: ProductFilter) -> PackageDependencyDescription {
-        PackageDependencyDescription(name: explicitName, url: url, requirement: requirement, productFilter: productFilter)
+        //PackageDependencyDescription(name: explicitName, url: url, requirement: requirement, productFilter: productFilter)
+        PackageDependencyDescription(identity: identity, location: location, requirement: requirement, productFilter: productFilter)
     }
 }
 

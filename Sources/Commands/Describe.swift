@@ -42,7 +42,7 @@ func describe(_ package: Package, in mode: DescribeMode, on stream: OutputByteSt
 
 /// Represents a package for the sole purpose of generating a description.
 fileprivate struct DescribedPackage: Encodable {
-    let name: String
+    let identity: PackageIdentity2
     let path: String
     let toolsVersion: String
     let dependencies: [DescribedPackageDependency]
@@ -55,7 +55,7 @@ fileprivate struct DescribedPackage: Encodable {
     let swiftLanguagesVersions: [String]?
 
     init(from package: Package) {
-        self.name = package.name
+        self.identity = package.identity
         self.path = package.path.pathString
         self.toolsVersion = "\(package.manifest.toolsVersion.major).\(package.manifest.toolsVersion.minor)"
             + (package.manifest.toolsVersion.patch == 0 ? "" : ".\(package.manifest.toolsVersion.patch)")
@@ -100,12 +100,12 @@ fileprivate struct DescribedPackage: Encodable {
     
     /// Represents a package dependency for the sole purpose of generating a description.
     struct DescribedPackageDependency: Encodable {
-        let name: String?
+        let identity: PackageIdentity2?
         let url: String?
         let requirement: PackageDependencyDescription.Requirement?
 
         init(from dependency: PackageDependencyDescription) {
-            self.name = dependency.explicitName
+            self.identity = dependency.identity
             self.url = dependency.url
             self.requirement = dependency.requirement
         }

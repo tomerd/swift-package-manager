@@ -175,7 +175,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
         let provider = RepositoryPackageContainerProvider(
             repositoryManager: repositoryManager,
-            manifestLoader: MockManifestLoader(manifests: [:])
+            manifestLoader: MockManifestLoader(manifests: [:]),
+            diagnostics: DiagnosticsEngine() // FIXME
         )
 
         let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString)
@@ -227,7 +228,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             return RepositoryPackageContainerProvider(
                 repositoryManager: repositoryManager,
                 manifestLoader: MockManifestLoader(manifests: [:]),
-                currentToolsVersion: currentToolsVersion
+                currentToolsVersion: currentToolsVersion,
+                diagnostics: DiagnosticsEngine() // FIXME
             )
         }
 
@@ -308,7 +310,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
         let provider = RepositoryPackageContainerProvider(
             repositoryManager: repositoryManager,
-            manifestLoader: MockManifestLoader(manifests: [:])
+            manifestLoader: MockManifestLoader(manifests: [:]),
+            diagnostics: DiagnosticsEngine() // FIXME
         )
         let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString)
         let container = try provider.getContainer(for: ref, skipUpdate: false)
@@ -348,7 +351,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
         let provider = RepositoryPackageContainerProvider(
             repositoryManager: repositoryManager,
-            manifestLoader: MockManifestLoader(manifests: [:])
+            manifestLoader: MockManifestLoader(manifests: [:]),
+            diagnostics: DiagnosticsEngine() // FIXME
         )
         let ref = PackageReference(identity: PackageIdentity(path: repoPath), path: repoPath.pathString)
         let container = try provider.getContainer(for: ref, skipUpdate: false)
@@ -378,7 +382,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             TargetDescription(name: "Foo3", dependencies: ["Bar3"]),
         ]
 
-        let mirrors: DependencyMirrors = [:]
+        //let mirrors: DependencyMirrors = [:]
 
         let v5ProductMapping: [String: ProductFilter] = [
             "Bar1": .specific(["Bar1", "Bar3"]),
@@ -387,7 +391,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         ]
         let v5Constraints = dependencies.map {
             PackageContainerConstraint(
-                container: $0.createPackageRef(mirrors: mirrors),
+                container: $0.createPackageRef(),
                 requirement: $0.requirement.toConstraintRequirement(),
                 products: v5ProductMapping[$0.name]!
             )
@@ -399,7 +403,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
         ]
         let v5_2Constraints = dependencies.map {
             PackageContainerConstraint(
-                container: $0.createPackageRef(mirrors: mirrors),
+                container: $0.createPackageRef(),
                 requirement: $0.requirement.toConstraintRequirement(),
                 products: v5_2ProductMapping[$0.name]!
             )
@@ -419,8 +423,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
             XCTAssertEqual(
                 manifest
-                    .dependencyConstraints(productFilter: .everything, mirrors: mirrors)
-                    .sorted(by: { $0.identifier.identity < $1.identifier.identity }),
+                    .dependencyConstraints(productFilter: .everything)
+                    .sorted(by: { $0.package.identity < $1.package.identity }),
                 [
                     v5Constraints[0],
                     v5Constraints[1],
@@ -443,8 +447,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
             XCTAssertEqual(
                 manifest
-                    .dependencyConstraints(productFilter: .everything, mirrors: mirrors)
-                    .sorted(by: { $0.identifier.identity < $1.identifier.identity }),
+                    .dependencyConstraints(productFilter: .everything)
+                    .sorted(by: { $0.package.identity < $1.package.identity }),
                 [
                     v5Constraints[0],
                     v5Constraints[1],
@@ -467,8 +471,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
             XCTAssertEqual(
                 manifest
-                    .dependencyConstraints(productFilter: .everything, mirrors: mirrors)
-                    .sorted(by: { $0.identifier.identity < $1.identifier.identity }),
+                    .dependencyConstraints(productFilter: .everything)
+                    .sorted(by: { $0.package.identity < $1.package.identity }),
                 [
                     v5_2Constraints[0],
                     v5_2Constraints[1],
@@ -491,8 +495,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
 
             XCTAssertEqual(
                 manifest
-                    .dependencyConstraints(productFilter: .specific(Set(products.map { $0.name })), mirrors: mirrors)
-                    .sorted(by: { $0.identifier.identity < $1.identifier.identity }),
+                    .dependencyConstraints(productFilter: .specific(Set(products.map { $0.name })))
+                    .sorted(by: { $0.package.identity < $1.package.identity }),
                 [
                     v5_2Constraints[0],
                     v5_2Constraints[1],
@@ -535,7 +539,10 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
                     TargetDescription(name: packageDir.basename, path: packageDir.pathString),
                 ]
             )
-            let containerProvider = RepositoryPackageContainerProvider(repositoryManager: repositoryManager, manifestLoader: MockManifestLoader(manifests: [.init(url: packageDir.pathString, version: nil): manifest]))
+            let containerProvider = RepositoryPackageContainerProvider(repositoryManager: repositoryManager,
+                                                                       manifestLoader: MockManifestLoader(manifests: [.init(url: packageDir.pathString, version: nil): manifest]),
+                                                                       diagnostics: DiagnosticsEngine() // FIXME
+            )
 
             // Get a hold of the container for the test package.
             let packageRef = PackageReference(identity: PackageIdentity(path: packageDir), path: packageDir.pathString)
@@ -612,7 +619,8 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
                 repositoryManager: repositoryManager,
                 manifestLoader: MockManifestLoader(
                     manifests: [.init(url: packageDirectory.pathString, version: Version(1, 0, 0)): manifest]
-                )
+                ),
+                diagnostics: DiagnosticsEngine() // FIXME
             )
 
             let packageReference = PackageReference(identity: PackageIdentity(path: packageDirectory), path: packageDirectory.pathString)

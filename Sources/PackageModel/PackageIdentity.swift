@@ -13,6 +13,67 @@ import Foundation
 import TSCBasic
 import TSCUtility
 
+
+// MARK: --------------------------------------------------------------------------------------------------------------------
+
+public struct PackageIdentity2: Hashable, CustomStringConvertible {
+    /// A textual representation of this instance.
+    public let description: String
+
+    public init(_ string: String) {
+        self.description = string
+    }
+
+    public var mangledToC99ExtendedIdentifier: String {
+        get {
+            self.description.spm_mangledToC99ExtendedIdentifier()
+        }
+    }
+
+    public var mangledToBundleIdentifier: String {
+        get {
+            self.description.spm_mangledToBundleIdentifier()
+        }
+    }
+}
+
+extension PackageIdentity2: Codable {
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let description = try container.decode(String.self)
+        self.init(description)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(self.description)
+    }
+}
+
+extension PackageIdentity2: JSONMappable, JSONSerializable {
+    public init(json: JSON) throws {
+        guard case .string(let string) = json else {
+            throw JSON.MapError.typeMismatch(key: "", expected: String.self, json: json)
+        }
+
+        self.init(string)
+    }
+
+    public func toJSON() -> JSON {
+        return .string(self.description)
+    }
+}
+
+
+extension PackageIdentity2: Comparable {
+    public static func < (lhs: PackageIdentity2, rhs: PackageIdentity2) -> Bool {
+        return lhs.description < rhs.description
+    }
+}
+
+// MARK: ------------------------------------------------------------------------------------------------------------------
+
+
 /// When set to `false`,
 /// `PackageIdentity` uses the canonical location of package dependencies as its identity.
 /// Otherwise, only the last path component is used to identify package dependencies.
@@ -27,6 +88,7 @@ internal protocol PackageIdentityProvider: CustomStringConvertible {
 }
 
 /// The canonical identifier for a package, based on its source location.
+@available(*, deprecated)
 public struct PackageIdentity: Hashable, CustomStringConvertible {
     /// The underlying type used to create package identities.
     internal static var provider: PackageIdentityProvider.Type = LegacyPackageIdentity.self
@@ -94,7 +156,33 @@ struct LegacyPackageIdentity: PackageIdentityProvider, Equatable {
 
     /// Instantiates an instance of the conforming type from a string representation.
     public init(_ string: String) {
-        self.description = PackageReference.computeDefaultName(fromURL: string).lowercased()
+        self.description = Self.computeDefaultName(fromURL: string).lowercased()
+    }
+
+    public static func computeDefaultName(fromURL url: String) -> String {
+        #if os(Windows)
+        let isSeparator : (Character) -> Bool = { $0 == "/" || $0 == "\\" }
+        #else
+        let isSeparator : (Character) -> Bool = { $0 == "/" }
+        #endif
+
+        // Get the last path component of the URL.
+        // Drop the last character in case it's a trailing slash.
+        var endIndex = url.endIndex
+        if let lastCharacter = url.last, isSeparator(lastCharacter) {
+            endIndex = url.index(before: endIndex)
+        }
+
+        let separatorIndex = url[..<endIndex].lastIndex(where: isSeparator)
+        let startIndex = separatorIndex.map { url.index(after: $0) } ?? url.startIndex
+        var lastComponent = url[startIndex..<endIndex]
+
+        // Strip `.git` suffix if present.
+        if lastComponent.hasSuffix(".git") {
+            lastComponent = lastComponent.dropLast(4)
+        }
+
+        return String(lastComponent)
     }
 }
 

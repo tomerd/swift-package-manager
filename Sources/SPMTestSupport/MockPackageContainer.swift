@@ -18,13 +18,11 @@ import TSCBasic
 import struct TSCUtility.Version
 
 public class MockPackageContainer: PackageContainer {
-    public typealias Identifier = PackageReference
-
     public typealias Constraint = PackageContainerConstraint
 
-    public typealias Dependency = (container: Identifier, requirement: PackageRequirement)
+    public typealias Dependency = (container: PackageReference, requirement: PackageRequirement)
 
-    let name: Identifier
+    let name: PackageReference
 
     let dependencies: [String: [Dependency]]
 
@@ -33,8 +31,8 @@ public class MockPackageContainer: PackageContainer {
     /// Contains the versions for which the dependencies were requested by resolver using getDependencies().
     public var requestedVersions: Set<Version> = []
 
-    public var identifier: Identifier {
-        return name
+    public var package: PackageReference {
+        return self.name
     }
 
     public let _versions: [Version]
@@ -52,9 +50,8 @@ public class MockPackageContainer: PackageContainer {
     }
 
     public func getDependencies(at revision: String, productFilter: ProductFilter) -> [MockPackageContainer.Constraint] {
-        return dependencies[revision]!.map { value in
-            let (name, requirement) = value
-            return MockPackageContainer.Constraint(container: name, requirement: requirement, products: productFilter)
+        return dependencies[revision]!.map { package, requirement in
+            return MockPackageContainer.Constraint(package: package, requirement: requirement, products: productFilter)
         }
     }
 
@@ -85,16 +82,16 @@ public class MockPackageContainer: PackageContainer {
         var dependencies: [String: [Dependency]] = [:]
         for (version, deps) in dependenciesByVersion {
             dependencies[version.description] = deps.map {
-                let ref = PackageReference(identity: PackageIdentity(url: $0.container), path: "/\($0.container)")
+                let ref = PackageReference(identity: PackageIdentity2($0.container), kind: .remote, path: "/\($0.container)")
                 return (ref, .versionSet($0.versionRequirement))
             }
         }
-        let ref = PackageReference(identity: PackageIdentity(url: name), path: "/\(name)")
+        let ref = PackageReference(identity: PackageIdentity2(name), kind: .remote, path: "/\(name)")
         self.init(name: ref, dependencies: dependencies)
     }
 
     public init(
-        name: Identifier,
+        name: PackageReference,
         dependencies: [String: [Dependency]] = [:]
     ) {
         self.name = name
@@ -109,7 +106,7 @@ public struct MockPackageContainerProvider: PackageContainerProvider {
 
     public init(containers: [MockPackageContainer]) {
         self.containers = containers
-        self.containersByIdentifier = Dictionary(uniqueKeysWithValues: containers.map { ($0.identifier, $0) })
+        self.containersByIdentifier = Dictionary(uniqueKeysWithValues: containers.map { ($0.package, $0) })
     }
 
     public func getContainer(
@@ -126,14 +123,16 @@ public struct MockPackageContainerProvider: PackageContainerProvider {
     }
 }
 
+/*
 public extension MockPackageContainer.Constraint {
     init(container identifier: String, requirement: PackageRequirement, products: ProductFilter) {
-        let ref = PackageReference(identity: PackageIdentity(url: identifier), path: "")
-        self.init(container: ref, requirement: requirement, products: products)
+        let ref = PackageReference(identity: PackageIdentity2(identifier), kind: .remote, path: "")
+        self.init(package: ref, requirement: requirement, products: products)
     }
 
     init(container identifier: String, versionRequirement: VersionSetSpecifier, products: ProductFilter) {
-        let ref = PackageReference(identity: PackageIdentity(url: identifier), path: "")
-        self.init(container: ref, versionRequirement: versionRequirement, products: products)
+        let ref = PackageReference(identity: PackageIdentity2(identifier), kind: .remote, path: "")
+        self.init(package: ref, versionRequirement: versionRequirement, products: products)
     }
 }
+*/

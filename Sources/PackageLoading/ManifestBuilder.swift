@@ -9,9 +9,10 @@
 */
 
 import PackageModel
+import TSCBasic
 
 struct ManifestBuilder {
-    var name: String!
+    //var name: String!
     var defaultLocalization: String?
     var platforms: [PlatformDescription] = []
     var targets: [TargetDescription] = []
@@ -25,12 +26,12 @@ struct ManifestBuilder {
     var cLanguageStandard: String?
 
     let toolsVersion: ToolsVersion
-    let baseURL: String
-    let fs: FileSystem
+    let basePath: AbsolutePath
+    let fileSystem: FileSystem
 
-    init(toolsVersion: ToolsVersion, baseURL: String, fileSystem: FileSystem) {
+    init(toolsVersion: ToolsVersion, basePath: AbsolutePath, fileSystem: FileSystem) {
         self.toolsVersion = toolsVersion
-        self.baseURL = baseURL
-        self.fs = fileSystem
+        self.basePath = basePath
+        self.fileSystem = fileSystem
     }
 }

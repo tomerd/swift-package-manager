@@ -29,6 +29,12 @@ public final class ThreadSafeKeyValueStore<Key, Value> where Key: Hashable {
         }
     }
 
+    public func get() -> [Key: Value] {
+        self.lock.withLock {
+            self.underlying
+        }
+    }
+
     @discardableResult
     public func memoize(_ key: Key, body: () throws -> Value) rethrows -> Value {
         try self.lock.withLock {

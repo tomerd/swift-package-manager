@@ -217,8 +217,9 @@ public struct SwiftPackageCollectionsTool: ParsableCommand {
         }
 
         mutating func run() throws {
-            let identity = PackageIdentity(url: packageUrl)
-            let reference = PackageReference(identity: identity, path: packageUrl)
+            // FIXME
+            let identity = PackageIdentity2(packageUrl)
+            let reference = PackageReference(identity: identity, kind: .remote, path: packageUrl)
             
             do { // assume URL is for a package
                 let result = try with { collections in

@@ -30,7 +30,6 @@ import Basics
 typealias Diagnostic = TSCBasic.Diagnostic
 
 private class ToolWorkspaceDelegate: WorkspaceDelegate {
-
     /// The stream to use for reporting progress.
     private let stdoutStream: ThreadSafeOutputByteStream
 
@@ -141,7 +140,7 @@ private class ToolWorkspaceDelegate: WorkspaceDelegate {
                 let dependencies = packages.lazy.map({ "'\($0.path)'" }).joined(separator: ", ")
                 self.stdoutStream <<< "the following dependencies were added: \(dependencies)"
             case .packageRequirementChange(let package, let state, let requirement):
-                self.stdoutStream <<< "dependency '\(package.name)' was "
+                self.stdoutStream <<< "dependency '\(package.identity)' was "
 
                 switch state {
                 case .checkout(let checkoutState)?:
@@ -256,23 +255,23 @@ public class SwiftTool {
 
     /// Helper function to get package root or throw error if it is not found.
     func getPackageRoot() throws -> AbsolutePath {
-        guard let packageRoot = packageRoot else {
+        guard let path = self.packageRoot else {
             throw Error.rootManifestFileNotFound
         }
-        return packageRoot
+        return path
     }
 
     /// Get the current workspace root object.
-    func getWorkspaceRoot() throws -> PackageGraphRootInput {
+    func getWorkspaceRootPackages() throws -> [AbsolutePath] {
         let packages: [AbsolutePath]
 
         if let workspace = options.multirootPackageDataFile {
             packages = try XcodeWorkspaceLoader(diagnostics: diagnostics).load(workspace: workspace)
         } else {
-            packages = [try getPackageRoot()]
+            packages = [try self.getPackageRoot()]
         }
 
-        return PackageGraphRootInput(packages: packages)
+        return packages
     }
 
     /// Path to the build directory.
@@ -525,13 +524,13 @@ public class SwiftTool {
 
     /// Resolve the dependencies.
     func resolve() throws {
-        let workspace = try getActiveWorkspace()
-        let root = try getWorkspaceRoot()
+        let workspace = try self.getActiveWorkspace()
+        let rootPackages = try self.getWorkspaceRootPackages()
 
-        if options.forceResolvedVersions {
-            try workspace.resolveToResolvedVersion(root: root, diagnostics: diagnostics)
+        if self.options.forceResolvedVersions {
+            try workspace.resolveToResolvedVersion(packages: rootPackages, diagnostics: diagnostics)
         } else {
-            try workspace.resolve(root: root, diagnostics: diagnostics)
+            try workspace.resolve(packages: rootPackages, diagnostics: diagnostics)
         }
 
         // Throw if there were errors when loading the graph.
@@ -552,16 +551,16 @@ public class SwiftTool {
         createREPLProduct: Bool = false
     ) throws -> PackageGraph {
         do {
-            let workspace = try getActiveWorkspace()
+            let workspace = try self.getActiveWorkspace()
 
             // Fetch and load the package graph.
             let graph = try workspace.loadPackageGraph(
-                rootInput: getWorkspaceRoot(),
+                packages: self.getWorkspaceRootPackages(),
                 explicitProduct: explicitProduct,
                 createMultipleTestProducts: createMultipleTestProducts,
                 createREPLProduct: createREPLProduct,
-                forceResolvedVersions: options.forceResolvedVersions,
-                diagnostics: diagnostics
+                forceResolvedVersions: self.options.forceResolvedVersions,
+                diagnostics: self.diagnostics
             )
 
             // Throw if there were errors when loading the graph.

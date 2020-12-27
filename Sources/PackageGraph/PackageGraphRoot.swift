@@ -15,6 +15,7 @@ import PackageModel
 import SourceControl
 
 /// Represents the input to the package graph root.
+@available(*, deprecated)
 public struct PackageGraphRootInput {
     /// The list of root packages.
     public let packages: [AbsolutePath]
@@ -34,6 +35,7 @@ public struct PackageGraphRootInput {
 }
 
 /// Represents the inputs to the package graph.
+@available(*, deprecated)
 public struct PackageGraphRoot {
 
     /// The list of root manifests.
@@ -48,8 +50,10 @@ public struct PackageGraphRoot {
     /// Create a package graph root.
     public init(input: PackageGraphRootInput, manifests: [Manifest], explicitProduct: String? = nil) {
         self.packageRefs = zip(input.packages, manifests).map { (path, manifest) in
-            let identity = PackageIdentity(url: manifest.url)
-            return PackageReference(identity: identity, path: path.pathString, kind: .root)
+            // FIXME
+            //let identity = PackageIdentity(url: manifest.url)
+            let identity = PackageIdentity2(path.pathString)
+            return PackageReference(identity: identity, kind: .root, path: path.pathString)
         }
         self.manifests = manifests
 
@@ -73,15 +77,86 @@ public struct PackageGraphRoot {
     /// Returns the constraints imposed by root manifests + dependencies.
     public func constraints(mirrors: DependencyMirrors) -> [PackageContainerConstraint] {
         let constraints = packageRefs.map({
-            PackageContainerConstraint(container: $0, requirement: .unversioned, products: .everything)
+            PackageContainerConstraint(package: $0, requirement: .unversioned, products: .everything)
         })
         return constraints + dependencies.map({
             PackageContainerConstraint(
-                container: $0.createPackageRef(mirrors: mirrors),
+                package: $0.createPackageRef(/*mirrors: mirrors*/),
                 requirement: $0.requirement.toConstraintRequirement(),
                 products: $0.productFilter
             )
         })
+    }
+}
+
+public struct ManifestContext: Hashable {
+    public let identity: PackageIdentity2
+    public let kind: PackageReference.Kind
+    public let path: AbsolutePath
+
+    public init(identity: PackageIdentity2, kind: PackageReference.Kind, path: AbsolutePath) {
+        self.identity = identity
+        self.kind = kind
+        self.path = path
+    }
+
+    public init(kind: PackageReference.Kind, path: AbsolutePath) {
+        // FIXME
+        assert(kind != .remote)
+        self.identity = PackageIdentity2(path.pathString)
+        self.kind = kind
+        self.path = path
+    }
+
+}
+
+public struct PackageGraphRoot54 {
+
+    /// The list of root manifests.
+    //public let manifests: [ManifestContext: Manifest]
+
+    /// The root package references.
+    public let packageManifests: [PackageReference: Manifest]
+
+    /// The top level dependencies.
+    public let dependencies: [PackageDependencyDescription]
+
+    /// Create a package graph root.
+    public init(packageManifests: [PackageReference: Manifest], dependencies: [PackageDependencyDescription], explicitProduct: String? = nil) {
+        self.packageManifests = packageManifests /*manifests.reduce(into: [PackageReference: Manifest](), { partial, item in
+            assert(item.key.kind == .root)
+            return partial[PackageReference(identity: item.key.identity, path: item.key.path.pathString, kind: item.key.kind)] = item.value
+        })*/
+
+        // FIXME: Deprecate special casing once the manifest supports declaring used executable products.
+        // Special casing explicit products like this is necessary to pass the test suite and satisfy backwards compatibility.
+        // However, changing the dependencies based on the command line arguments may force pins to temporarily change,
+        // which can become a nuissance.
+        // Such pin switching can currently be worked around by declaring the executable product as a dependency of a dummy target.
+        // But in the future it might be worth providing a way of declaring them in the manifest without a dummy target,
+        // at which time the current special casing can be deprecated.
+        var adjustedDependencies = dependencies
+        if let product = explicitProduct {
+            for dependency in packageManifests.lazy.map({ $0.value.dependenciesRequired(for: .everything) }).joined() {
+                adjustedDependencies.append(dependency.filtered(by: .specific([product])))
+            }
+        }
+
+        self.dependencies = adjustedDependencies
+    }
+
+    /// Returns the constraints imposed by root manifests + dependencies.
+    public func constraints(/*mirrors: DependencyMirrors*/) -> [PackageContainerConstraint] {
+        let constraints = self.packageManifests.map{
+            PackageContainerConstraint(package: $0.key, requirement: .unversioned, products: .everything)
+        }
+        return constraints + self.dependencies.map{
+            PackageContainerConstraint(
+                package: $0.createPackageRef(/*mirrors: mirrors*/),
+                requirement: $0.requirement.toConstraintRequirement(),
+                products: $0.productFilter
+            )
+        }
     }
 }
 

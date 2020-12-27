@@ -17,7 +17,7 @@ import Foundation
 extension ManifestBuilder {
     mutating func build(v4 json: JSON, toolsVersion: ToolsVersion) throws {
         let package = try json.getJSON("package")
-        self.name = try package.get(String.self, forKey: "name")
+        //self.name = try package.get(String.self, forKey: "name")
         self.defaultLocalization = try? package.get(String.self, forKey: "defaultLocalization")
         self.pkgConfig = package.get("pkgConfig")
         self.platforms = try parsePlatforms(package)
@@ -29,8 +29,8 @@ extension ManifestBuilder {
             try PackageDependencyDescription(
                 v4: $0,
                 toolsVersion: toolsVersion,
-                baseURL: self.baseURL,
-                fileSystem: self.fs
+                basePath: self.basePath,
+                fileSystem: self.fileSystem
             )
         })
 
@@ -291,14 +291,14 @@ extension PackageDependencyDescription.Requirement {
 }
 
 extension PackageDependencyDescription {
-    fileprivate init(v4 json: JSON, toolsVersion: ToolsVersion, baseURL: String, fileSystem: FileSystem) throws {
-        let isBaseURLRemote = URL.scheme(baseURL) != nil
+    fileprivate init(v4 json: JSON, toolsVersion: ToolsVersion, basePath: AbsolutePath, fileSystem: FileSystem) throws {
+        //let isBaseURLRemote = URL.scheme(baseURL) != nil
 
         func fixURL(_ url: String, requirement: Requirement) throws -> String {
             // If base URL is remote (http/ssh), we can't do any "fixing".
-            if isBaseURLRemote {
-                return url
-            }
+            //if isBaseURLRemote {
+            //    return url
+            //}
 
             // If the dependency URL starts with '~/', try to expand it.
             if url.hasPrefix("~/") {
@@ -308,7 +308,7 @@ extension PackageDependencyDescription {
             // If the dependency URL is not remote, try to "fix" it.
             if URL.scheme(url) == nil {
                 // If the URL has no scheme, we treat it as a path (either absolute or relative to the base URL).
-                return AbsolutePath(url, relativeTo: AbsolutePath(baseURL)).pathString
+                return AbsolutePath(url, relativeTo: basePath).pathString
             }
 
             if case .localPackage = requirement {
@@ -324,8 +324,16 @@ extension PackageDependencyDescription {
 
         let requirement = try Requirement(v4: json.get("requirement"))
         let url = try fixURL(json.get("url"), requirement: requirement)
-        let name: String? = json.get("name")
-        self.init(name: name, url: url, requirement: requirement)
+        let identity: PackageIdentity2
+        // backwards compatibility
+        if let id = json.get("identity") as PackageIdentity2? {
+            identity = id
+        } else if let name = json.get("name") as String? {
+            identity = PackageIdentity2(name)
+        } else {
+            identity = PackageIdentity2(url)
+        }
+        self.init(identity: identity, location: url, requirement: requirement)
     }
 }
 
@@ -359,7 +367,8 @@ extension TargetDescription.Dependency {
 
         case "product":
             let name = try json.get(String.self, forKey: "name")
-            self = .product(name: name, package: json.get("package"), condition: condition)
+            let packageIdentity: PackageIdentity2? = json.get("package").map(PackageIdentity2.init)
+            self = .product(name: name, packageIdentity: packageIdentity, condition: condition)
 
         case "byname":
             self = try .byName(name: json.get("name"), condition: condition)

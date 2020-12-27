@@ -11,8 +11,8 @@
 import TSCBasic
 
 extension Diagnostic.Message {
-    static func unusedDependency(_ name: String) -> Diagnostic.Message {
-        .warning("dependency '\(name)' is not used by any target")
+    static func unusedDependency(_ package: String) -> Diagnostic.Message {
+        .warning("dependency '\(package)' is not used by any target")
     }
 
     static func productUsesUnsafeFlags(product: String, target: String) -> Diagnostic.Message {

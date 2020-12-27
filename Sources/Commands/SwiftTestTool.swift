@@ -12,11 +12,12 @@ import class Foundation.ProcessInfo
 
 import ArgumentParser
 import Basics
-import TSCBasic
-import SPMBuildCore
 import Build
-import TSCUtility
 import PackageGraph
+import PackageModel
+import SPMBuildCore
+import TSCBasic
+import TSCUtility
 import Workspace
 
 import func TSCLibc.exit
@@ -223,12 +224,14 @@ public struct SwiftTestTool: SwiftCommand {
 
         case .codeCovPath:
             let workspace = try swiftTool.getActiveWorkspace()
-            let root = try swiftTool.getWorkspaceRoot()
-            let rootManifest = try temp_await {
-                workspace.loadRootManifests(packages: root.packages, diagnostics: swiftTool.diagnostics, completion: $0)                
-            }[0]
+            let rootPackages = try swiftTool.getWorkspaceRootPackages()
+            guard let rootManifest = (try temp_await {
+                workspace.loadRootManifests(from: rootPackages, diagnostics: swiftTool.diagnostics, completion: $0)
+            }.first) else {
+                throw InternalError("unknown manifest for \(rootPackages)")
+            }
             let buildParameters = try swiftTool.buildParametersForTest()
-            print(codeCovAsJSONPath(buildParameters: buildParameters, packageName: rootManifest.name))
+            print(self.codeCovAsJSONPath(buildParameters: buildParameters, packageIdentity: rootManifest.key.identity))
 
         case .generateLinuxMain:
             return // warning emitted by validateArguments
@@ -346,9 +349,9 @@ public struct SwiftTestTool: SwiftCommand {
         let buildParameters = try swiftTool.buildParametersForTest()
         for product in testProducts {
             // Export the codecov data as JSON.
-            let jsonPath = codeCovAsJSONPath(
+            let jsonPath = self.codeCovAsJSONPath(
                 buildParameters: buildParameters,
-                packageName: product.packageName)
+                packageIdentity: product.packageIdentity)
             try exportCodeCovAsJSON(to: jsonPath, testBinary: product.binaryPath, swiftTool: swiftTool)
         }
     }
@@ -375,8 +378,9 @@ public struct SwiftTestTool: SwiftCommand {
         try Process.checkNonZeroExit(arguments: args)
     }
 
-    private func codeCovAsJSONPath(buildParameters: BuildParameters, packageName: String) -> AbsolutePath {
-        return buildParameters.codeCovPath.appending(component: packageName + ".json")
+    private func codeCovAsJSONPath(buildParameters: BuildParameters, packageIdentity: PackageIdentity2) -> AbsolutePath {
+        // FIMXE: c99 the identifer?
+        return buildParameters.codeCovPath.appending(component: "\(packageIdentity).json")
     }
 
     /// Exports profdata as a JSON file.

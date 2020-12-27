@@ -29,7 +29,7 @@ public final class ManagedArtifact {
     }
 
     /// The package reference.
-    public let packageRef: PackageReference
+    public let package: PackageReference
 
     /// The name of the binary target the artifact corresponds to.
     public let targetName: String
@@ -38,25 +38,25 @@ public final class ManagedArtifact {
     public let source: Source
 
     public init(
-        packageRef: PackageReference,
+        package: PackageReference,
         targetName: String,
         source: Source
     ) {
-        self.packageRef = packageRef
+        self.package = package
         self.targetName = targetName
         self.source = source
     }
 
     /// Create an artifact downloaded from a remote url.
     public static func remote(
-        packageRef: PackageReference,
+        package: PackageReference,
         targetName: String,
         url: String,
         checksum: String,
         subpath: RelativePath
     ) -> ManagedArtifact {
         return ManagedArtifact(
-            packageRef: packageRef,
+            package: package,
             targetName: targetName,
             source: .remote(url: url, checksum: checksum, subpath: subpath)
         )
@@ -64,12 +64,12 @@ public final class ManagedArtifact {
 
     /// Create an artifact present locally on the filesystem.
     public static func local(
-        packageRef: PackageReference,
+        package: PackageReference,
         targetName: String,
         path: String
     ) -> ManagedArtifact {
         return ManagedArtifact(
-            packageRef: packageRef,
+            package: package,
             targetName: targetName,
             source: .local(path: path)
         )
@@ -81,7 +81,7 @@ public final class ManagedArtifact {
 extension ManagedArtifact: JSONMappable, JSONSerializable, CustomStringConvertible {
     public convenience init(json: JSON) throws {
         try self.init(
-            packageRef: json.get("packageRef"),
+            package: json.get("packageRef") ?? json.get("package"),
             targetName: json.get("targetName"),
             source: json.get("source")
         )
@@ -89,14 +89,14 @@ extension ManagedArtifact: JSONMappable, JSONSerializable, CustomStringConvertib
 
     public func toJSON() -> JSON {
         return .init([
-            "packageRef": packageRef,
-            "targetName": targetName,
-            "source": source,
+            "package": self.package,
+            "targetName": self.targetName,
+            "source": self.source,
         ])
     }
 
     public var description: String {
-        return "<ManagedArtifact: \(packageRef.name).\(targetName) \(source)>"
+        return "<ManagedArtifact: \(self.package.identity).\(self.targetName) \(self.source)>"
     }
 }
 
@@ -148,31 +148,27 @@ extension ManagedArtifact.Source: JSONMappable, JSONSerializable, CustomStringCo
 /// A collection of managed artifacts which have been downloaded.
 public final class ManagedArtifacts {
 
-    /// A mapping from package url, to target name, to ManagedArtifact.
-    private var artifactMap: [String: [String: ManagedArtifact]]
+    /// A mapping from package identity, to target name, to ManagedArtifact.
+    private var artifactMap: [PackageIdentity2: [String: ManagedArtifact]]
 
     private var artifacts: AnyCollection<ManagedArtifact> {
-        AnyCollection(artifactMap.values.lazy.flatMap({ $0.values }))
+        AnyCollection(artifactMap.values.lazy.flatMap{ $0.values })
     }
 
-    init(artifactMap: [String: [String: ManagedArtifact]] = [:]) {
+    init(artifactMap: [PackageIdentity2: [String: ManagedArtifact]] = [:]) {
         self.artifactMap = artifactMap
     }
 
-    public subscript(packageURL packageURL: String, targetName targetName: String) -> ManagedArtifact? {
-        artifactMap[packageURL]?[targetName]
-    }
-
-    public subscript(packageName packageName: String, targetName targetName: String) -> ManagedArtifact? {
-        artifacts.first(where: { $0.packageRef.name == packageName && $0.targetName == targetName })
+    public subscript(package package: PackageIdentity2, targetName targetName: String) -> ManagedArtifact? {
+        artifactMap[package]?[targetName]
     }
 
     public func add(_ artifact: ManagedArtifact) {
-        artifactMap[artifact.packageRef.path, default: [:]][artifact.targetName] = artifact
+        artifactMap[artifact.package.identity, default: [:]][artifact.targetName] = artifact
     }
 
-    public func remove(packageURL: String, targetName: String) {
-        artifactMap[packageURL]?[targetName] = nil
+    public func remove(package: PackageIdentity2, targetName: String) {
+        artifactMap[package]?[targetName] = nil
     }
 }
 
@@ -201,15 +197,15 @@ extension ManagedArtifacts: Collection {
 extension ManagedArtifacts: JSONMappable, JSONSerializable {
     public convenience init(json: JSON) throws {
         let artifacts = try Array<ManagedArtifact>(json: json)
-        let artifactsByPackagePath = Dictionary(grouping: artifacts, by: { $0.packageRef.path })
-        let artifactMap = artifactsByPackagePath.mapValues({ artifacts in
-            Dictionary(uniqueKeysWithValues: artifacts.lazy.map({ ($0.targetName, $0) }))
-        })
+        let artifactsByPackagePath = Dictionary(grouping: artifacts, by: { $0.package.identity })
+        let artifactMap = artifactsByPackagePath.mapValues{ artifacts in
+            Dictionary(uniqueKeysWithValues: artifacts.lazy.map{ ($0.targetName, $0) })
+        }
         self.init(artifactMap: artifactMap)
     }
 
     public func toJSON() -> JSON {
-        artifacts.toJSON()
+        self.artifacts.toJSON()
     }
 }
 
@@ -217,7 +213,7 @@ extension ManagedArtifacts: JSONMappable, JSONSerializable {
 
 extension ManagedArtifacts: CustomStringConvertible {
     public var description: String {
-        "<ManagedArtifacts: \(Array(artifacts))>"
+        "<ManagedArtifacts: \(Array(self.artifacts))>"
     }
 }
 

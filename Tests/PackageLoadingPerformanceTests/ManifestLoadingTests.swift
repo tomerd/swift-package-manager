@@ -34,12 +34,14 @@ class ManifestLoadingPerfTests: XCTestCasePerf {
             """))
         try write(trivialManifest) { path in
             measure {
-                for _ in 0..<N {
+                for index in 0..<N {
                     let manifest = try! self.manifestLoader.load(
-                        package: path,
-                        baseURL: "/Trivial",
-                        toolsVersion: .v4_2,
-                        packageKind: .root)
+                        packageIdentity: .init("\(index)"),
+                        packageKind: .root,
+                        at: path,
+                        //baseURL: "/Trivial",
+                        toolsVersion: .v4_2
+                    )
                     XCTAssertEqual(manifest.name, "Trivial")
                 }
             }
@@ -66,12 +68,14 @@ class ManifestLoadingPerfTests: XCTestCasePerf {
 
         try write(manifest) { path in
             measure {
-                for _ in 0..<N {
+                for index in 0..<N {
                     let manifest = try! self.manifestLoader.load(
-                        package: path,
-                        baseURL: "/Trivial",
-                        toolsVersion: .v4_2,
-                        packageKind: .root)
+                        packageIdentity: .init("\(index)"),
+                        packageKind: .root,
+                        at: path,
+                        //baseURL: "/Trivial",
+                        toolsVersion: .v4_2
+                    )
                     XCTAssertEqual(manifest.name, "Foo")
                 }
             }

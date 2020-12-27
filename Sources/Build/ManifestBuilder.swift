@@ -109,7 +109,7 @@ extension LLBuildManifestBuilder {
                 .map { Node.directoryStructure($0) }
 
             // FIXME: Need to handle version-specific manifests.
-            inputs.append(file: package.manifest.path)
+            inputs.append(file: package.path)
 
             // FIXME: This won't be the location of Package.resolved for multiroot packages.
             inputs.append(file: package.path.appending(component: "Package.resolved"))

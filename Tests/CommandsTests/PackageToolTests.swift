@@ -671,7 +671,8 @@ final class PackageToolTests: XCTestCase {
                 try execute("resolve", "bar", "--branch", "YOLO")
                 let pinsStore = try PinsStore(pinsFile: pinsFile, fileSystem: localFileSystem)
                 let state = CheckoutState(revision: yoloRevision, branch: "YOLO")
-                let identity = PackageIdentity(path: barPath)
+                // FIXME
+                let identity = PackageIdentity2(barPath.pathString)
                 XCTAssertEqual(pinsStore.pinsMap[identity]?.state, state)
             }
 
@@ -680,7 +681,8 @@ final class PackageToolTests: XCTestCase {
                 try execute("resolve", "bar", "--revision", yoloRevision.identifier)
                 let pinsStore = try PinsStore(pinsFile: pinsFile, fileSystem: localFileSystem)
                 let state = CheckoutState(revision: yoloRevision)
-                let identity = PackageIdentity(path: barPath)
+                // FIXME
+                let identity = PackageIdentity2(barPath.pathString)
                 XCTAssertEqual(pinsStore.pinsMap[identity]?.state, state)
             }
 
@@ -723,9 +725,11 @@ final class PackageToolTests: XCTestCase {
                 XCTAssertEqual(pinsStore.pins.map{$0}.count, 2)
                 for pkg in ["bar", "baz"] {
                     let path = try SwiftPMProduct.packagePath(for: pkg, packageRoot: fooPath)
-                    let pin = pinsStore.pinsMap[PackageIdentity(path: path)]!
-                    XCTAssertEqual(pin.packageRef.identity, PackageIdentity(path: path))
-                    XCTAssert(pin.packageRef.repository.url.hasSuffix(pkg))
+                    // FIXME
+                    let pin = pinsStore.pinsMap[PackageIdentity2(path.pathString)]!
+                    // FIMXE
+                    XCTAssertEqual(pin.package.identity, PackageIdentity2(path.pathString))
+                    XCTAssert(pin.package.repository.url.hasSuffix(pkg))
                     XCTAssertEqual(pin.state.version, "1.2.3")
                 }
             }
@@ -739,7 +743,8 @@ final class PackageToolTests: XCTestCase {
             do {
                 try execute("resolve", "bar")
                 let pinsStore = try PinsStore(pinsFile: pinsFile, fileSystem: localFileSystem)
-                let identity = PackageIdentity(path: barPath)
+                // FIXME
+                let identity = PackageIdentity2(barPath.pathString)
                 XCTAssertEqual(pinsStore.pinsMap[identity]?.state.version, "1.2.3")
             }
 
@@ -763,7 +768,8 @@ final class PackageToolTests: XCTestCase {
             do {
                 try execute("resolve", "bar", "--version", "1.2.3")
                 let pinsStore = try PinsStore(pinsFile: pinsFile, fileSystem: localFileSystem)
-                let identity = PackageIdentity(path: barPath)
+                // FIXME
+                let identity = PackageIdentity2(barPath.pathString)
                 XCTAssertEqual(pinsStore.pinsMap[identity]?.state.version, "1.2.3")
                 try checkBar(5)
             }

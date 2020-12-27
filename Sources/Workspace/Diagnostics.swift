@@ -82,10 +82,10 @@ public enum WorkspaceDiagnostics {
     /// is not in edit mode.
     public struct DependencyNotInEditMode: DiagnosticData, Swift.Error {
         /// The name of the dependency being unedited.
-        public let dependencyName: String
+        public let dependency: PackageIdentity2
 
         public var description: String {
-            return "dependency '\(dependencyName)' not in edit mode"
+            return "dependency '\(dependency)' not in edit mode"
         }
     }
 
@@ -113,24 +113,49 @@ public enum WorkspaceDiagnostics {
 }
 
 extension Diagnostic.Message {
+    @available(*, deprecated)
     static func dependencyNotFound(packageName: String) -> Diagnostic.Message {
         .warning("dependency '\(packageName)' was not found")
     }
 
+    static func dependencyNotFound(package: PackageIdentity2) -> Diagnostic.Message {
+        .warning("dependency '\(package)' was not found")
+    }
+
+    @available(*, deprecated)
     static func editBranchNotCheckedOut(packageName: String, branchName: String) -> Diagnostic.Message {
         .warning("dependency '\(packageName)' already exists at the edit destination; not checking-out branch '\(branchName)'")
     }
 
+    static func editBranchNotCheckedOut(package: PackageIdentity2, branchName: String) -> Diagnostic.Message {
+        .warning("dependency '\(package)' already exists at the edit destination; not checking-out branch '\(branchName)'")
+    }
+
+    @available(*, deprecated)
     static func editRevisionNotUsed(packageName: String, revisionIdentifier: String) -> Diagnostic.Message {
         .warning("dependency '\(packageName)' already exists at the edit destination; not using revision '\(revisionIdentifier)'")
     }
 
+    static func editRevisionNotUsed(package: PackageIdentity2, revisionIdentifier: String) -> Diagnostic.Message {
+        .warning("dependency '\(package)' already exists at the edit destination; not using revision '\(revisionIdentifier)'")
+    }
+
+    @available(*, deprecated)
     static func editedDependencyMissing(packageName: String) -> Diagnostic.Message {
         .warning("dependency '\(packageName)' was being edited but is missing; falling back to original checkout")
     }
 
+    static func editedDependencyMissing(package: PackageIdentity2) -> Diagnostic.Message {
+        .warning("dependency '\(package)' was being edited but is missing; falling back to original checkout")
+    }
+
+    @available(*, deprecated)
     static func checkedOutDependencyMissing(packageName: String) -> Diagnostic.Message {
         .warning("dependency '\(packageName)' is missing; cloning again")
+    }
+
+    static func checkedOutDependencyMissing(package: PackageIdentity2) -> Diagnostic.Message {
+        .warning("dependency '\(package)' is missing; cloning again")
     }
 
     static func artifactChecksumChanged(targetName: String) -> Diagnostic.Message {

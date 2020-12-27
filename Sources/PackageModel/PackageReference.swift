@@ -8,6 +8,7 @@
  See http://swift.org/CONTRIBUTORS.txt for Swift project authors
 */
 
+import Basics
 import TSCBasic
 import TSCUtility
 
@@ -16,7 +17,7 @@ import TSCUtility
 /// This represents a reference to a package containing its identity and location.
 public struct PackageReference: Codable {
     /// The kind of package reference.
-    public enum Kind: String, Codable {
+    public enum Kind: String, Codable, Equatable {
         /// A root package.
         case root
 
@@ -28,12 +29,13 @@ public struct PackageReference: Codable {
     }
 
     /// Compute the default name of a package given its URL.
+    /*@available(*, deprecated)
     public static func computeDefaultName(fromURL url: String) -> String {
-      #if os(Windows)
+        #if os(Windows)
         let isSeparator : (Character) -> Bool = { $0 == "/" || $0 == "\\" }
-      #else
+        #else
         let isSeparator : (Character) -> Bool = { $0 == "/" }
-      #endif
+        #endif
 
         // Get the last path component of the URL.
         // Drop the last character in case it's a trailing slash.
@@ -52,36 +54,49 @@ public struct PackageReference: Codable {
         }
 
         return String(lastComponent)
-    }
+    }*/
 
     /// The identity of the package.
-    public let identity: PackageIdentity
+    public let identity: PackageIdentity2
 
     /// The name of the package, if available.
+    /*@available(*, deprecated)
     public var name: String {
         _name ?? Self.computeDefaultName(fromURL: path)
     }
-    private let _name: String?
+    private let _name: String?*/
 
     /// The path of the package.
     ///
     /// This could be a remote repository, local repository or local package.
+    // FIXME: do something better than this
     public let path: String
 
     /// The kind of package: root, local, or remote.
     public let kind: Kind
 
-    /// Create a package reference given its identity and repository.
-    public init(identity: PackageIdentity, path: String, name: String? = nil, kind: Kind = .remote) {
-        self._name = name
-        self.identity = identity
-        self.path = path
+    // FIXME: remove - used in tests
+    @available(*, deprecated)
+    public init(identity: PackageIdentity, kind: Kind = .remote, path: String) {
+        self.identity = PackageIdentity2(identity.description)
         self.kind = kind
+        //self._name = name
+        self.path = path
+    }
+
+    /// Create a package reference given its identity and repository.
+    public init(identity: PackageIdentity2, kind: Kind, path: String) {
+        self.identity = identity
+        self.kind = kind
+        self.path = path
+        // FIXME
+        //self._name = identity.description
     }
 
     /// Create a new package reference object with the given name.
+    @available(*, deprecated)
     public func with(newName: String) -> PackageReference {
-        return PackageReference(identity: identity, path: path, name: newName, kind: kind)
+        return PackageReference(identity: PackageIdentity2(newName), kind: self.kind, path: self.path)
     }
 }
 
@@ -93,36 +108,47 @@ extension PackageReference: Equatable {
 
 extension PackageReference: Hashable {
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(identity)
+        hasher.combine(self.identity)
     }
 }
 
 extension PackageReference: CustomStringConvertible {
     public var description: String {
-        return "\(identity)\(path.isEmpty ? "" : "[\(path)]")"
+        return "\(self.identity)\(path.isEmpty ? "" : "[\(path)]")"
     }
 }
 
 extension PackageReference: JSONMappable, JSONSerializable {
     public init(json: JSON) throws {
-        self._name = json.get("name")
-        self.identity = try json.get("identity")
+        let identity: PackageIdentity2
+        // backwards compatibility
+        if let id = json.get("identity") as PackageIdentity2? {
+            identity = id
+        } else if let name = json.get("name") as String? {
+            identity = PackageIdentity2(name)
+        } else {
+            throw InternalError("invalid package reference JSON, unknown package identity")
+        }
+        //self._name = json.get("name")
+        self.identity = identity
         self.path = try json.get("path")
 
         // Support previous version of PackageReference that contained an `isLocal` property.
         if let isLocal: Bool = json.get("isLocal") {
-            kind = isLocal ? .local : .remote
+            self.kind = isLocal ? .local : .remote
         } else {
-            kind = try Kind(rawValue: json.get("kind"))!
+            self.kind = try Kind(rawValue: json.get("kind"))!
         }
+        // FIXME
+        //self._name = nil
     }
 
     public func toJSON() -> JSON {
         return .init([
-            "name": name.toJSON(),
-            "identity": identity,
-            "path": path,
-            "kind": kind.rawValue,
+            //"name": self.name.toJSON(),
+            "identity": self.identity,
+            "path": self.path,
+            "kind": self.kind.rawValue,
         ])
     }
 }

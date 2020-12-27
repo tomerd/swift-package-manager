@@ -24,35 +24,47 @@ import TSCUtility
 /// should be used as-is. Infact, they might not even have a git repository.
 /// Examples: Root packages, local dependencies, edited packages.
 public final class LocalPackageContainer: PackageContainer {
-    public let identifier: PackageReference
-    private let mirrors: DependencyMirrors
+    @available(*, deprecated)
+    public var identifier: PackageReference {
+        get {
+            self.package
+        }
+    }
+
+    public let package: PackageReference
+
+    //private let mirrors: DependencyMirrors
     private let manifestLoader: ManifestLoaderProtocol
     private let toolsVersionLoader: ToolsVersionLoaderProtocol
     private let currentToolsVersion: ToolsVersion
 
     /// The file system that shoud be used to load this package.
-    private let fs: FileSystem
+    private let fileSystem: FileSystem
+
+    private let diagnostics: DiagnosticsEngine
 
     /// cached version of the manifest
-    private let manifest = ThreadSafeBox<Manifest>()
+    private let manifestCache = ThreadSafeBox<Manifest>()
 
     private func loadManifest() throws -> Manifest {
-        try manifest.memoize() {
+        try manifestCache.memoize() {
             // Load the tools version.
-            let toolsVersion = try toolsVersionLoader.load(at: AbsolutePath(identifier.path), fileSystem: fs)
+            let toolsVersion = try toolsVersionLoader.load(at: AbsolutePath(self.package.path), fileSystem: self.fileSystem)
 
             // Validate the tools version.
-            try toolsVersion.validateToolsVersion(self.currentToolsVersion, packagePath: identifier.path)
+            try toolsVersion.validateToolsVersion(self.currentToolsVersion, packagePath: self.package.path)
 
             // Load the manifest.
             // FIXME: this should not block
             return try temp_await {
-                manifestLoader.load(package: AbsolutePath(identifier.path),
-                                    baseURL: identifier.path,
+                manifestLoader.load(packageIdentity: self.package.identity,
+                                    packageKind: self.package.kind,
+                                    at: AbsolutePath(self.package.path),
+                                    //baseURL: self.package.path,
                                     version: nil,
                                     toolsVersion: toolsVersion,
-                                    packageKind: identifier.kind,
-                                    fileSystem: fs,
+                                    fileSystem: self.fileSystem,
+                                    diagnostics: self.diagnostics,
                                     on: .global(),
                                     completion: $0)
             }
@@ -60,30 +72,32 @@ public final class LocalPackageContainer: PackageContainer {
     }
 
     public func getUnversionedDependencies(productFilter: ProductFilter) throws -> [PackageContainerConstraint] {
-        return try loadManifest().dependencyConstraints(productFilter: productFilter, mirrors: mirrors)
+        return try loadManifest().dependencyConstraints(productFilter: productFilter)
     }
 
     public func getUpdatedIdentifier(at boundVersion: BoundVersion) throws -> PackageReference {
         assert(boundVersion == .unversioned, "Unexpected bound version \(boundVersion)")
-        let manifest = try loadManifest()
-        return identifier.with(newName: manifest.name)
+        let manifest = try self.loadManifest()
+        return self.package.with(newName: manifest.name)
     }
 
     public init(
-        _ identifier: PackageReference,
-        mirrors: DependencyMirrors,
+        package: PackageReference,
+        //mirrors: DependencyMirrors,
         manifestLoader: ManifestLoaderProtocol,
         toolsVersionLoader: ToolsVersionLoaderProtocol,
         currentToolsVersion: ToolsVersion,
-        fs: FileSystem = localFileSystem
+        fileSystem: FileSystem, // = localFileSystem,
+        diagnostics: DiagnosticsEngine
     ) {
-        assert(URL.scheme(identifier.path) == nil, "unexpected scheme \(URL.scheme(identifier.path)!) in \(identifier.path)")
-        self.identifier = identifier
-        self.mirrors = mirrors
+        assert(URL.scheme(package.path) == nil, "unexpected scheme \(URL.scheme(package.path)!) in \(package.path)")
+        self.package = package
+        //self.mirrors = mirrors
         self.manifestLoader = manifestLoader
         self.toolsVersionLoader = toolsVersionLoader
         self.currentToolsVersion = currentToolsVersion
-        self.fs = fs
+        self.fileSystem = fileSystem
+        self.diagnostics = diagnostics
     }
     
     public func isToolsVersionCompatible(at version: Version) -> Bool {
@@ -113,6 +127,6 @@ public final class LocalPackageContainer: PackageContainer {
 
 extension LocalPackageContainer: CustomStringConvertible  {
     public var description: String {
-        return "LocalPackageContainer(\(identifier.path))"
+        return "LocalPackageContainer(\(self.package.path))"
     }
 }

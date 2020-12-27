@@ -348,9 +348,12 @@ class PackageDescription4LoadingTests: PackageDescriptionLoadingTests {
 
         let diagnostics = DiagnosticsEngine()
         let manifest = try manifestLoader.load(
-            package: .root, baseURL: "/foo",
-            toolsVersion: .v4, packageKind: .root,
-            fileSystem: fs, diagnostics: diagnostics
+            packageKind: .root,
+            at: .root,
+            //baseURL: "/foo",
+            toolsVersion: .v4,
+            fileSystem: fs,
+            diagnostics: diagnostics
         )
 
         XCTAssertEqual(manifest.name, "Trivial")

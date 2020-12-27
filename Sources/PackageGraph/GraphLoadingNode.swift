@@ -19,6 +19,10 @@ import TSCUtility
 ///
 /// - SeeAlso: DependencyResolutionNode
 public struct GraphLoadingNode: Equatable, Hashable {
+    /// The manifest loading context.
+    public let identity: PackageIdentity2
+    public let kind: PackageReference.Kind
+    public let path: AbsolutePath
 
     /// The package manifest.
     public let manifest: Manifest
@@ -26,7 +30,31 @@ public struct GraphLoadingNode: Equatable, Hashable {
     /// The product filter applied to the package.
     public let productFilter: ProductFilter
 
-    public init(manifest: Manifest, productFilter: ProductFilter) {
+    public init(context: ManifestContext, manifest: Manifest, productFilter: ProductFilter) {
+        self.init(identity: context.identity,
+                  kind: context.kind,
+                  path: context.path,
+                  manifest: manifest,
+                  productFilter: productFilter)
+    }
+
+    public init(package: PackageReference, manifest: Manifest, productFilter: ProductFilter) {
+        self.init(identity: package.identity,
+                  kind: package.kind,
+                  // FIXME: this makes assumption about the path
+                  path: AbsolutePath(package.path),
+                  manifest: manifest,
+                  productFilter: productFilter)
+    }
+
+    public init(identity: PackageIdentity2,
+                kind: PackageReference.Kind,
+                path: AbsolutePath,
+                manifest: Manifest,
+                productFilter: ProductFilter) {
+        self.identity = identity
+        self.kind = kind
+        self.path = path
         self.manifest = manifest
         self.productFilter = productFilter
     }
@@ -41,9 +69,9 @@ extension GraphLoadingNode: CustomStringConvertible {
     public var description: String {
         switch productFilter {
         case .everything:
-            return manifest.name
+            return "\(self.identity)"
         case .specific(let set):
-            return "\(manifest.name)[\(set.sorted().joined(separator: ", "))]"
+            return "\(self.identity)[\(set.sorted().joined(separator: ", "))]"
         }
     }
 }

@@ -23,13 +23,18 @@ public final class ResolvedPackage: ObjectIdentifierProtocol {
     }
 
     /// The name of the package.
-    public var name: String {
-        return underlyingPackage.name
+    public var identity: PackageIdentity2 {
+        return self.underlyingPackage.identity
     }
 
     /// The local path of the package.
     public var path: AbsolutePath {
-        return underlyingPackage.path
+        return self.underlyingPackage.path
+    }
+
+    /// The local path of the package.
+    public var kind: PackageReference.Kind {
+        return self.underlyingPackage.kind
     }
 
     /// The targets contained in the package.
@@ -56,6 +61,6 @@ public final class ResolvedPackage: ObjectIdentifierProtocol {
 
 extension ResolvedPackage: CustomStringConvertible {
     public var description: String {
-        return "<ResolvedPackage: \(name)>"
+        return "<ResolvedPackage: \(self.identity)>"
     }
 }

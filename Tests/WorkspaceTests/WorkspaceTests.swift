@@ -858,7 +858,7 @@ final class WorkspaceTests: XCTestCase {
         try workspace.set(
             pins: [bRef: v1_5, cRef: v2],
             managedDependencies: [
-                ManagedDependency(packageRef: bRef, subpath: bPath, checkoutState: v1_5)
+                ManagedDependency(package: bRef, subpath: bPath, checkoutState: v1_5)
                     .editedDependency(subpath: bPath, unmanagedPath: nil),
             ]
         )
@@ -914,7 +914,7 @@ final class WorkspaceTests: XCTestCase {
         try workspace.set(
             pins: [bRef: v1],
             managedDependencies: [
-                ManagedDependency(packageRef: bRef, subpath: bPath, checkoutState: v1),
+                ManagedDependency(package: bRef, subpath: bPath, checkoutState: v1),
             ]
         )
 
@@ -971,8 +971,8 @@ final class WorkspaceTests: XCTestCase {
         try workspace.set(
             pins: [bRef: v1_5, cRef: v1_5],
             managedDependencies: [
-                ManagedDependency(packageRef: bRef, subpath: bPath, checkoutState: v1_5),
-                ManagedDependency(packageRef: cRef, subpath: cPath, checkoutState: v1_5),
+                ManagedDependency(package: bRef, subpath: bPath, checkoutState: v1_5),
+                ManagedDependency(package: cRef, subpath: cPath, checkoutState: v1_5),
             ]
         )
 
@@ -1021,7 +1021,7 @@ final class WorkspaceTests: XCTestCase {
         try testWorkspace.set(
             pins: [cRef: v1_5],
             managedDependencies: [
-                ManagedDependency(packageRef: cRef, subpath: cPath, checkoutState: v1_5),
+                ManagedDependency(package: cRef, subpath: cPath, checkoutState: v1_5),
             ]
         )
 
@@ -1081,8 +1081,8 @@ final class WorkspaceTests: XCTestCase {
         try workspace.set(
             pins: [bRef: v1_5],
             managedDependencies: [
-                ManagedDependency(packageRef: bRef, subpath: bPath, checkoutState: v1_5),
-                ManagedDependency.local(packageRef: cRef),
+                ManagedDependency(package: bRef, subpath: bPath, checkoutState: v1_5),
+                ManagedDependency.local(package: cRef),
             ]
         )
 
@@ -1143,8 +1143,8 @@ final class WorkspaceTests: XCTestCase {
         try workspace.set(
             pins: [bRef: v1_5, cRef: v1_5],
             managedDependencies: [
-                ManagedDependency(packageRef: bRef, subpath: bPath, checkoutState: v1_5),
-                ManagedDependency(packageRef: cRef, subpath: cPath, checkoutState: v1_5),
+                ManagedDependency(package: bRef, subpath: bPath, checkoutState: v1_5),
+                ManagedDependency(package: cRef, subpath: cPath, checkoutState: v1_5),
             ]
         )
 
@@ -1206,8 +1206,8 @@ final class WorkspaceTests: XCTestCase {
         try workspace.set(
             pins: [bRef: v1_5, cRef: master],
             managedDependencies: [
-                ManagedDependency(packageRef: bRef, subpath: bPath, checkoutState: v1_5),
-                ManagedDependency(packageRef: cRef, subpath: cPath, checkoutState: master),
+                ManagedDependency(package: bRef, subpath: bPath, checkoutState: v1_5),
+                ManagedDependency(package: cRef, subpath: cPath, checkoutState: master),
             ]
         )
 
@@ -1268,8 +1268,8 @@ final class WorkspaceTests: XCTestCase {
         try workspace.set(
             pins: [bRef: v1_5, cRef: v1_5],
             managedDependencies: [
-                ManagedDependency(packageRef: bRef, subpath: bPath, checkoutState: v1_5),
-                ManagedDependency(packageRef: cRef, subpath: cPath, checkoutState: v1_5),
+                ManagedDependency(package: bRef, subpath: bPath, checkoutState: v1_5),
+                ManagedDependency(package: cRef, subpath: cPath, checkoutState: v1_5),
             ]
         )
 
@@ -1327,8 +1327,8 @@ final class WorkspaceTests: XCTestCase {
         try workspace.set(
             pins: [bRef: v1_5, cRef: v2],
             managedDependencies: [
-                ManagedDependency(packageRef: bRef, subpath: bPath, checkoutState: v1_5),
-                ManagedDependency(packageRef: cRef, subpath: cPath, checkoutState: v2),
+                ManagedDependency(package: bRef, subpath: bPath, checkoutState: v1_5),
+                ManagedDependency(package: cRef, subpath: cPath, checkoutState: v2),
             ]
         )
 
@@ -1867,7 +1867,7 @@ final class WorkspaceTests: XCTestCase {
 
         try workspace.loadDependencyManifests(roots: ["Root1"]) { manifests, diagnostics in
             // Ensure that the order of the manifests is stable.
-            XCTAssertEqual(manifests.allDependencyManifests().map { $0.name }, ["Foo", "Baz", "Bam", "Bar"])
+            XCTAssertEqual(manifests.allDependencyManifests().map { $0.key.identity.description }, ["Foo", "Baz", "Bam", "Bar"])
             XCTAssertNoDiagnostics(diagnostics)
         }
     }
@@ -1985,7 +1985,7 @@ final class WorkspaceTests: XCTestCase {
         }
 
         // Resolve to an older version.
-        workspace.checkResolve(pkg: "Foo", roots: ["Root"], version: "1.0.0") { diagnostics in
+        workspace.checkResolve(packageName: "Foo", roots: ["Root"], version: "1.0.0") { diagnostics in
             XCTAssertNoDiagnostics(diagnostics)
         }
         workspace.checkManagedDependencies { result in
@@ -1996,7 +1996,7 @@ final class WorkspaceTests: XCTestCase {
         }
 
         // Check failure.
-        workspace.checkResolve(pkg: "Foo", roots: ["Root"], version: "1.3.0") { diagnostics in
+        workspace.checkResolve(packageName: "Foo", roots: ["Root"], version: "1.3.0") { diagnostics in
             DiagnosticsEngineTester(diagnostics) { result in
                 result.check(diagnostic: .contains("'Foo' 1.3.0"), behavior: .error)
             }
@@ -2223,7 +2223,7 @@ final class WorkspaceTests: XCTestCase {
 
         try workspace.loadDependencyManifests(roots: ["Root"]) { manifests, diagnostics in
             let editedPackages = manifests.editedPackagesConstraints()
-            XCTAssertEqual(editedPackages.map { $0.identifier.path }, [fooPath.pathString])
+            XCTAssertEqual(editedPackages.map { $0.package.path }, [fooPath.pathString])
             XCTAssertNoDiagnostics(diagnostics)
         }
 
@@ -2375,7 +2375,7 @@ final class WorkspaceTests: XCTestCase {
         }
 
         // There should still be an entry for `foo`, which we can unedit.
-        let editedDependency = ws.state.dependencies[forNameOrIdentity: "foo"]!
+        let editedDependency = ws.state.dependencies[PackageIdentity2("foo")]!
         XCTAssertNil(editedDependency.basedOn)
         workspace.checkManagedDependencies { result in
             result.check(dependency: "foo", at: .edited(nil))
@@ -2472,7 +2472,7 @@ final class WorkspaceTests: XCTestCase {
         }
 
         // Now, resolve foo at a different version.
-        workspace.checkResolve(pkg: "Foo", roots: ["Root"], version: "1.2.0") { diagnostics in
+        workspace.checkResolve(packageName: "Foo", roots: ["Root"], version: "1.2.0") { diagnostics in
             XCTAssertNoDiagnostics(diagnostics)
         }
         workspace.checkManagedDependencies { result in
@@ -2649,14 +2649,16 @@ final class WorkspaceTests: XCTestCase {
         let fooKey = MockManifestLoader.Key(url: "/tmp/ws/roots/Foo")
         let manifest = workspace.manifestLoader.manifests[fooKey]!
         workspace.manifestLoader.manifests[fooKey] = Manifest(
-            name: manifest.name,
+            //name: manifest.name,
             platforms: [],
-            path: manifest.path,
-            url: manifest.url,
+            //path: manifest.path,
+            //url: manifest.url,
             version: manifest.version,
             toolsVersion: manifest.toolsVersion,
-            packageKind: .root,
-            dependencies: [PackageDependencyDescription(url: manifest.dependencies[0].url, requirement: .exact("1.5.0"))],
+            //packageKind: .root,
+            dependencies: [PackageDependencyDescription(identity: manifest.dependencies[0].identity,
+                                                        location: manifest.dependencies[0].location,
+                                                        requirement: .exact("1.5.0"))],
             targets: manifest.targets
         )
 
@@ -2868,7 +2870,7 @@ final class WorkspaceTests: XCTestCase {
                 result.check(diagnostic: .contains("local dependency 'Bar' can't be edited"), behavior: .error)
             }
         }
-        workspace.checkResolve(pkg: "Bar", roots: ["Foo"], version: "1.0.0") { diagnostics in
+        workspace.checkResolve(packageName: "Bar", roots: ["Foo"], version: "1.0.0") { diagnostics in
             DiagnosticsEngineTester(diagnostics) { result in
                 result.check(diagnostic: .contains("local dependency 'Bar' can't be edited"), behavior: .error)
             }
@@ -3303,7 +3305,7 @@ final class WorkspaceTests: XCTestCase {
         }
         do {
             let ws = workspace.createWorkspace()
-            XCTAssertNotNil(ws.state.dependencies[forURL: "/tmp/ws/pkgs/Foo"])
+            XCTAssertNotNil(ws.state.dependencies[PackageIdentity2("/tmp/ws/pkgs/Foo")])
         }
 
         deps = [
@@ -3317,7 +3319,7 @@ final class WorkspaceTests: XCTestCase {
         }
         do {
             let ws = workspace.createWorkspace()
-            XCTAssertNotNil(ws.state.dependencies[forURL: "/tmp/ws/pkgs/Nested/Foo"])
+            XCTAssertNotNil(ws.state.dependencies[PackageIdentity2("/tmp/ws/pkgs/Nested/Foo")])
         }
     }
 
@@ -3585,7 +3587,7 @@ final class WorkspaceTests: XCTestCase {
 
         do {
             let ws = workspace.createWorkspace()
-            XCTAssertNotNil(ws.state.dependencies[forURL: "/tmp/ws/pkgs/Foo"])
+            XCTAssertNotNil(ws.state.dependencies[PackageIdentity2("/tmp/ws/pkgs/Foo")])
         }
 
         workspace.checkReset { diagnostics in
@@ -3609,7 +3611,7 @@ final class WorkspaceTests: XCTestCase {
 
         do {
             let ws = workspace.createWorkspace()
-            XCTAssertNotNil(ws.state.dependencies[forURL: "/tmp/ws/pkgs/Nested/Foo"])
+            XCTAssertNotNil(ws.state.dependencies[PackageIdentity2("/tmp/ws/pkgs/Nested/Foo")])
         }
     }
 
@@ -3677,13 +3679,13 @@ final class WorkspaceTests: XCTestCase {
         do {
             let ws = workspace.createWorkspace()
             let pinsStore = try ws.pinsStore.load()
-            let fooPin = pinsStore.pins.first(where: { $0.packageRef.identity.description == "foo" })!
+            let fooPin = pinsStore.pins.first(where: { $0.package.identity.description == "foo" })!
 
-            let fooRepo = workspace.repoProvider.specifierMap[RepositorySpecifier(url: fooPin.packageRef.path)]!
+            let fooRepo = workspace.repoProvider.specifierMap[RepositorySpecifier(url: fooPin.package.path)]!
             let revision = try fooRepo.resolveRevision(tag: "1.0.0")
             let newState = CheckoutState(revision: revision, version: "1.0.0")
 
-            pinsStore.pin(packageRef: fooPin.packageRef, state: newState)
+            pinsStore.pin(package: fooPin.package, state: newState)
             try pinsStore.saveState()
         }
 
@@ -3797,7 +3799,7 @@ final class WorkspaceTests: XCTestCase {
         )
 
         XCTAssertEqual(manifest.name, "SwiftPM")
-        XCTAssertEqual(loadedPackage.name, "SwiftPM")
+        XCTAssertEqual(loadedPackage.identity.description, "SwiftPM")
         XCTAssert(graph.reachableProducts.contains(where: { $0.name == "SwiftPM" }))
     }
 
@@ -4365,7 +4367,7 @@ final class WorkspaceTests: XCTestCase {
             managedDependencies: [],
             managedArtifacts: [
                 ManagedArtifact(
-                    packageRef: aRef,
+                    package: aRef,
                     targetName: "A1",
                     source: .remote(
                         url: "https://a.com/a1.zip",
@@ -4374,7 +4376,7 @@ final class WorkspaceTests: XCTestCase {
                     )
                 ),
                 ManagedArtifact(
-                    packageRef: aRef,
+                    package: aRef,
                     targetName: "A3",
                     source: .remote(
                         url: "https://a.com/old/a3.zip",
@@ -4383,7 +4385,7 @@ final class WorkspaceTests: XCTestCase {
                     )
                 ),
                 ManagedArtifact(
-                    packageRef: aRef,
+                    package: aRef,
                     targetName: "A4",
                     source: .remote(
                         url: "https://a.com/a4.zip",
@@ -4392,7 +4394,7 @@ final class WorkspaceTests: XCTestCase {
                     )
                 ),
                 ManagedArtifact(
-                    packageRef: aRef,
+                    package: aRef,
                     targetName: "A5",
                     source: .remote(
                         url: "https://a.com/a5.zip",
@@ -4401,7 +4403,7 @@ final class WorkspaceTests: XCTestCase {
                     )
                 ),
                 ManagedArtifact(
-                    packageRef: aRef,
+                    package: aRef,
                     targetName: "A6",
                     source: .local(path: "A6.xcframework")
                 ),
@@ -4621,14 +4623,14 @@ final class WorkspaceTests: XCTestCase {
         let aRepo = workspace.repoProvider.specifierMap[RepositorySpecifier(url: aURL)]!
         let aRevision = try aRepo.resolveRevision(tag: "1.0.0")
         let aState = CheckoutState(revision: aRevision, version: "1.0.0")
-        let aDependency = ManagedDependency(packageRef: aRef, subpath: RelativePath("A"), checkoutState: aState)
+        let aDependency = ManagedDependency(package: aRef, subpath: RelativePath("A"), checkoutState: aState)
 
         try workspace.set(
             pins: [aRef: aState],
             managedDependencies: [aDependency],
             managedArtifacts: [
                 ManagedArtifact(
-                    packageRef: aRef,
+                    package: aRef,
                     targetName: "A",
                     source: .remote(
                         url: "https://a.com/a.zip",
@@ -4668,7 +4670,7 @@ final class WorkspaceTests: XCTestCase {
 extension PackageGraph {
     /// Finds the package matching the given name.
     func lookup(_ name: String) -> ResolvedPackage {
-        return packages.first { $0.name == name }!
+        return packages.first { $0.identity.description == name }!
     }
 }
 

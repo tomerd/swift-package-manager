@@ -351,7 +351,12 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
                     bytes: bogusManifest)
             }
             // Check we can load the repository.
-            let manifest = try manifestLoader.load(package: root, baseURL: "/foo", toolsVersion: .v4_2, packageKind: .root, fileSystem: fs)
+            let manifest = try manifestLoader.load(
+                packageKind: .root,
+                at: root,
+                //baseURL: "/foo",
+                toolsVersion: .v4_2,
+                fileSystem: fs)
             XCTAssertEqual(manifest.name, "Trivial")
         }
     }
@@ -470,10 +475,10 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             func check(loader: ManifestLoader, expectCached: Bool) {
                 delegate.clear()
                 let manifest = try! loader.load(
-                    package: manifestPath.parentDirectory,
-                    baseURL: manifestPath.pathString,
-                    toolsVersion: .v4_2,
-                    packageKind: .local
+                    packageKind: .local,
+                    at: manifestPath.parentDirectory,
+                    //baseURL: manifestPath.pathString,
+                    toolsVersion: .v4_2
                 )
 
                 XCTAssertEqual(delegate.loaded, [manifestPath])
@@ -526,10 +531,10 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             func check(loader: ManifestLoader, expectCached: Bool) {
                 delegate.clear()
                 let manifest = try! loader.load(
-                    package: manifestPath.parentDirectory,
-                    baseURL: manifestPath.pathString,
-                    toolsVersion: .v4_2,
-                    packageKind: .local
+                    packageKind: .local,
+                    at: manifestPath.parentDirectory,
+                    //baseURL: manifestPath.pathString,
+                    toolsVersion: .v4_2
                 )
 
                 XCTAssertEqual(delegate.loaded, [manifestPath])
@@ -602,10 +607,10 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
                 try fs.writeFileContents(manifestPath, bytes: stream.bytes)
 
                 let m = try manifestLoader.load(
-                    package: AbsolutePath.root,
-                    baseURL: "/foo",
-                    toolsVersion: .v4_2,
                     packageKind: .root,
+                    at: AbsolutePath.root,
+                    //baseURL: "/foo",
+                    toolsVersion: .v4_2,
                     fileSystem: fs)
 
                 XCTAssertEqual(m.name, "Trivial")
@@ -667,10 +672,10 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
 
         do {
             _ = try loadManifest(
-                stream.bytes,
-                toolsVersion: toolsVersion,
+                contents: stream.bytes,
                 packageKind: .remote,
-                diagnostics: nil
+                toolsVersion: toolsVersion,
+                diagnostics: DiagnosticsEngine() // FIXME
             )
 
             XCTFail("Unexpected success")
@@ -701,12 +706,15 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             let manifestLoader = ManifestLoader(manifestResources: Resources.default, cacheDir: path, useInMemoryCache: true, delegate: delegate)
 
             let sync = DispatchGroup()
-            for _ in 0 ..< 1000 {
+            for index in 0 ..< 1000 {
                 sync.enter()
-                manifestLoader.load(package: manifestPath.parentDirectory,
-                                    baseURL: manifestPath.pathString,
-                                    toolsVersion: .v4_2,
+                manifestLoader.load(packageIdentity: .init("\(index)"),
                                     packageKind: .local,
+                                    at: manifestPath.parentDirectory,
+                                    //baseURL: manifestPath.pathString,
+                                    toolsVersion: .v4_2,
+                                    fileSystem: localFileSystem,
+                                    diagnostics: DiagnosticsEngine(), // FIXME
                                     on: .global()) { result in
                     defer { sync.leave() }
 

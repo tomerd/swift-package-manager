@@ -86,7 +86,8 @@ public final class SchemesGenerator {
             }
         })
         schemes.append(Scheme(
-            name: rootPackage.name + "-Package",
+            // FIXME: make sure this correct
+            name: rootPackage.identity.mangledToC99ExtendedIdentifier + "-Package",
             regularTargets: regularTargets,
             testTargets: rootPackage.targets.filter({ $0.type == .test })
         ))

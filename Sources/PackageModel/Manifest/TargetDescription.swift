@@ -23,15 +23,21 @@ public struct TargetDescription: Equatable, Codable {
     /// Represents a target's dependency on another entity.
     public enum Dependency: Equatable {
         case target(name: String, condition: PackageConditionDescription?)
-        case product(name: String, package: String?, condition: PackageConditionDescription?)
+        case product(name: String, packageIdentity: PackageIdentity2?, condition: PackageConditionDescription?)
         case byName(name: String, condition: PackageConditionDescription?)
 
         public static func target(name: String) -> Dependency {
             return .target(name: name, condition: nil)
         }
 
-        public static func product(name: String, package: String? = nil) -> Dependency {
-            return .product(name: name, package: package, condition: nil)
+        public static func product(name: String, packageIdentity: PackageIdentity2? = nil) -> Dependency {
+            return .product(name: name, packageIdentity: packageIdentity, condition: nil)
+        }
+
+        // FIXME: remove - for tests
+        @available(*, deprecated)
+        public static func product(name: String, package: String? = nil, condition: PackageConditionDescription? = nil) -> Dependency {
+            return .product(name: name, packageIdentity: package.map(PackageIdentity2.init), condition: condition)
         }
     }
 
@@ -212,7 +218,7 @@ extension TargetDescription.Dependency: Codable {
             let a1 = try unkeyedValues.decode(String.self)
             let a2 = try unkeyedValues.decodeIfPresent(String.self)
             let a3 = try unkeyedValues.decodeIfPresent(PackageConditionDescription.self)
-            self = .product(name: a1, package: a2, condition: a3)
+            self = .product(name: a1, packageIdentity: a2.map(PackageIdentity2.init), condition: a3)
         case .byName:
             var unkeyedValues = try values.nestedUnkeyedContainer(forKey: key)
             let a1 = try unkeyedValues.decode(String.self)

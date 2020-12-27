@@ -35,8 +35,8 @@ import struct TSCUtility.Version
 /// later.
 public protocol PackageContainer {
 
-    /// The identifier for the package.
-    var identifier: PackageReference { get }
+    /// The underlying  package reference.
+    var package: PackageReference { get }
 
     /// Returns true if the tools version is compatible at the given version.
     func isToolsVersionCompatible(at version: Version) -> Bool
@@ -114,9 +114,7 @@ extension PackageContainer {
 
 /// An individual constraint onto a container.
 public struct PackageContainerConstraint: Equatable, Hashable {
-
-    /// The identifier for the container the constraint is on.
-    public let identifier: PackageReference
+    public let package: PackageReference
 
     /// The constraint requirement.
     public let requirement: PackageRequirement
@@ -126,22 +124,36 @@ public struct PackageContainerConstraint: Equatable, Hashable {
 
     /// Create a constraint requiring the given `container` satisfying the
     /// `requirement`.
+    @available(*, deprecated)
     public init(container identifier: PackageReference, requirement: PackageRequirement, products: ProductFilter) {
-        self.identifier = identifier
+        self.package = identifier
         self.requirement = requirement
         self.products = products
     }
 
     /// Create a constraint requiring the given `container` satisfying the
     /// `versionRequirement`.
+    @available(*, deprecated)
     public init(container identifier: PackageReference, versionRequirement: VersionSetSpecifier, products: ProductFilter) {
         self.init(container: identifier, requirement: .versionSet(versionRequirement), products: products)
+    }
+
+    /// Create a constraint requiring the given `container` satisfying the  `requirement`.
+    public init(package: PackageReference, requirement: PackageRequirement, products: ProductFilter) {
+        self.package = package
+        self.requirement = requirement
+        self.products = products
+    }
+
+    /// Create a constraint requiring the given `container` satisfying the `versionRequirement`.
+    public init(package: PackageReference, versionRequirement: VersionSetSpecifier, products: ProductFilter) {
+        self.init(package: package, requirement: .versionSet(versionRequirement), products: products)
     }
 }
 
 extension PackageContainerConstraint: CustomStringConvertible {
     public var description: String {
-        return "Constraint(\(identifier), \(requirement), \(products)"
+        return "Constraint(\(self.package), \(self.requirement), \(self.products)"
     }
 }
 
