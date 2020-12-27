@@ -852,8 +852,8 @@ final class WorkspaceTests: XCTestCase {
 
         let bRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "B"))
         let cRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "C"))
-        let bRef = PackageReference(identity: PackageIdentity(url: bRepo.url), path: bRepo.url)
-        let cRef = PackageReference(identity: PackageIdentity(url: cRepo.url), path: cRepo.url)
+        let bRef = PackageReference.remote(identity: PackageIdentity(url: bRepo.url), url: bRepo.url)
+        let cRef = PackageReference.remote(identity: PackageIdentity(url: cRepo.url), url: cRepo.url)
 
         try workspace.set(
             pins: [bRef: v1_5, cRef: v2],
@@ -908,8 +908,8 @@ final class WorkspaceTests: XCTestCase {
 
         let bRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "B"))
         let cRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "C"))
-        let bRef = PackageReference(identity: PackageIdentity(url: bRepo.url), path: bRepo.url)
-        let cRef = PackageReference(identity: PackageIdentity(url: cRepo.url), path: cRepo.url)
+        let bRef = PackageReference.remote(identity: PackageIdentity(url: bRepo.url), url: bRepo.url)
+        let cRef = PackageReference.remote(identity: PackageIdentity(url: cRepo.url), url: cRepo.url)
 
         try workspace.set(
             pins: [bRef: v1],
@@ -965,8 +965,8 @@ final class WorkspaceTests: XCTestCase {
 
         let bRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "B"))
         let cRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "C"))
-        let bRef = PackageReference(identity: PackageIdentity(url: bRepo.url), path: bRepo.url)
-        let cRef = PackageReference(identity: PackageIdentity(url: cRepo.url), path: cRepo.url)
+        let bRef = PackageReference.remote(identity: PackageIdentity(url: bRepo.url), url: bRepo.url)
+        let cRef = PackageReference.remote(identity: PackageIdentity(url: cRepo.url), url: cRepo.url)
 
         try workspace.set(
             pins: [bRef: v1_5, cRef: v1_5],
@@ -1016,7 +1016,7 @@ final class WorkspaceTests: XCTestCase {
         )
 
         let cRepo = RepositorySpecifier(url: testWorkspace.urlForPackage(withName: "C"))
-        let cRef = PackageReference(identity: PackageIdentity(url: cRepo.url), path: cRepo.url)
+        let cRef = PackageReference.remote(identity: PackageIdentity(url: cRepo.url), url: cRepo.url)
 
         try testWorkspace.set(
             pins: [cRef: v1_5],
@@ -1075,8 +1075,8 @@ final class WorkspaceTests: XCTestCase {
 
         let bRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "B"))
         let cRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "C"))
-        let bRef = PackageReference(identity: PackageIdentity(url: bRepo.url), path: bRepo.url)
-        let cRef = PackageReference(identity: PackageIdentity(url: cRepo.url), path: cRepo.url)
+        let bRef = PackageReference.remote(identity: PackageIdentity(url: bRepo.url), url: bRepo.url)
+        let cRef = PackageReference.remote(identity: PackageIdentity(url: cRepo.url), url: cRepo.url)
 
         try workspace.set(
             pins: [bRef: v1_5],
@@ -1137,8 +1137,8 @@ final class WorkspaceTests: XCTestCase {
 
         let bRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "B"))
         let cRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "C"))
-        let bRef = PackageReference(identity: PackageIdentity(url: bRepo.url), path: bRepo.url)
-        let cRef = PackageReference(identity: PackageIdentity(url: cRepo.url), path: cRepo.url)
+        let bRef = PackageReference.remote(identity: PackageIdentity(url: bRepo.url), url: bRepo.url)
+        let cRef = PackageReference.remote(identity: PackageIdentity(url: cRepo.url), url: cRepo.url)
 
         try workspace.set(
             pins: [bRef: v1_5, cRef: v1_5],
@@ -1200,8 +1200,8 @@ final class WorkspaceTests: XCTestCase {
 
         let bRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "B"))
         let cRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "C"))
-        let bRef = PackageReference(identity: PackageIdentity(url: bRepo.url), path: bRepo.url)
-        let cRef = PackageReference(identity: PackageIdentity(url: cRepo.url), path: cRepo.url)
+        let bRef = PackageReference.remote(identity: PackageIdentity(url: bRepo.url), url: bRepo.url)
+        let cRef = PackageReference.remote(identity: PackageIdentity(url: cRepo.url), url: cRepo.url)
 
         try workspace.set(
             pins: [bRef: v1_5, cRef: master],
@@ -1262,8 +1262,8 @@ final class WorkspaceTests: XCTestCase {
 
         let bRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "B"))
         let cRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "C"))
-        let bRef = PackageReference(identity: PackageIdentity(url: bRepo.url), path: bRepo.url)
-        let cRef = PackageReference(identity: PackageIdentity(url: cRepo.url), path: cRepo.url)
+        let bRef = PackageReference.remote(identity: PackageIdentity(url: bRepo.url), url: bRepo.url)
+        let cRef = PackageReference.remote(identity: PackageIdentity(url: cRepo.url), url: cRepo.url)
 
         try workspace.set(
             pins: [bRef: v1_5, cRef: v1_5],
@@ -1321,8 +1321,8 @@ final class WorkspaceTests: XCTestCase {
 
         let bRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "B"))
         let cRepo = RepositorySpecifier(url: workspace.urlForPackage(withName: "C"))
-        let bRef = PackageReference(identity: PackageIdentity(url: bRepo.url), path: bRepo.url)
-        let cRef = PackageReference(identity: PackageIdentity(url: cRepo.url), path: cRepo.url)
+        let bRef = PackageReference.remote(identity: PackageIdentity(url: bRepo.url), url: bRepo.url)
+        let cRef = PackageReference.remote(identity: PackageIdentity(url: cRepo.url), url: cRepo.url)
 
         try workspace.set(
             pins: [bRef: v1_5, cRef: v2],
@@ -1532,7 +1532,7 @@ final class WorkspaceTests: XCTestCase {
 
             let path = AbsolutePath("/tmp/ws/pkgs/Foo")
             let expectedChange = (
-                PackageReference(identity: PackageIdentity(path: path), path: path.pathString),
+                PackageReference.local(identity: PackageIdentity(path: path), path: path),
                 stateChange
             )
             guard let change = changes?.first, changes?.count == 1 else {
@@ -1998,7 +1998,7 @@ final class WorkspaceTests: XCTestCase {
         // Check failure.
         workspace.checkResolve(pkg: "Foo", roots: ["Root"], version: "1.3.0") { diagnostics in
             DiagnosticsEngineTester(diagnostics) { result in
-                result.check(diagnostic: .contains("'Foo' 1.3.0"), behavior: .error)
+                result.check(diagnostic: .contains("'foo' 1.3.0"), behavior: .error)
             }
         }
         workspace.checkManagedDependencies { result in
@@ -2050,7 +2050,7 @@ final class WorkspaceTests: XCTestCase {
                 result.check(packages: "Foo", "Root")
             }
             DiagnosticsEngineTester(diagnostics) { result in
-                result.check(diagnostic: .contains("dependency 'Foo' is missing; cloning again"), behavior: .warning)
+                result.check(diagnostic: .contains("dependency 'foo' is missing; cloning again"), behavior: .warning)
             }
         }
     }
@@ -2212,7 +2212,7 @@ final class WorkspaceTests: XCTestCase {
         }
 
         // Edit foo.
-        let fooPath = workspace.createWorkspace().editablesPath.appending(component: "Foo")
+        let fooPath = workspace.createWorkspace().editablesPath.appending(component: "foo")
         workspace.checkEdit(packageName: "Foo") { diagnostics in
             XCTAssertNoDiagnostics(diagnostics)
         }
@@ -2230,7 +2230,7 @@ final class WorkspaceTests: XCTestCase {
         // Try re-editing foo.
         workspace.checkEdit(packageName: "Foo") { diagnostics in
             DiagnosticsEngineTester(diagnostics) { result in
-                result.check(diagnostic: .equal("dependency 'Foo' already in edit mode"), behavior: .error)
+                result.check(diagnostic: .equal("dependency 'foo' already in edit mode"), behavior: .error)
             }
         }
         workspace.checkManagedDependencies { result in
@@ -2375,7 +2375,7 @@ final class WorkspaceTests: XCTestCase {
         }
 
         // There should still be an entry for `foo`, which we can unedit.
-        let editedDependency = ws.state.dependencies[forNameOrIdentity: "foo"]!
+        let editedDependency = ws.state.dependencies[forIdentity: PackageIdentity(name: "foo")]!
         XCTAssertNil(editedDependency.basedOn)
         workspace.checkManagedDependencies { result in
             result.check(dependency: "foo", at: .edited(nil))
@@ -2743,7 +2743,7 @@ final class WorkspaceTests: XCTestCase {
         ]
         workspace.checkPackageGraph(roots: ["Root"], deps: deps) { _, diagnostics in
             DiagnosticsEngineTester(diagnostics) { result in
-                result.check(diagnostic: .contains("'Bar' 1.1.0"), behavior: .error)
+                result.check(diagnostic: .contains("'bar' 1.1.0"), behavior: .error)
             }
         }
     }
@@ -2865,12 +2865,12 @@ final class WorkspaceTests: XCTestCase {
         // Test that its not possible to edit or resolve this package.
         workspace.checkEdit(packageName: "Bar") { diagnostics in
             DiagnosticsEngineTester(diagnostics) { result in
-                result.check(diagnostic: .contains("local dependency 'Bar' can't be edited"), behavior: .error)
+                result.check(diagnostic: .contains("local dependency 'bar' can't be edited"), behavior: .error)
             }
         }
         workspace.checkResolve(pkg: "Bar", roots: ["Foo"], version: "1.0.0") { diagnostics in
             DiagnosticsEngineTester(diagnostics) { result in
-                result.check(diagnostic: .contains("local dependency 'Bar' can't be edited"), behavior: .error)
+                result.check(diagnostic: .contains("local dependency 'bar' can't be edited"), behavior: .error)
             }
         }
     }
@@ -3303,7 +3303,7 @@ final class WorkspaceTests: XCTestCase {
         }
         do {
             let ws = workspace.createWorkspace()
-            XCTAssertNotNil(ws.state.dependencies[forURL: "/tmp/ws/pkgs/Foo"])
+            XCTAssertNotNil(ws.state.dependencies[forIdentity: PackageIdentity(path: AbsolutePath("/tmp/ws/pkgs/Foo"))])
         }
 
         deps = [
@@ -3317,7 +3317,7 @@ final class WorkspaceTests: XCTestCase {
         }
         do {
             let ws = workspace.createWorkspace()
-            XCTAssertNotNil(ws.state.dependencies[forURL: "/tmp/ws/pkgs/Nested/Foo"])
+            XCTAssertNotNil(ws.state.dependencies[forIdentity: PackageIdentity(path: AbsolutePath("/tmp/ws/pkgs/Nested/Foo"))])
         }
     }
 
@@ -3585,7 +3585,7 @@ final class WorkspaceTests: XCTestCase {
 
         do {
             let ws = workspace.createWorkspace()
-            XCTAssertNotNil(ws.state.dependencies[forURL: "/tmp/ws/pkgs/Foo"])
+            XCTAssertNotNil(ws.state.dependencies[forIdentity: PackageIdentity(path: AbsolutePath("/tmp/ws/pkgs/Foo"))])
         }
 
         workspace.checkReset { diagnostics in
@@ -3609,7 +3609,7 @@ final class WorkspaceTests: XCTestCase {
 
         do {
             let ws = workspace.createWorkspace()
-            XCTAssertNotNil(ws.state.dependencies[forURL: "/tmp/ws/pkgs/Nested/Foo"])
+            XCTAssertNotNil(ws.state.dependencies[forIdentity: PackageIdentity(path: AbsolutePath("/tmp/ws/pkgs/Nested/Foo"))])
         }
     }
 
@@ -3849,7 +3849,7 @@ final class WorkspaceTests: XCTestCase {
 
         workspace.checkPackageGraph(roots: ["Root"]) { _, diagnostics in
             DiagnosticsEngineTester(diagnostics) { result in
-                result.check(diagnostic: .equal("package 'Foo' is required using a revision-based requirement and it depends on local package 'Local', which is not supported"), behavior: .error)
+                result.check(diagnostic: .equal("package 'foo' is required using a revision-based requirement and it depends on local package 'local', which is not supported"), behavior: .error)
             }
         }
     }
@@ -4036,7 +4036,7 @@ final class WorkspaceTests: XCTestCase {
         }
 
         // Edit foo.
-        let fooPath = workspace.createWorkspace().editablesPath.appending(component: "Foo")
+        let fooPath = workspace.createWorkspace().editablesPath.appending(component: "foo")
         workspace.checkEdit(packageName: "Foo") { diagnostics in
             XCTAssertNoDiagnostics(diagnostics)
         }
@@ -4355,7 +4355,7 @@ final class WorkspaceTests: XCTestCase {
 
         // Pin A to 1.0.0, Checkout B to 1.0.0
         let aURL = workspace.urlForPackage(withName: "A")
-        let aRef = PackageReference(identity: PackageIdentity(url: aURL), path: aURL)
+        let aRef = PackageReference.remote(identity: PackageIdentity(url: aURL), url: aURL)
         let aRepo = workspace.repoProvider.specifierMap[RepositorySpecifier(url: aURL)]!
         let aRevision = try aRepo.resolveRevision(tag: "1.0.0")
         let aState = CheckoutState(revision: aRevision, version: "1.0.0")
@@ -4521,7 +4521,7 @@ final class WorkspaceTests: XCTestCase {
                 }
             }),
             archiver: MockArchiver(extract: { _, destinationPath, completion in
-                XCTAssertEqual(destinationPath, AbsolutePath("/tmp/ws/.build/artifacts/A"))
+                XCTAssertEqual(destinationPath, AbsolutePath("/tmp/ws/.build/artifacts/a"))
                 completion(.failure(DummyError()))
             }),
             roots: [
@@ -4617,7 +4617,7 @@ final class WorkspaceTests: XCTestCase {
 
         // Pin A to 1.0.0, Checkout A to 1.0.0
         let aURL = workspace.urlForPackage(withName: "A")
-        let aRef = PackageReference(identity: PackageIdentity(url: aURL), path: aURL)
+        let aRef = PackageReference.remote(identity: PackageIdentity(url: aURL), url: aURL)
         let aRepo = workspace.repoProvider.specifierMap[RepositorySpecifier(url: aURL)]!
         let aRevision = try aRepo.resolveRevision(tag: "1.0.0")
         let aState = CheckoutState(revision: aRevision, version: "1.0.0")

@@ -49,7 +49,7 @@ public struct PackageGraphRoot {
     public init(input: PackageGraphRootInput, manifests: [Manifest], explicitProduct: String? = nil) {
         self.packageRefs = zip(input.packages, manifests).map { (path, manifest) in
             let identity = PackageIdentity(url: manifest.url)
-            return PackageReference(identity: identity, path: path.pathString, kind: .root)
+            return .root(identity: identity, path: path)
         }
         self.manifests = manifests
 

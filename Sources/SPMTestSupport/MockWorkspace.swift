@@ -383,7 +383,8 @@ public final class MockWorkspace {
         }
 
         public func check(notPresent name: String, file: StaticString = #file, line: UInt = #line) {
-            let dependency = self.managedDependencies[forNameOrIdentity: name]
+            let identity = PackageIdentity(name: name)
+            let dependency = self.managedDependencies[forIdentity: identity]
             XCTAssert(dependency == nil, "Unexpectedly found \(name) in managed dependencies", file: file, line: line)
         }
 
@@ -392,7 +393,8 @@ public final class MockWorkspace {
         }
 
         public func check(dependency name: String, at state: State, file: StaticString = #file, line: UInt = #line) {
-            guard let dependency = managedDependencies[forNameOrIdentity: name] else {
+            let identity = PackageIdentity(name: name)
+            guard let dependency = managedDependencies[forIdentity: identity] else {
                 XCTFail("\(name) does not exists", file: file, line: line)
                 return
             }
@@ -431,7 +433,8 @@ public final class MockWorkspace {
             file: StaticString = #file,
             line: UInt = #line
         ) {
-            let artifact = self.managedArtifacts[packageName: packageName, targetName: targetName]
+            let packageIdentity = PackageIdentity(name: packageName)
+            let artifact = self.managedArtifacts[package: packageIdentity, targetName: targetName]
             XCTAssert(artifact == nil, "Unexpectedly found \(packageName).\(targetName) in managed artifacts", file: file, line: line)
         }
 
@@ -446,7 +449,8 @@ public final class MockWorkspace {
             file: StaticString = #file,
             line: UInt = #line
         ) {
-            guard let artifact = managedArtifacts[packageName: packageName, targetName: targetName] else {
+            let packageIdentity = PackageIdentity(name: packageName)
+            guard let artifact = managedArtifacts[package: packageIdentity, targetName: targetName] else {
                 XCTFail("\(packageName).\(targetName) does not exists", file: file, line: line)
                 return
             }

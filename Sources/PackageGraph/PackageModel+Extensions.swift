@@ -10,6 +10,7 @@
 
 import PackageModel
 import SourceControl
+import TSCBasic
 
 extension PackageDependencyDescription {
     /// Create the package reference object for the dependency.
@@ -25,11 +26,9 @@ extension PackageDependencyDescription {
         //        registries.
         let identity = PackageIdentity(url: effectiveURL)
         
-        return PackageReference(
-            identity: identity,
-            path: effectiveURL,
-            kind: requirement == .localPackage ? .local : .remote
-        )
+        return requirement == .localPackage ?
+            .local(identity: identity, path: AbsolutePath(effectiveURL)) :
+            .remote(identity: identity, url: effectiveURL)
     }
 }
 

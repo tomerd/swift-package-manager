@@ -109,11 +109,7 @@ private struct LocalPackageContainer: PackageContainer {
             return identifier
         } else {
             let identity = PackageIdentity(url: manifest.url)
-            return PackageReference(
-                identity: identity,
-                path: manifest.path.pathString,
-                kind: .root
-            )
+            return .root(identity: identity, path: manifest.path)
         }
     }
 

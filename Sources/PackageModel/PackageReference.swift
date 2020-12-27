@@ -27,41 +27,8 @@ public struct PackageReference: Codable {
         case remote
     }
 
-    /// Compute the default name of a package given its URL.
-    public static func computeDefaultName(fromURL url: String) -> String {
-      #if os(Windows)
-        let isSeparator : (Character) -> Bool = { $0 == "/" || $0 == "\\" }
-      #else
-        let isSeparator : (Character) -> Bool = { $0 == "/" }
-      #endif
-
-        // Get the last path component of the URL.
-        // Drop the last character in case it's a trailing slash.
-        var endIndex = url.endIndex
-        if let lastCharacter = url.last, isSeparator(lastCharacter) {
-            endIndex = url.index(before: endIndex)
-        }
-
-        let separatorIndex = url[..<endIndex].lastIndex(where: isSeparator)
-        let startIndex = separatorIndex.map { url.index(after: $0) } ?? url.startIndex
-        var lastComponent = url[startIndex..<endIndex]
-
-        // Strip `.git` suffix if present.
-        if lastComponent.hasSuffix(".git") {
-            lastComponent = lastComponent.dropLast(4)
-        }
-
-        return String(lastComponent)
-    }
-
     /// The identity of the package.
     public let identity: PackageIdentity
-
-    /// The name of the package, if available.
-    public var name: String {
-        _name ?? Self.computeDefaultName(fromURL: path)
-    }
-    private let _name: String?
 
     /// The path of the package.
     ///
@@ -72,16 +39,27 @@ public struct PackageReference: Codable {
     public let kind: Kind
 
     /// Create a package reference given its identity and repository.
-    public init(identity: PackageIdentity, path: String, name: String? = nil, kind: Kind = .remote) {
-        self._name = name
+    public init(identity: PackageIdentity, kind: Kind, path: String) {
         self.identity = identity
-        self.path = path
         self.kind = kind
+        self.path = path
     }
 
     /// Create a new package reference object with the given name.
     public func with(newName: String) -> PackageReference {
-        return PackageReference(identity: identity, path: path, name: newName, kind: kind)
+        return PackageReference(identity: PackageIdentity(newName), kind: self.kind, path: self.path)
+    }
+
+    public static func root(identity: PackageIdentity, path: AbsolutePath) -> PackageReference {
+        PackageReference(identity: identity, kind: .root, path: path.pathString)
+    }
+
+    public static func local(identity: PackageIdentity, path: AbsolutePath) -> PackageReference {
+        PackageReference(identity: identity, kind: .local, path: path.pathString)
+    }
+
+    public static func remote(identity: PackageIdentity, url: String) -> PackageReference {
+        PackageReference(identity: identity, kind: .remote, path: url)
     }
 }
 
@@ -105,7 +83,7 @@ extension PackageReference: CustomStringConvertible {
 
 extension PackageReference: JSONMappable, JSONSerializable {
     public init(json: JSON) throws {
-        self._name = json.get("name")
+        //self._name = json.get("name")
         self.identity = try json.get("identity")
         self.path = try json.get("path")
 
@@ -119,7 +97,7 @@ extension PackageReference: JSONMappable, JSONSerializable {
 
     public func toJSON() -> JSON {
         return .init([
-            "name": name.toJSON(),
+            //"name": name.toJSON(),
             "identity": identity,
             "path": path,
             "kind": kind.rawValue,

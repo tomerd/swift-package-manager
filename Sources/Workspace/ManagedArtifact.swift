@@ -96,7 +96,7 @@ extension ManagedArtifact: JSONMappable, JSONSerializable, CustomStringConvertib
     }
 
     public var description: String {
-        return "<ManagedArtifact: \(packageRef.name).\(targetName) \(source)>"
+        return "<ManagedArtifact: \(packageRef.identity).\(targetName) \(source)>"
     }
 }
 
@@ -149,30 +149,26 @@ extension ManagedArtifact.Source: JSONMappable, JSONSerializable, CustomStringCo
 public final class ManagedArtifacts {
 
     /// A mapping from package url, to target name, to ManagedArtifact.
-    private var artifactMap: [String: [String: ManagedArtifact]]
+    private var artifactMap: [PackageIdentity: [String: ManagedArtifact]]
 
     private var artifacts: AnyCollection<ManagedArtifact> {
         AnyCollection(artifactMap.values.lazy.flatMap({ $0.values }))
     }
 
-    init(artifactMap: [String: [String: ManagedArtifact]] = [:]) {
+    init(artifactMap: [PackageIdentity: [String: ManagedArtifact]] = [:]) {
         self.artifactMap = artifactMap
     }
 
-    public subscript(packageURL packageURL: String, targetName targetName: String) -> ManagedArtifact? {
-        artifactMap[packageURL]?[targetName]
-    }
-
-    public subscript(packageName packageName: String, targetName targetName: String) -> ManagedArtifact? {
-        artifacts.first(where: { $0.packageRef.name == packageName && $0.targetName == targetName })
+    public subscript(package package: PackageIdentity, targetName targetName: String) -> ManagedArtifact? {
+        artifactMap[package]?[targetName]
     }
 
     public func add(_ artifact: ManagedArtifact) {
-        artifactMap[artifact.packageRef.path, default: [:]][artifact.targetName] = artifact
+        artifactMap[artifact.packageRef.identity, default: [:]][artifact.targetName] = artifact
     }
 
-    public func remove(packageURL: String, targetName: String) {
-        artifactMap[packageURL]?[targetName] = nil
+    public func remove(_ package: PackageIdentity, targetName: String) {
+        artifactMap[package]?[targetName] = nil
     }
 }
 
@@ -201,8 +197,8 @@ extension ManagedArtifacts: Collection {
 extension ManagedArtifacts: JSONMappable, JSONSerializable {
     public convenience init(json: JSON) throws {
         let artifacts = try Array<ManagedArtifact>(json: json)
-        let artifactsByPackagePath = Dictionary(grouping: artifacts, by: { $0.packageRef.path })
-        let artifactMap = artifactsByPackagePath.mapValues({ artifacts in
+        let artifactsByPackageIdentity = Dictionary(grouping: artifacts, by: { $0.packageRef.identity })
+        let artifactMap = artifactsByPackageIdentity.mapValues({ artifacts in
             Dictionary(uniqueKeysWithValues: artifacts.lazy.map({ ($0.targetName, $0) }))
         })
         self.init(artifactMap: artifactMap)

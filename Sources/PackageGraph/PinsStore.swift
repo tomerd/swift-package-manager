@@ -133,18 +133,24 @@ extension PinsStore: JSONSerializable {
 extension PinsStore.Pin: JSONMappable, JSONSerializable {
     /// Create an instance from JSON data.
     public init(json: JSON) throws {
-        let name: String? = json.get("package")
         let url: String = try json.get("repositoryURL")
-        let identity = PackageIdentity(url: url)
-        let ref = PackageReference(identity: identity, path: url)
-        self.packageRef = name.flatMap(ref.with(newName:)) ?? ref
+        // backwards compatibility 12/2020
+        let identity:  PackageIdentity
+        if let id: PackageIdentity = json.get("package") {
+            identity = id
+        } else if let name: String = json.get("package") {
+            identity = PackageIdentity(url: name)
+        } else {
+            identity = PackageIdentity(url: url)
+        }
+        self.packageRef = PackageReference.remote(identity: identity, url: url)
         self.state = try json.get("state")
     }
 
     /// Convert the pin to JSON.
     public func toJSON() -> JSON {
         return .init([
-            "package": packageRef.name.toJSON(),
+            "package": packageRef.identity,
             "repositoryURL": packageRef.path,
             "state": state
         ])
@@ -155,6 +161,6 @@ extension PinsStore.Pin: JSONMappable, JSONSerializable {
 
 extension PinsStore: SimplePersistanceProtocol {
     public func restore(from json: JSON) throws {
-        self.pinsMap = try Dictionary(json.get("pins").map({ ($0.packageRef.identity, $0) }), uniquingKeysWith: { first, _ in throw StringError("duplicated entry for package \"\(first.packageRef.name)\"") })
+        self.pinsMap = try Dictionary(json.get("pins").map({ ($0.packageRef.identity, $0) }), uniquingKeysWith: { first, _ in throw StringError("duplicated entry for package \"\(first.packageRef.identity)\"") })
     }
 }

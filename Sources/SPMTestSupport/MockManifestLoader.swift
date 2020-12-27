@@ -37,7 +37,8 @@ public final class MockManifestLoader: ManifestLoaderProtocol {
         public let version: Version?
 
         public init(url: String, version: Version? = nil) {
-            self.url = url
+            // FIXME: maybe use identity instead?
+            self.url = url.lowercased()
             self.version = version
         }
     }
