@@ -154,8 +154,7 @@ public struct PubgrubDependencyResolver {
     public func solve(constraints: [Constraint]) -> Result<[DependencyResolver.Binding], Error> {
         let root = DependencyResolutionNode.root(package: PackageReference(
             identity: PackageIdentity2("<synthesized-root>"),
-            kind: .root,
-            path: "<synthesized-root-path>"
+            kind: .root(AbsolutePath("<synthesized-root-path>"))
         ))
 
         do {

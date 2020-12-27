@@ -866,7 +866,7 @@ extension Workspace {
         let rootManifests = ThreadSafeKeyValueStore<PackageReference, Manifest>()
         paths.forEach { path in
             sync.enter()
-            let context = ManifestContext(kind: .root, path: path)
+            let context = ManifestContext(kind: .root(path))
             //let url = path.pathString // FIXME: this seems wrong?
             self.loadManifest(context: context, /*url: url,*/ diagnostics: diagnostics) { result in
                 defer { sync.leave() }
@@ -961,7 +961,7 @@ extension Workspace {
         if fileSystem.exists(destination) {
 
             // FIXME: this should not block
-            let context = ManifestContext(identity: packageIdentity, kind: .local, path: destination)
+            let context = ManifestContext(identity: packageIdentity, kind: .local(destination))
             _ = try temp_await {
                 self.loadManifest(context: context,
                                   //url: dependency.package.repository.url,
@@ -1192,8 +1192,8 @@ extension Workspace {
             return self.dependencies.reduce(into: [ManifestContext: Manifest](), { partial, item in
                 // FIXME: assumption about path
                 let context = ManifestContext(identity: item.dependency.package.identity,
-                                              kind: item.dependency.package.kind,
-                                              path: AbsolutePath(item.dependency.package.path))
+                                              kind: item.dependency.package.kind)//,
+                                              //path: AbsolutePath(item.dependency.package.path))
                 partial[context] = item.manifest
             })
         }
@@ -1228,12 +1228,12 @@ extension Workspace {
         }
 
         func computePackageURLs() -> (required: Set<PackageReference>, missing: Set<PackageReference>) {
-            let manifestsMap: [PackageIdentity2: (path: String, kind: PackageReference.Kind,  manifest: Manifest)] = Dictionary(uniqueKeysWithValues:
+            let manifestsMap: [PackageIdentity2: (kind: PackageReference.Kind,  manifest: Manifest)] = Dictionary(uniqueKeysWithValues:
                 //root.manifests.map({ (PackageIdentity(url: $0.url), $0) }) +
                 //dependencies.map({ (PackageIdentity(url: $0.manifest.url), $0.manifest) }))
                 // FIXME identity
-                self.root.packageManifests.map{ ($0.key.identity, ($0.key.path, $0.key.kind, $0.value)) } +
-                self.dependencies.map{ ($0.dependency.package.identity, ($0.dependency.package.path, $0.dependency.package.kind, $0.manifest)) }
+                self.root.packageManifests.map{ ($0.key.identity, ($0.key.kind, $0.value)) } +
+                self.dependencies.map{ ($0.dependency.package.identity, ($0.dependency.package.kind, $0.manifest)) }
             )
 
             var inputIdentities: Set<PackageReference> = []
@@ -1249,7 +1249,7 @@ extension Workspace {
                 //let identity = PackageIdentity(url: url)
                 //let package = PackageReference(identity: identity, path: url)
                 // FIXME: is path correct?
-                let package = PackageReference(identity: dependency.identity, kind: dependency.kind, path: dependency.location)
+                let package = PackageReference(identity: dependency.identity, kind: dependency.kind)
                 inputIdentities.insert(package)
                 return manifestsMap[dependency.identity].map {
                     GraphLoadingNode(package: package, manifest: $0.manifest, productFilter: dependency.productFilter)
@@ -1263,7 +1263,7 @@ extension Workspace {
                     //let identity = PackageIdentity(url: url)
                     //let package = PackageReference(identity: identity, path: url)
                     // FIXME: is path correct?
-                    let package = PackageReference(identity: dependency.identity, kind: dependency.kind, path: dependency.location)
+                    let package = PackageReference(identity: dependency.identity, kind: dependency.kind)
                     requiredIdentities.insert(package)
                     return manifestsMap[dependency.identity].map {
                         GraphLoadingNode(package: package, manifest: $0.manifest, productFilter: dependency.productFilter)
@@ -1302,8 +1302,8 @@ extension Workspace {
                     // We should get the correct one from managed dependency object.
                     let ref = PackageReference(
                         identity: managedDependency.package.identity,
-                        kind: .local,
-                        path: managedDependency.package.path
+                        kind: .local(managedDependency.package.path)//,
+                        //path: managedDependency.package.path
                     )
                     let constraint = PackageContainerConstraint(
                         package: ref,
@@ -1335,8 +1335,8 @@ extension Workspace {
                 // We should get the correct one from managed dependency object.
                 let ref = PackageReference(
                     identity: managedDependency.package.identity,
-                    kind: .local,
-                    path: workspace.path(for: managedDependency).pathString
+                    kind: .local(workspace.path(for: managedDependency))//,
+                    //path: workspace.path(for: managedDependency).pathString
                 )
                 let constraint = PackageContainerConstraint(
                     package: ref,
@@ -1447,7 +1447,7 @@ extension Workspace {
         }
 
         // optimization: preload in parallel
-        let rootDependencyManifestsURLs: [PackageIdentity2: String] = root.dependencies.map{ ($0.identity, $0.url) }.uniqueKeysWithValues()
+        let rootDependencyManifestsURLs: [PackageIdentity2: String] = root.dependencies.map{ ($0.identity, $0.location) }.uniqueKeysWithValues()
         let rootDependencyManifests = try temp_await { self.loadManifests(forURLs: rootDependencyManifestsURLs, diagnostics: diagnostics, completion: $0) }
 
         // TODO: confirm merging logic makes sense
@@ -1455,7 +1455,7 @@ extension Workspace {
 
         // optimization: preload in parallel
         // Map of loaded manifests. We do this to avoid reloading the shared nodes.
-        let inputDependenciesURLs = inputManifests.compactMap { $0.value.dependencies.compactMap{ ($0.identity, $0.url) } }.flatMap { $0 }.uniqueKeysWithValues()
+        let inputDependenciesURLs = inputManifests.compactMap { $0.value.dependencies.compactMap{ ($0.identity, $0.location) } }.flatMap { $0 }.uniqueKeysWithValues()
         // FIXME: this should not block
         var loadedManifests = try temp_await { self.loadManifests(forURLs: inputDependenciesURLs, diagnostics: diagnostics, completion: $0) }.reduce(into: [PackageIdentity2: Manifest]()) { partial, item in
             partial[item.key.identity] = item.value
@@ -1472,7 +1472,7 @@ extension Workspace {
                 //let url = config.mirrors.effectiveURL(forURL: dependency.url)
                 // FIXME: this should not block
                 let identity = dependency.identity
-                let manifest = loadedManifests[dependency.identity] ?? temp_await { self.loadManifest(identity: identity, url: dependency.url, diagnostics: diagnostics, completion: $0) }?.manifest
+                let manifest = loadedManifests[dependency.identity] ?? temp_await { self.loadManifest(identity: identity, url: dependency.location, diagnostics: diagnostics, completion: $0) }?.manifest
                 loadedManifests[identity] = manifest
                 return manifest.flatMap{ KeyedPair(($0, dependency.productFilter), key: IdentityAndFilter(identity: identity, filter: dependency.productFilter)) }
             }

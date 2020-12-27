@@ -326,8 +326,9 @@ public final class PackageBuilder {
         xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion]
             = MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
         diagnostics: DiagnosticsEngine,
-        kind: PackageReference.Kind = .root
+        kind: PackageReference.Kind? = nil
     ) throws -> Package {
+        let kind = kind ?? .root(packagePath)
         return try temp_await {
             Self.loadPackage(packagePath: packagePath,
                              swiftCompiler: swiftCompiler,
@@ -356,10 +357,11 @@ public final class PackageBuilder {
         xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion]
             = MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
         diagnostics: DiagnosticsEngine,
-        kind: PackageReference.Kind = .root,
+        kind: PackageReference.Kind? = nil,
         on queue: DispatchQueue,
         completion: @escaping (Result<Package, Error>) -> Void
     ) {
+        let kind = kind ?? .root(packagePath)
         ManifestLoader.loadManifest(packagePath: packagePath,
                                     swiftCompiler: swiftCompiler,
                                     swiftCompilerFlags: swiftCompilerFlags,
@@ -390,7 +392,7 @@ public final class PackageBuilder {
     ///     - kind: The kind of package.
     public static func loadPackage(
         packageIdentity: PackageIdentity2,
-        packageKind: PackageReference.Kind = .root,
+        packageKind: PackageReference.Kind? = nil,
         packagePath: AbsolutePath,
         swiftCompiler: AbsolutePath,
         swiftCompilerFlags: [String],
@@ -401,6 +403,7 @@ public final class PackageBuilder {
         on queue: DispatchQueue,
         completion: @escaping (Result<Package, Error>) -> Void
     ) {
+        let packageKind = packageKind ?? .root(packagePath)
         ManifestLoader.loadManifest(packageIdentity: packageIdentity,
                                     packageKind: packageKind,
                                     at: packagePath,
@@ -1265,7 +1268,7 @@ public final class PackageBuilder {
 
         // Add implicit executables - for root packages only.
 
-        if self.packageKind == .root {
+        if case .root = self.packageKind {
             // Compute the list of targets which are being used in an
             // executable product so we don't create implicit executables
             // for them.

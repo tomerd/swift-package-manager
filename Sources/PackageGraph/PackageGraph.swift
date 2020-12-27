@@ -234,9 +234,9 @@ fileprivate extension PackageDependencyDescription {
         parameters.append("identity: \"\(identity)\"")
 
         if self.requirement == .localPackage {
-            parameters.append("path: \"\(self.url)\"")
+            parameters.append("path: \"\(self.kind.location)\"")
         } else {
-            parameters.append("url: \"\(self.url)\"")
+            parameters.append("url: \"\(self.kind.location)\"")
 
             switch requirement {
             case .branch(let branch):

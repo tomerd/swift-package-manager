@@ -53,7 +53,7 @@ public struct PackageGraphRoot {
             // FIXME
             //let identity = PackageIdentity(url: manifest.url)
             let identity = PackageIdentity2(path.pathString)
-            return PackageReference(identity: identity, kind: .root, path: path.pathString)
+            return PackageReference.root(identity: identity, path: path)
         }
         self.manifests = manifests
 
@@ -92,20 +92,29 @@ public struct PackageGraphRoot {
 public struct ManifestContext: Hashable {
     public let identity: PackageIdentity2
     public let kind: PackageReference.Kind
-    public let path: AbsolutePath
+    //public let path: AbsolutePath
 
-    public init(identity: PackageIdentity2, kind: PackageReference.Kind, path: AbsolutePath) {
+    public init(identity: PackageIdentity2, kind: PackageReference.Kind/*, path: AbsolutePath*/) {
         self.identity = identity
         self.kind = kind
-        self.path = path
+        //self.path = path
     }
 
-    public init(kind: PackageReference.Kind, path: AbsolutePath) {
+    /*
+    public init(kind: PackageReference.Kind/*, path: AbsolutePath*/) {
         // FIXME
-        assert(kind != .remote)
+        assert(!kind.isRemote())
         self.identity = PackageIdentity2(path.pathString)
         self.kind = kind
-        self.path = path
+        //self.path = path
+    }*/
+
+    public init(package: PackageReference) {
+        // FIXME
+        assert(!package.kind.isRemote())
+        self.identity = package.identity
+        self.kind = package.kind
+        //self.path = path
     }
 
 }

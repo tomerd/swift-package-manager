@@ -35,11 +35,12 @@ struct GitHubPackageMetadataProvider: PackageMetadataProvider {
     }
 
     func get(_ reference: PackageReference, callback: @escaping (Result<Model.PackageBasicMetadata, Error>) -> Void) {
-        guard reference.kind == .remote else {
+        guard case .remote(let url) = reference.kind else {
             return callback(.failure(Errors.invalidReferenceType(reference)))
         }
-        guard let baseURL = self.apiURL(reference.path) else {
-            return callback(.failure(Errors.invalidGitURL(reference.path)))
+        // FIXME
+        guard let baseURL = self.apiURL(url.absoluteString) else {
+            return callback(.failure(Errors.invalidGitURL(url.absoluteString)))
         }
 
         let metadataURL = baseURL

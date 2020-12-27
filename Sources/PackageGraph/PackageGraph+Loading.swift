@@ -63,8 +63,7 @@ extension PackageGraph {
 
         // FIXME: confirm merging logic is correct (prefer root over external)
         var manifestMap = root.packageManifests.reduce(into: [PackageIdentity2: (context: ManifestContext, manifest: Manifest)](), { partial, item in
-            // FIXME assumption about path
-            let context = ManifestContext(identity: item.key.identity, kind: item.key.kind, path: AbsolutePath(item.key.path))
+            let context = ManifestContext(package: item.key)
             partial[item.key.identity] = (context, item.value)
         })
         manifestMap.merge(externalManifests.reduce(into: [PackageIdentity2: (ManifestContext, Manifest)](), { partial, item in
@@ -86,8 +85,7 @@ extension PackageGraph {
             manifestMap[$0.identity]?.manifest
         })
         let rootManifestNodes = root.packageManifests.map { package, manifest -> GraphLoadingNode in
-            // FIXME assumption about path
-            let context = ManifestContext(identity: package.identity, kind: package.kind, path: AbsolutePath(package.path))
+            let context = ManifestContext(package: package)
             return GraphLoadingNode(context: context, manifest: manifest, productFilter: .everything)
         }
         let rootDependencyNodes = root.dependencies.lazy.compactMap { (dependency: PackageDependencyDescription) -> GraphLoadingNode? in
@@ -135,7 +133,8 @@ extension PackageGraph {
             // Derive the path to the package.
             let packagePath = node.path.parentDirectory
 
-            let packageLocation = PackageLocation.Local(name: manifest.name, packagePath: packagePath)
+            // FIXME
+            let packageLocation = PackageLocation.Local(name: node.identity.description, packagePath: packagePath)
             diagnostics.with(location: packageLocation) { diagnostics in
                 diagnostics.wrap {
                     // Create a package from the manifest and sources.
@@ -151,7 +150,7 @@ extension PackageGraph {
                         fileSystem: fileSystem,
                         diagnostics: diagnostics,
                         shouldCreateMultipleTestProducts: shouldCreateMultipleTestProducts,
-                        createREPLProduct: node.kind == .root ? createREPLProduct : false
+                        createREPLProduct: node.kind.isRoot() ? createREPLProduct : false
                     )
                     let package = try builder.construct()
                     manifestToPackage[manifest] = package
@@ -159,7 +158,7 @@ extension PackageGraph {
                     // Throw if any of the non-root package is empty.
                     if package.targets.isEmpty // System packages have targets in the package but not the manifest.
                         && package.manifest.targets.isEmpty // An unneeded dependency will not have loaded anything from the manifest.
-                        && node.kind != .root {
+                        && !node.kind.isRoot() {
                             throw PackageGraphError.noModules(package)
                     }
                 }

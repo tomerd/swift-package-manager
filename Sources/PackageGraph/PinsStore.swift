@@ -146,7 +146,7 @@ extension PinsStore.Pin: JSONMappable, JSONSerializable {
         } else {
             throw InternalError("invalid pins file, unknown package identity")
         }
-        let ref = PackageReference(identity: identity, kind: .remote, path: url)
+        let ref = PackageReference.remote(identity: identity, url: url)
         //self.packageRef = name.flatMap(ref.with(newName:)) ?? ref
         self.package = ref
         self.state = try json.get("state")
@@ -157,7 +157,7 @@ extension PinsStore.Pin: JSONMappable, JSONSerializable {
         return .init([
             "identity": self.package.identity,
             //"package": self.packageRef.name.toJSON(),
-            "repositoryURL": self.package.path,
+            "repositoryURL": self.package.location,
             "state": self.state
         ])
     }

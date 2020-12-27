@@ -31,18 +31,33 @@ public struct GraphLoadingNode: Equatable, Hashable {
     public let productFilter: ProductFilter
 
     public init(context: ManifestContext, manifest: Manifest, productFilter: ProductFilter) {
+        let packagePath: AbsolutePath
+        switch context.kind {
+        case .local(let path),
+             .root(let path):
+            packagePath = path
+        case .remote(let url):
+            fatalError()
+        }
         self.init(identity: context.identity,
                   kind: context.kind,
-                  path: context.path,
+                  path: packagePath,
                   manifest: manifest,
                   productFilter: productFilter)
     }
 
     public init(package: PackageReference, manifest: Manifest, productFilter: ProductFilter) {
+        let packagePath: AbsolutePath
+        switch package.kind {
+        case .local(let path),
+             .root(let path):
+            packagePath = path
+        case .remote(let url):
+            fatalError()
+        }
         self.init(identity: package.identity,
                   kind: package.kind,
-                  // FIXME: this makes assumption about the path
-                  path: AbsolutePath(package.path),
+                  path: packagePath,
                   manifest: manifest,
                   productFilter: productFilter)
     }

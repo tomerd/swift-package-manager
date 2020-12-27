@@ -168,15 +168,16 @@ private struct LocalPackageContainer: PackageContainer {
         if let identifier = dependency?.package {
             return identifier
         } else {
+            return self.package
             //let identity = PackageIdentity(url: manifest.url)
             //let path = manifest.path.pathString
-            let identity = self.package.identity
-            let path =  self.package.path
-            return PackageReference(
-                identity: identity,
-                kind: .root,
-                path: path
-            )
+            //let identity = self.package.identity
+            //let path =  self.package.path
+            //return PackageReference(
+              //  identity: identity,
+                //kind: .root,
+              //  path: path
+            //)
         }
     }
 }

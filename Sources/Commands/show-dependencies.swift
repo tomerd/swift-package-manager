@@ -44,7 +44,7 @@ private final class PlainTextDumper: DependenciesDumper {
 
                 let pkgVersion = package.manifest.version?.description ?? "unspecified"
 
-                stream <<< "\(hanger)\(package.identity)<\(package.manifest.url)@\(pkgVersion)>\n"
+                stream <<< "\(hanger)\(package.identity)<\(package.kind.location)@\(pkgVersion)>\n"
 
                 if !package.dependencies.isEmpty {
                     let replacement = (index == packages.count - 1) ?  "    " : "│   "
@@ -85,7 +85,7 @@ private final class DotDumper: DependenciesDumper {
     func dump(dependenciesOf rootpkg: ResolvedPackage, on stream: OutputByteStream) {
         var nodesAlreadyPrinted: Set<String> = []
         func printNode(_ package: ResolvedPackage) {
-            let url = package.manifest.url
+            let url = package.kind.location
             if nodesAlreadyPrinted.contains(url) { return }
             let pkgVersion = package.manifest.version?.description ?? "unspecified"
             stream <<< #""\#(url)" [label="\#(package.identity)\n\#(url)\n\#(pkgVersion)"]"# <<< "\n"
@@ -100,8 +100,8 @@ private final class DotDumper: DependenciesDumper {
         func recursiveWalk(rootpkg: ResolvedPackage) {
             printNode(rootpkg)
             for dependency in rootpkg.dependencies {
-                let rootURL = rootpkg.manifest.url
-                let dependencyURL = dependency.manifest.url
+                let rootURL = rootpkg.kind.location
+                let dependencyURL = dependency.kind.location
                 let urlPair = DependencyURLs(root: rootURL, dependency: dependencyURL)
                 if dependenciesAlreadyPrinted.contains(urlPair) { continue }
                 
@@ -131,7 +131,7 @@ private final class JSONDumper: DependenciesDumper {
         func convert(_ package: ResolvedPackage) -> JSON {
             return .orderedDictionary([
                 "identity": .string(package.identity.description),
-                "url": .string(package.manifest.url),
+                "url": .string(package.kind.location),
                 "version": .string(package.manifest.version?.description ?? "unspecified"),
                 "path": .string(package.path.pathString),
                 "dependencies": .array(package.dependencies.map(convert)),

@@ -48,18 +48,26 @@ public final class LocalPackageContainer: PackageContainer {
 
     private func loadManifest() throws -> Manifest {
         try manifestCache.memoize() {
+            let manifestPath: AbsolutePath
+            switch self.package.kind {
+            case .local(let path),
+                 .root(let path):
+                manifestPath = path
+            case .remote(let url):
+                throw InternalError("unexpected remote package \(url)")
+            }
             // Load the tools version.
-            let toolsVersion = try toolsVersionLoader.load(at: AbsolutePath(self.package.path), fileSystem: self.fileSystem)
+            let toolsVersion = try toolsVersionLoader.load(at: manifestPath, fileSystem: self.fileSystem)
 
             // Validate the tools version.
-            try toolsVersion.validateToolsVersion(self.currentToolsVersion, packagePath: self.package.path)
+            try toolsVersion.validateToolsVersion(self.currentToolsVersion, packagePath: manifestPath.pathString)
 
             // Load the manifest.
             // FIXME: this should not block
             return try temp_await {
                 manifestLoader.load(packageIdentity: self.package.identity,
                                     packageKind: self.package.kind,
-                                    at: AbsolutePath(self.package.path),
+                                    at: manifestPath,
                                     //baseURL: self.package.path,
                                     version: nil,
                                     toolsVersion: toolsVersion,
@@ -90,7 +98,7 @@ public final class LocalPackageContainer: PackageContainer {
         fileSystem: FileSystem, // = localFileSystem,
         diagnostics: DiagnosticsEngine
     ) {
-        assert(URL.scheme(package.path) == nil, "unexpected scheme \(URL.scheme(package.path)!) in \(package.path)")
+        assert(!package.kind.isRemote(), "unexpected remote package \(package.identity)")
         self.package = package
         //self.mirrors = mirrors
         self.manifestLoader = manifestLoader
@@ -127,6 +135,6 @@ public final class LocalPackageContainer: PackageContainer {
 
 extension LocalPackageContainer: CustomStringConvertible  {
     public var description: String {
-        return "LocalPackageContainer(\(self.package.path))"
+        return "LocalPackageContainer(\(self.package.location))"
     }
 }

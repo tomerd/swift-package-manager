@@ -357,7 +357,7 @@ public class RepositoryPackageContainerProvider: PackageContainerProvider {
         completion: @escaping (Result<PackageContainer, Swift.Error>) -> Void
     ) {
         // If the container is local, just create and return a local package container.
-        if package.kind != .remote {
+        if !package.kind.isRemote(){
             return queue.async {
                 let container = LocalPackageContainer(
                     package: package,

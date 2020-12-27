@@ -220,7 +220,7 @@ final class PackagePIFProjectBuilder: PIFProjectBuilder {
     private var binaryGroup: PIFGroupBuilder!
     private let executableTargetProductMap: [ResolvedTarget: ResolvedProduct]
 
-    var isRootPackage: Bool { package.kind == .root }
+    var isRootPackage: Bool { package.kind.isRoot() }
 
     init(
         package: ResolvedPackage,

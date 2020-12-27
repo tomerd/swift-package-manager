@@ -508,16 +508,17 @@ public final class ManifestLoader: ManifestLoaderProtocol {
                     ))
                 }
 
+                // FIXME
                 let manifest = Manifest(
-                    //name: manifestBuilder.name,
+                    name: packageIdentity.description,
                     defaultLocalization: manifestBuilder.defaultLocalization,
                     platforms: manifestBuilder.platforms,
-                    //path: manifestPath,
+                    path: manifestPath,
                     //url: baseURL,
                     version: version,
                     revision: revision,
                     toolsVersion: toolsVersion,
-                    //packageKind: packageKind,
+                    packageKind: packageKind,
                     pkgConfig: manifestBuilder.pkgConfig,
                     providers: manifestBuilder.providers,
                     cLanguageStandard: manifestBuilder.cLanguageStandard,
@@ -676,7 +677,7 @@ public final class ManifestLoader: ManifestLoaderProtocol {
                     }
                 case .byName(let name, _):
                     // Don't diagnose root manifests so we can emit a better diagnostic during package loading.
-                    if packageKind != .root &&
+                    if !packageKind.isRoot() &&
                        !manifest.targetMap.keys.contains(name) &&
                        manifest.packageDependency(referencedBy: targetDependency) == nil
                     {

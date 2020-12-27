@@ -94,14 +94,12 @@ public final class MockWorkspace {
 
         var manifests: [MockManifestLoader.Key: Manifest] = [:]
 
-        func create(package: MockPackage, basePath: AbsolutePath, packageKind: PackageReference.Kind) throws {
-            let packagePath = basePath.appending(RelativePath(package.path ?? package.name))
-
-            let url = (packageKind == .root ? packagePath : self.packagesDir.appending(RelativePath(package.path ?? package.name))).pathString
+        func create(package: MockPackage, packageKind: PackageReference.Kind) throws {
+            let url = packageKind.location
             let specifier = RepositorySpecifier(url: url)
 
             // Create targets on disk.
-            let repo = self.repoProvider.specifierMap[specifier] ?? InMemoryGitRepository(path: packagePath, fs: self.fs as! InMemoryFileSystem)
+            let repo = self.repoProvider.specifierMap[specifier] ?? InMemoryGitRepository(path: AbsolutePath(package.path!), fs: self.fs as! InMemoryFileSystem)
             let repoSourcesDir = AbsolutePath("/Sources")
             for target in package.targets {
                 let repoTargetDir = repoSourcesDir.appending(component: target.name)
@@ -114,18 +112,23 @@ public final class MockWorkspace {
             try writeToolsVersion(at: .root, version: toolsVersion, fs: repo)
             try repo.commit()
 
-            let versions: [String?] = packageKind == .remote ? package.versions : [nil]
+            let versions: [String?]
+            if case .remote = packageKind {
+                versions = package.versions
+            } else {
+                versions = [nil]
+            }
             //let manifestPath = packagePath.appending(component: Manifest.filename)
             for version in versions {
                 let v = version.flatMap(Version.init(string:))
                 manifests[.init(url: url, version: v)] = Manifest(
-                    //name: package.name,
+                    name: package.name,
                     platforms: package.platforms,
-                    //path: manifestPath,
+                    path: repoManifestPath,
                     //url: url,
                     version: v,
                     toolsVersion: toolsVersion,
-                    //packageKind: packageKind,
+                    packageKind: packageKind,
                     dependencies: package.dependencies.map { $0.convert(baseURL: packagesDir) },
                     products: package.products.map { ProductDescription(name: $0.name, type: .library(.automatic), targets: $0.targets) },
                     targets: package.targets.map { $0.convert() }
@@ -138,14 +141,18 @@ public final class MockWorkspace {
             self.repoProvider.add(specifier: specifier, repository: repo)
         }
 
+
+
         // Create root packages.
         for package in self.roots {
-            try create(package: package, basePath: self.rootsDir, packageKind: .root)
+            let location = self.rootsDir.appending(RelativePath(package.path ?? package.name))
+            try create(package: package, packageKind: .root(location))
         }
 
         // Create dependency packages.
         for package in self.packages {
-            try create(package: package, basePath: self.packagesDir, packageKind: .remote)
+            let location = self.packagesDir.appending(RelativePath(package.path ?? package.name))
+            try create(package: package, packageKind: .local(location))
         }
 
         self.manifestLoader = MockManifestLoader(manifests: manifests)

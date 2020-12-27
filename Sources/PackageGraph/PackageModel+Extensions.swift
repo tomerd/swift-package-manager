@@ -25,11 +25,9 @@ extension PackageDependencyDescription {
         //        registries.
         //let identity = PackageIdentity(url: effectiveURL)
         
-        return PackageReference(
-            identity: self.identity,
-            kind: requirement == .localPackage ? .local : .remote,
-            path: self.url
-        )
+        return requirement == .localPackage ?
+            .local(identity: self.identity, path: self.location) :
+            .remote(identity: self.identity, url: self.location)
     }
 }
 
@@ -71,7 +69,12 @@ extension PackageReference {
     ///
     /// This should only be accessed when the reference is not local.
     public var repository: RepositorySpecifier {
-        precondition(kind == .remote)
-        return RepositorySpecifier(url: self.path)
+        switch self.kind {
+        case .remote(let url):
+            return RepositorySpecifier(url: url.absoluteString)
+        default:
+            // FIXME
+            fatalError()
+        }
     }
 }

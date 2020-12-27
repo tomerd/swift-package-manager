@@ -9,6 +9,7 @@
 */
 
 import TSCBasic
+import struct Foundation.URL
 
 /// Represents a package dependency.
 public struct PackageDependencyDescription: Equatable, Codable {
@@ -52,8 +53,8 @@ public struct PackageDependencyDescription: Equatable, Codable {
     }
 
     /// The url of the package dependency.
-    @available(*, deprecated, message: "use location instead")
-    public let url: String
+    //@available(*, deprecated, message: "use location instead")
+    //public let url: String
 
     public let identity: PackageIdentity2
     public let location: String
@@ -68,12 +69,13 @@ public struct PackageDependencyDescription: Equatable, Codable {
         get {
             switch self.requirement {
             case .localPackage:
-                return .local
+                return .local(AbsolutePath(self.location))
             case .branch,
                  .exact,
                  .range,
                  .revision:
-                return .remote
+                // FIXME
+                return .remote(URL(string: location)!)
             }
         }
     }
@@ -100,12 +102,12 @@ public struct PackageDependencyDescription: Equatable, Codable {
         //self.explicitName = name
         //self.name = name ?? LegacyPackageIdentity.computeDefaultName(fromURL: normalizedURL)
         let name = name ?? LegacyPackageIdentity.computeDefaultName(fromURL: normalizedURL)
-        self.url = normalizedURL
+        //self.url = normalizedURL
         self.requirement = requirement
         self.productFilter = productFilter
         // FIXME
         self.identity = .init(name)
-        self.location = self.url
+        self.location = normalizedURL
     }
 
     public init(
@@ -121,7 +123,7 @@ public struct PackageDependencyDescription: Equatable, Codable {
         // FIXME
         //self.name = identity.description
         //self.explicitName = identity.description
-        self.url = location
+        //self.url = location
     }
 
     /// Returns a new package dependency with the specified products.

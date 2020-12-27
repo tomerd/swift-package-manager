@@ -34,8 +34,8 @@ public final class Manifest: ObjectIdentifierProtocol {
     // to the repository state, it shouldn't matter where it is.
     //
     /// The repository URL the manifest was loaded from.
-    @available(*, deprecated)
-    public let url: String
+    //@available(*, deprecated)
+    //public let url: String
 
     /// The version this package was loaded from, if known.
     public let version: Version?
@@ -99,7 +99,7 @@ public final class Manifest: ObjectIdentifierProtocol {
         defaultLocalization: String? = nil,
         platforms: [PlatformDescription],
         path: AbsolutePath,
-        url: String,
+        //url: String,
         version: TSCUtility.Version? = nil,
         revision: String? = nil,
         toolsVersion: ToolsVersion,
@@ -117,7 +117,7 @@ public final class Manifest: ObjectIdentifierProtocol {
         self.defaultLocalization = defaultLocalization
         self.platforms = platforms
         self.path = path
-        self.url = url
+        //self.url = url
         self.version = version
         self.revision = revision
         self.toolsVersion = toolsVersion
@@ -133,6 +133,7 @@ public final class Manifest: ObjectIdentifierProtocol {
         self.targetMap = Dictionary(targets.lazy.map({ ($0.name, $0) }), uniquingKeysWith: { $1 })
     }
 
+    /*
     public init(
         defaultLocalization: String? = nil,
         platforms: [PlatformDescription],
@@ -167,7 +168,7 @@ public final class Manifest: ObjectIdentifierProtocol {
         self.url = "FIXME"
         self.path = AbsolutePath("/FIXME")
         self.packageKind = .remote
-    }
+    }*/
 
     /// Returns the targets required for a particular product filter.
     public func targetsRequired(for productFilter: ProductFilter) -> [TargetDescription] {
@@ -388,7 +389,7 @@ extension Manifest: CustomStringConvertible {
 
 extension Manifest: Codable {
     private enum CodingKeys: CodingKey {
-         case name, path, url, version, targetMap, toolsVersion,
+         case name, path, version, targetMap, toolsVersion,
               pkgConfig,providers, cLanguageStandard, cxxLanguageStandard, swiftLanguageVersions,
               dependencies, products, targets, platforms, packageKind, revision,
               defaultLocalization
@@ -400,12 +401,12 @@ extension Manifest: Codable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        //try container.encode(name, forKey: .name)
+        try container.encode(name, forKey: .name)
 
         // Hide the keys that users shouldn't see when
         // we're encoding for the dump-package command.
         if encoder.userInfo[Manifest.dumpPackageKey] == nil {
-            //try container.encode(path, forKey: .path)
+            try container.encode(path, forKey: .path)
             //try container.encode(url, forKey: .url)
             try container.encode(version, forKey: .version)
             try container.encode(targetMap, forKey: .targetMap)
@@ -421,6 +422,6 @@ extension Manifest: Codable {
         try container.encode(products, forKey: .products)
         try container.encode(targets, forKey: .targets)
         try container.encode(platforms, forKey: .platforms)
-        //try container.encode(packageKind, forKey: .packageKind)
+        try container.encode(packageKind, forKey: .packageKind)
     }
 }
