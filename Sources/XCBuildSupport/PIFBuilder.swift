@@ -106,7 +106,7 @@ public final class PIFBuilder {
         try memoize(to: &pif) {
             let rootPackage = graph.rootPackages[0]
 
-            let sortedPackages = graph.packages.sorted { $0.name < $1.name }
+            let sortedPackages = graph.packages.sorted { $0.identity < $1.identity }
             var projects: [PIFProjectBuilder] = try sortedPackages.map { package in
                 try PackagePIFProjectBuilder(
                     package: package,
@@ -120,7 +120,8 @@ public final class PIFBuilder {
 
             let workspace = PIF.Workspace(
                 guid: "Workspace:\(rootPackage.path.pathString)",
-                name: rootPackage.name,
+                // FIXME: tomer identity changes
+                name: rootPackage.identity.description,
                 path: rootPackage.path,
                 projects: try projects.map { try $0.construct() }
             )
@@ -239,7 +240,8 @@ final class PackagePIFProjectBuilder: PIFProjectBuilder {
         super.init()
 
         guid = package.pifProjectGUID
-        name = package.name
+        // FIXME: tomer identity changes
+        name = package.identity.description
         path = package.path
         projectDirectory = package.path
         developmentRegion = package.manifest.defaultLocalization ?? "en"
@@ -752,7 +754,8 @@ final class PackagePIFProjectBuilder: PIFProjectBuilder {
             return nil
         }
 
-        let bundleName = "\(package.name)_\(target.name)"
+        // FIXME: tomer identity changes
+        let bundleName = "\(package.identity.description)_\(target.name)"
         let resourcesTarget = addTarget(
             guid: target.pifResourceTargetGUID,
             name: bundleName,
@@ -770,7 +773,8 @@ final class PackagePIFProjectBuilder: PIFProjectBuilder {
         settings[.TARGET_NAME] = bundleName
         settings[.PRODUCT_NAME] = bundleName
         settings[.PRODUCT_MODULE_NAME] = bundleName
-        let bundleIdentifier = "\(package.name).\(target.name).resources".spm_mangledToBundleIdentifier()
+        // FIXME: tomer identity changes
+        let bundleIdentifier = "\(package.identity.description).\(target.name).resources".spm_mangledToBundleIdentifier()
         settings[.PRODUCT_BUNDLE_IDENTIFIER] = bundleIdentifier
         settings[.GENERATE_INFOPLIST_FILE] = "YES"
         settings[.PACKAGE_RESOURCE_TARGET_KIND] = "resource"

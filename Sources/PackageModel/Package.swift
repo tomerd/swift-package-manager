@@ -50,9 +50,11 @@ public final class Package: ObjectIdentifierProtocol, Codable {
     public let path: AbsolutePath
 
     /// The name of the package.
-    public var name: String {
-        return manifest.name
-    }
+    //public var name: String {
+    //    return manifest.name
+    //}
+
+    public let identity: PackageIdentity
 
     /// The targets contained in the package.
     @PolymorphicCodableArray
@@ -72,15 +74,17 @@ public final class Package: ObjectIdentifierProtocol, Codable {
     public let testTargetSearchPath: AbsolutePath
 
     public init(
-        manifest: Manifest,
+        identity: PackageIdentity,
         path: AbsolutePath,
+        manifest: Manifest,
         targets: [Target],
         products: [Product],
         targetSearchPath: AbsolutePath,
         testTargetSearchPath: AbsolutePath
     ) {
-        self.manifest = manifest
+        self.identity = identity
         self.path = path
+        self.manifest = manifest
         self._targets = .init(wrappedValue: targets)
         self.products = products
         self.targetSearchPath = targetSearchPath
@@ -94,7 +98,7 @@ public final class Package: ObjectIdentifierProtocol, Codable {
 
 extension Package: CustomStringConvertible {
     public var description: String {
-        return name
+        return self.identity.description
     }
 }
 

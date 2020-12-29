@@ -228,6 +228,24 @@ public final class ManifestLoader: ManifestLoaderProtocol {
         }
     }
 
+    // FIXME: deprecated 12/2020, remove once clients migrate
+    @available(*, deprecated, message: "use loadManifest(packagePath:packageKind:... instead")
+    public static func loadManifest(
+        packagePath: AbsolutePath,
+        swiftCompiler: AbsolutePath,
+        swiftCompilerFlags: [String],
+        packageKind: PackageReference.Kind,
+        on queue: DispatchQueue,
+        completion: @escaping (Result<Manifest, Error>) -> Void
+    ) {
+        Self.loadManifest(packagePath: packagePath,
+                          packageKind: packageKind,
+                          swiftCompiler: swiftCompiler,
+                          swiftCompilerFlags: swiftCompilerFlags,
+                          on: queue,
+                          completion: completion)
+    }
+
     /// Loads a manifest from a package repository using the resources associated with a particular `swiftc` executable.
     ///
     /// - Parameters:
@@ -237,9 +255,9 @@ public final class ManifestLoader: ManifestLoaderProtocol {
     ///     - kind: The kind of package the manifest is from.
     public static func loadManifest(
         packagePath: AbsolutePath,
+        packageKind: PackageReference.Kind,
         swiftCompiler: AbsolutePath,
         swiftCompilerFlags: [String],
-        packageKind: PackageReference.Kind,
         on queue: DispatchQueue,
         completion: @escaping (Result<Manifest, Error>) -> Void
     ) {
@@ -504,7 +522,7 @@ public final class ManifestLoader: ManifestLoaderProtocol {
         diagnostics: DiagnosticsEngine?
     ) throws {
         let dependenciesByIdentity = Dictionary(grouping: manifest.dependencies, by: { dependency in
-            PackageIdentity(url: dependency.url)
+            PackageIdentity(url: dependency.location)
         })
 
         let duplicateDependencyIdentities = dependenciesByIdentity
@@ -523,14 +541,14 @@ public final class ManifestLoader: ManifestLoaderProtocol {
                 }
                 return dependency
             }
-            let duplicateDependencyNames = manifest.dependencies
+            let duplicateDependencyIdentities = manifest.dependencies
                 .lazy
-                .filter({ !duplicateDependencies.contains($0) })
-                .map({ $0.name })
+                .filter{ !duplicateDependencies.contains($0) }
+                .map{ $0.identity }
                 .spm_findDuplicates()
 
-            for name in duplicateDependencyNames {
-                try diagnostics.emit(.duplicateDependencyName(dependencyName: name))
+            for identity in duplicateDependencyIdentities {
+                try diagnostics.emit(.duplicateDependency(dependency: identity))
             }
         }
     }
@@ -572,10 +590,11 @@ public final class ManifestLoader: ManifestLoaderProtocol {
                     break
                 case .product(_, let packageName, _):
                     if manifest.packageDependency(referencedBy: targetDependency) == nil {
+                        let packageName = packageName ?? "unknown package name"
                         try diagnostics.emit(.unknownTargetPackageDependency(
-                            packageName: packageName ?? "unknown package name",
+                        package: (packageName, PackageIdentity(name: packageName)),
                             targetName: target.name,
-                            validPackages: manifest.dependencies.map { $0.name }
+                            validPackages: manifest.dependencies.map { $0.identity }
                         ))
                     }
                 case .byName(let name, _):
@@ -585,9 +604,9 @@ public final class ManifestLoader: ManifestLoaderProtocol {
                        manifest.packageDependency(referencedBy: targetDependency) == nil
                     {
                         try diagnostics.emit(.unknownTargetDependency(
-                            dependency: name,
+                            dependency: (name, PackageIdentity(name: name)),
                             targetName: target.name,
-                            validDependencies: manifest.dependencies.map { $0.name }
+                            validDependencies: manifest.dependencies.map { $0.identity }
                         ))
                     }
                 }
@@ -1084,16 +1103,16 @@ extension TSCBasic.Diagnostic.Message {
         .error("duplicate dependency '\(dependencyIdentity)'")
     }
 
-    static func duplicateDependencyName(dependencyName: String) -> Self {
-        .error("duplicate dependency named '\(dependencyName)'; consider differentiating them using the 'name' argument")
+    static func duplicateDependency(dependency: PackageIdentity) -> Self {
+        .error("duplicate dependency '\(dependency)'; consider differentiating them using the 'name' argument")
     }
 
-    static func unknownTargetDependency(dependency: String, targetName: String, validDependencies: [String]) -> Self {
-        .error("unknown dependency '\(dependency)' in target '\(targetName)'; valid dependencies are: '\(validDependencies.joined(separator: "', '"))'")
+    static func unknownTargetDependency(dependency: (String, PackageIdentity), targetName: String, validDependencies: [PackageIdentity]) -> Self {
+        .error("unknown dependency '\(dependency)' in target '\(targetName)'; valid dependencies are: '\(validDependencies.map{ $0.description }.joined(separator: "', '"))'")
     }
 
-    static func unknownTargetPackageDependency(packageName: String, targetName: String, validPackages: [String]) -> Self {
-        .error("unknown package '\(packageName)' in dependencies of target '\(targetName)'; valid packages are: '\(validPackages.joined(separator: "', '"))'")
+    static func unknownTargetPackageDependency(package: (String, PackageIdentity), targetName: String, validPackages: [PackageIdentity]) -> Self {
+        .error("unknown package '\(package)' in dependencies of target '\(targetName)'; valid packages are: '\(validPackages.map{ $0.description }.joined(separator: "', '"))'")
     }
 
     static func invalidBinaryLocation(targetName: String) -> Self {

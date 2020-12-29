@@ -76,15 +76,16 @@ class PackageDescription5_2LoadingTests: PackageDescriptionLoadingTests {
 
         loadManifest(stream.bytes) { manifest in
             XCTAssertEqual(manifest.name, "Trivial")
-            XCTAssertEqual(manifest.dependencies[0].name, "Foo")
-            XCTAssertEqual(manifest.dependencies[1].name, "Foo2")
-            XCTAssertEqual(manifest.dependencies[2].name, "Foo3")
-            XCTAssertEqual(manifest.dependencies[3].name, "Foo4")
-            XCTAssertEqual(manifest.dependencies[4].name, "Foo5")
-            XCTAssertEqual(manifest.dependencies[5].name, "bar")
-            XCTAssertEqual(manifest.dependencies[6].name, "Bar2")
-            XCTAssertEqual(manifest.dependencies[7].name, "Baz")
-            XCTAssertEqual(manifest.dependencies[8].name, "swift")
+            // FIXME: tomer identity changes
+            XCTAssertEqual(manifest.dependencies[0].identity.description, "Foo")
+            XCTAssertEqual(manifest.dependencies[1].identity.description, "Foo2")
+            XCTAssertEqual(manifest.dependencies[2].identity.description, "Foo3")
+            XCTAssertEqual(manifest.dependencies[3].identity.description, "Foo4")
+            XCTAssertEqual(manifest.dependencies[4].identity.description, "Foo5")
+            XCTAssertEqual(manifest.dependencies[5].identity.description, "bar")
+            XCTAssertEqual(manifest.dependencies[6].identity.description, "Bar2")
+            XCTAssertEqual(manifest.dependencies[7].identity.description, "Baz")
+            XCTAssertEqual(manifest.dependencies[8].identity.description, "swift")
         }
     }
 
@@ -193,9 +194,9 @@ class PackageDescription5_2LoadingTests: PackageDescriptionLoadingTests {
             """
 
         loadManifest(stream.bytes) { manifest in
-            let dependencies = Dictionary(uniqueKeysWithValues: manifest.dependencies.map({ ($0.name, $0) }))
-            let dependencyFoobar = dependencies["Foobar"]!
-            let dependencyBarfoo = dependencies["Barfoo"]!
+            let dependencies = Dictionary(uniqueKeysWithValues: manifest.dependencies.map({ ($0.identity, $0) }))
+            let dependencyFoobar = dependencies[PackageIdentity(name: "Foobar")]!
+            let dependencyBarfoo = dependencies[PackageIdentity(name: "Barfoo")]!
             let targetFoo = manifest.targetMap["foo"]!
             let targetBar = manifest.targetMap["bar"]!
             XCTAssertEqual(manifest.packageDependency(referencedBy: targetFoo.dependencies[0]), dependencyFoobar)
@@ -204,7 +205,37 @@ class PackageDescription5_2LoadingTests: PackageDescriptionLoadingTests {
         }
     }
 
-    func testDuplicateDependencyNames() {
+    func testDuplicateDependencyWithoutNames() {
+        let stream = BufferedOutputByteStream()
+        stream <<< """
+            import PackageDescription
+            let package = Package(
+                name: "Foo",
+                products: [],
+                dependencies: [
+                    .package(url: "http://localhost/bar", from: "1.0.0"),
+                    .package(url: "http://127.0.0.1/bar"),
+                    .package(url: "http://localhost//biz", from: "1.0.0"),
+                    .package(url: "http://127.0.0.1/biz"),
+                ],
+                targets: [
+                    .target(
+                        name: "Foo",
+                        dependencies: [
+                            .product(name: "Something", package: "Bar"),
+                            .product(name: "Something", package: "Biz"),
+                        ]),
+                ]
+            )
+            """
+
+        XCTAssertManifestLoadThrows(stream.bytes) { _, diagnostics in
+            diagnostics.checkUnordered(diagnostic: "duplicate dependency named 'bar'; consider differentiating them using the 'name' argument", behavior: .error)
+            diagnostics.checkUnordered(diagnostic: "duplicate dependency named 'biz'; consider differentiating them using the 'name' argument", behavior: .error)
+        }
+    }
+
+    func testDuplicateDependencyWithNames() {
         let stream = BufferedOutputByteStream()
         stream <<< """
             import PackageDescription
@@ -229,8 +260,8 @@ class PackageDescription5_2LoadingTests: PackageDescriptionLoadingTests {
             """
 
         XCTAssertManifestLoadThrows(stream.bytes) { _, diagnostics in
-            diagnostics.checkUnordered(diagnostic: "duplicate dependency named 'Bar'; consider differentiating them using the 'name' argument", behavior: .error)
-            diagnostics.checkUnordered(diagnostic: "duplicate dependency named 'Biz'; consider differentiating them using the 'name' argument", behavior: .error)
+            diagnostics.checkUnordered(diagnostic: "duplicate dependency named 'bar'; consider differentiating them using the 'name' argument", behavior: .error)
+            diagnostics.checkUnordered(diagnostic: "duplicate dependency named 'biz'; consider differentiating them using the 'name' argument", behavior: .error)
         }
     }
 

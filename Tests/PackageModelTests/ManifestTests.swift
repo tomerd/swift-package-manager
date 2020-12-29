@@ -95,7 +95,7 @@ class ManifestTests: XCTestCase {
                 targets: targets
             )
 
-            XCTAssertEqual(manifest.dependenciesRequired(for: .everything).map({ $0.name }).sorted(), [
+            XCTAssertEqual(manifest.dependenciesRequired(for: .everything).map({ $0.identity.description }).sorted(), [
                 "Bar1",
                 "Bar2",
                 "Bar3",
@@ -114,7 +114,7 @@ class ManifestTests: XCTestCase {
                 targets: targets
             )
 
-            XCTAssertEqual(manifest.dependenciesRequired(for: .specific(["Foo"])).map({ $0.name }).sorted(), [
+            XCTAssertEqual(manifest.dependenciesRequired(for: .specific(["Foo"])).map({ $0.identity.description }).sorted(), [
                 "Bar1", // Foo → Foo1 → Bar1
                 "Bar2", // Foo → Foo1 → Foo2 → Bar2
                 "Bar3", // Foo → Foo1 → Bar1 → could be from any package due to pre‐5.2 tools version.
@@ -133,7 +133,7 @@ class ManifestTests: XCTestCase {
                 targets: targets
             )
 
-            XCTAssertEqual(manifest.dependenciesRequired(for: .everything).map({ $0.name }).sorted(), [
+            XCTAssertEqual(manifest.dependenciesRequired(for: .everything).map({ $0.identity.description }).sorted(), [
                 "Bar1",
                 "Bar2",
                 "Bar3",

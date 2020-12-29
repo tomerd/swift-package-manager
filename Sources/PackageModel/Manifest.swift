@@ -154,13 +154,13 @@ public final class Manifest: ObjectIdentifierProtocol {
 
     /// Returns the package dependencies required for a particular products filter.
     public func dependenciesRequired(for productFilter: ProductFilter) -> [PackageDependencyDescription] {
-        // If we have already calcualted it, returned the cached value.
-        if let dependencies = _requiredDependencies[productFilter] {
+        // If we have already calculated it, returned the cached value.
+        if let dependencies = self._requiredDependencies[productFilter] {
             return dependencies
         } else {
-            let targets = targetsRequired(for: productFilter)
-            let dependencies = dependenciesRequired(for: targets, keepUnused: productFilter == .everything)
-            _requiredDependencies[productFilter] = dependencies
+            let targets = self.targetsRequired(for: productFilter)
+            let dependencies =  self.dependenciesRequired(for: targets, keepUnused: productFilter == .everything)
+            self._requiredDependencies[productFilter] = dependencies
             return dependencies
         }
     }
@@ -190,17 +190,13 @@ public final class Manifest: ObjectIdentifierProtocol {
     /// Returns the package dependencies required for building the provided targets.
     ///
     /// The returned dependencies have their particular product filters registered. (To determine product filters without removing any dependencies from the list, specify `keepUnused: true`.)
-    public func dependenciesRequired(
-        for targets: [TargetDescription],
-        keepUnused: Bool = false
-    ) -> [PackageDependencyDescription] {
-
-        var registry: (known: [String: ProductFilter], unknown: Set<String>) = ([:], [])
-        let availablePackages = Set(dependencies.lazy.map({ $0.name }))
+    public func dependenciesRequired(for targets: [TargetDescription], keepUnused: Bool = false) -> [PackageDependencyDescription] {
+        var registry: (known: [PackageIdentity: ProductFilter], unknown: Set<String>) = ([:], [])
+        let availablePackages = Set(dependencies.lazy.map({ $0.identity }))
 
         for target in targets {
             for targetDependency in target.dependencies {
-                register(targetDependency: targetDependency, registry: &registry, availablePackages: availablePackages)
+                self.register(targetDependency: targetDependency, registry: &registry, availablePackages: availablePackages)
             }
         }
 
@@ -234,54 +230,52 @@ public final class Manifest: ObjectIdentifierProtocol {
     /// Finds the package dependency referenced by the specified target dependency.
     /// - Returns: Returns `nil` if the dependency is a target dependency, if it is a product dependency but has no
     /// package name (for tools versions less than 5.2), or if there were no dependencies with the provided name.
-    public func packageDependency(
-        referencedBy targetDependency: TargetDescription.Dependency
-    ) -> PackageDependencyDescription? {
-        let packageName: String
+    public func packageDependency(referencedBy targetDependency: TargetDescription.Dependency) -> PackageDependencyDescription? {
+        let packageIdentity: PackageIdentity
 
         switch targetDependency {
         case .product(_, package: let name?, _),
              .byName(name: let name, _):
-            packageName = name
+            packageIdentity = PackageIdentity(name: name)
         default:
             return nil
         }
 
-        return dependencies.first(where: { $0.name == packageName })
+        return self.dependencies.first(where: { $0.identity == packageIdentity })
     }
 
     /// Registers a required product with a particular dependency if possible, or registers it as unknown.
     ///
     /// - Parameters:
     ///   - targetDependency: The target dependency to register.
-    ///   - registry: The registry in which to record the assocation.
+    ///   - registry: The registry in which to record the association.
     ///   - availablePackages: The set of available packages.
     private func register(
         targetDependency: TargetDescription.Dependency,
-        registry: inout (known: [String: ProductFilter], unknown: Set<String>),
-        availablePackages: Set<String>
+        registry: inout (known: [PackageIdentity: ProductFilter], unknown: Set<String>),
+        availablePackages: Set<PackageIdentity>
     ) {
         switch targetDependency {
         case .target:
             break
         case .product(let product, let package, _):
             if let package = package { // ≥ 5.2
-                if !register(
+                if !self.register(
                     product: product,
-                    inPackage: package,
+                    inPackage: PackageIdentity(name: package),
                     registry: &registry.known,
                     availablePackages: availablePackages) {
-                        // This is an invalid manifest condition diagnosed later. (No such package.)
-                        // Treating it as unknown gracefully allows resolution to continue for now.
+                    // This is an invalid manifest condition diagnosed later. (No such package.)
+                    // Treating it as unknown gracefully allows resolution to continue for now.
                     registry.unknown.insert(product)
                 }
             } else { // < 5.2
                 registry.unknown.insert(product)
             }
         case .byName(let product, _):
-            if toolsVersion < .v5_2 {
+            if self.toolsVersion < .v5_2 {
                 // A by‐name entry might be a product from anywhere.
-                if targets.contains(where: { $0.name == product }) {
+                if self.targets.contains(where: { $0.name == product }) {
                     // Save the resolver some effort if it is known to only be a target anyway.
                     break
                 } else {
@@ -289,13 +283,13 @@ public final class Manifest: ObjectIdentifierProtocol {
                 }
             } else { // ≥ 5.2
                 // If a by‐name entry is a product, it must be in a package of the same name.
-                if !register(
+                if !self.register(
                     product: product,
-                    inPackage: product,
+                    inPackage: PackageIdentity(name: product),
                     registry: &registry.known,
                     availablePackages: availablePackages) {
                         // If it doesn’t match a package, it should be a target, not a product.
-                        if targets.contains(where: { $0.name == product }) {
+                        if self.targets.contains(where: { $0.name == product }) {
                             break
                         } else {
                             // But in case the user is trying to reference a product,
@@ -314,15 +308,15 @@ public final class Manifest: ObjectIdentifierProtocol {
     /// - Parameters:
     ///   - product: The product to try registering.
     ///   - package: The package to try associating it with.
-    ///   - registry: The registry in which to record the assocation.
+    ///   - registry: The registry in which to record the association.
     ///   - availablePackages: The set of available packages.
     ///
     /// - Returns: `true` if the particular dependency was found and the product was registered; `false` if no matching dependency was found and the product has not yet been handled.
     private func register(
         product: String,
-        inPackage package: String,
-        registry: inout [String: ProductFilter],
-        availablePackages: Set<String>
+        inPackage package: PackageIdentity,
+        registry: inout [PackageIdentity: ProductFilter],
+        availablePackages: Set<PackageIdentity>
     ) -> Bool {
         if let existing = registry[package] {
             registry[package] = existing.union(.specific([product]))

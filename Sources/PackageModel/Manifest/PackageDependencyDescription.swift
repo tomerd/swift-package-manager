@@ -32,7 +32,7 @@ public struct PackageDependencyDescription: Equatable, Codable {
 
     // FIXME: remove this and use identity instead
     /// The name of the package dependency explicitly defined in the manifest, if any.
-    public let explicitName: String?
+    //public let explicitName: String?
 
     // FIXME: remove this and use identity instead
     /// The name of the package dependency,
@@ -41,10 +41,15 @@ public struct PackageDependencyDescription: Equatable, Codable {
     ///
     /// - SeeAlso: `explicitName`
     /// - SeeAlso: `url`
-    public let name: String
+    //public let name: String
 
-    /// The url of the package dependency.
-    public let url: String
+    /// The identity of the package dependency,
+    /// either explicitly defined in the manifest,
+    /// or derived from the location.
+    public let identity: PackageIdentity
+
+    /// The location of the package dependency.
+    public let location: String
 
     /// The dependency requirement.
     public let requirement: Requirement
@@ -52,34 +57,51 @@ public struct PackageDependencyDescription: Equatable, Codable {
     /// The products requested of the package dependency.
     public let productFilter: ProductFilter
 
-    /// Create a package dependency.
+    // FIXME: remove this / move elsewhere. need a better model for location instead of string URL for both AbsolutePath and URLs
+    // FIXME: SwiftPM can't handle file URLs with file:// scheme so we need to
+    // strip that. We need to design a URL data structure for SwiftPM.
+    /*let filePrefix = "file://"
+    let normalizedLocation: String
+    if location.hasPrefix(filePrefix) {
+        normalizedLocation = AbsolutePath(String(location.dropFirst(filePrefix.count))).pathString
+    } else {
+        normalizedLocation = location
+    }
+    */
+
+    // FIXME: tomer identity changes, used by tests - move there or refactor
+    @available(*, deprecated)
     public init(
         name: String? = nil,
         url: String,
         requirement: Requirement,
         productFilter: ProductFilter = .everything
     ) {
-        // FIXME: remove this / move elsewhere. need a better model for location instead of string URL for both AbsolutePath and URLs
-        // FIXME: SwiftPM can't handle file URLs with file:// scheme so we need to
-        // strip that. We need to design a URL data structure for SwiftPM.
-        let filePrefix = "file://"
-        let normalizedURL: String
-        if url.hasPrefix(filePrefix) {
-            normalizedURL = AbsolutePath(String(url.dropFirst(filePrefix.count))).pathString
-        } else {
-            normalizedURL = url
-        }
+        self.identity = name.map(PackageIdentity.init(name:)) ?? PackageIdentity(url: url)
+        self.location = url
+        self.requirement = requirement
+        self.productFilter = productFilter
+    }
 
-        self.explicitName = name
-        self.name = name ?? LegacyPackageIdentity.computeDefaultName(fromURL: normalizedURL)
-        self.url = normalizedURL
+    /// Create a package dependency.
+    public init(
+        identity: PackageIdentity,
+        location: String,
+        requirement: Requirement,
+        productFilter: ProductFilter = .everything
+    ) {
+        self.identity = identity
+        self.location = location
         self.requirement = requirement
         self.productFilter = productFilter
     }
 
     /// Returns a new package dependency with the specified products.
     public func filtered(by productFilter: ProductFilter) -> PackageDependencyDescription {
-        PackageDependencyDescription(name: explicitName, url: url, requirement: requirement, productFilter: productFilter)
+        PackageDependencyDescription(identity: self.identity,
+                                     location: self.location,
+                                     requirement: self.requirement,
+                                     productFilter: productFilter)
     }
 }
 

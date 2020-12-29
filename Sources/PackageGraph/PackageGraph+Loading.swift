@@ -43,7 +43,7 @@ extension PackageGraph {
         let manifestMap = Dictionary(uniqueKeysWithValues: manifestMapSequence)
         let successors: (GraphLoadingNode) -> [GraphLoadingNode] = { node in
             node.requiredDependencies().compactMap({ dependency in
-                let url = mirrors.effectiveURL(forURL: dependency.url)
+                let url = mirrors.effectiveURL(forURL: dependency.location)
                 return manifestMap[PackageIdentity(url: url)].map { manifest in
                     GraphLoadingNode(manifest: manifest, productFilter: dependency.productFilter)
                 }
@@ -53,11 +53,11 @@ extension PackageGraph {
         // Construct the root manifest and root dependencies set.
         let rootManifestSet = Set(root.manifests)
         let rootDependencies = Set(root.dependencies.compactMap({
-            manifestMap[PackageIdentity(url: $0.url)]
+            manifestMap[PackageIdentity(url: $0.location)]
         }))
         let rootManifestNodes = root.manifests.map { GraphLoadingNode(manifest: $0, productFilter: .everything) }
         let rootDependencyNodes = root.dependencies.lazy.compactMap { (dependency: PackageDependencyDescription) -> GraphLoadingNode? in
-            guard let manifest = manifestMap[PackageIdentity(url: dependency.url)] else { return nil }
+            guard let manifest = manifestMap[PackageIdentity(url: dependency.location)] else { return nil }
             return GraphLoadingNode(manifest: manifest, productFilter: dependency.productFilter)
         }
         let inputManifests = rootManifestNodes + rootDependencyNodes
@@ -97,15 +97,18 @@ extension PackageGraph {
             //
             // FIXME: Lift this out of the manifest.
             let packagePath = manifest.path.parentDirectory
+            // FIXME: tomer identity changes
+            let packageIdentity = PackageIdentity(url: manifest.url)
 
             let packageLocation = PackageLocation.Local(name: manifest.name, packagePath: packagePath)
             diagnostics.with(location: packageLocation) { diagnostics in
                 diagnostics.wrap {
                     // Create a package from the manifest and sources.
                     let builder = PackageBuilder(
+                        identity: packageIdentity,
+                        path: packagePath,
                         manifest: manifest,
                         productFilter: node.productFilter,
-                        path: packagePath,
                         additionalFileRules: additionalFileRules,
                         remoteArtifacts: remoteArtifacts,
                         xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
@@ -179,7 +182,7 @@ private func checkAllDependenciesAreUsed(_ rootPackages: [ResolvedPackage], _ di
 
             let dependencyIsUsed = dependency.products.contains(where: productDependencies.contains)
             if !dependencyIsUsed {
-                diagnostics.emit(.unusedDependency(dependency.name))
+                diagnostics.emit(.unusedDependency(dependency.identity))
             }
         }
     }
@@ -210,11 +213,11 @@ private func createResolvedPackages(
     })
 
     // Create a map of package builders keyed by the package identity.
-    let packageMapByIdentity: [PackageIdentity: ResolvedPackageBuilder] = packageBuilders.spm_createDictionary{
-        let identity = PackageIdentity(url: $0.package.manifest.url)
-        return (identity, $0)
-    }
-    let packageMapByName: [String: ResolvedPackageBuilder] = packageBuilders.spm_createDictionary{ ($0.package.name, $0) }
+    //let packageMapByIdentity: [PackageIdentity: ResolvedPackageBuilder] = packageBuilders.spm_createDictionary{
+    //    let identity = PackageIdentity(url: $0.package.manifest.url)
+    //    return (identity, $0)
+    //}
+    let packageMapByIdentity: [PackageIdentity: ResolvedPackageBuilder] = packageBuilders.spm_createDictionary{ ($0.package.identity, $0) }
 
     // In the first pass, we wire some basic things.
     for packageBuilder in packageBuilders {
@@ -223,13 +226,19 @@ private func createResolvedPackages(
         // Establish the manifest-declared package dependencies.
         packageBuilder.dependencies = package.manifest.dependenciesRequired(for: packageBuilder.productFilter)
             .compactMap { dependency in
+                if let resolvedPackage = packageMapByIdentity[dependency.identity] {
+                    return resolvedPackage
+                }
+                // FIXME: tomer identity changes, check by alternative identity?
+                return nil
+                /*
                 // Use the package name to lookup the dependency. The package name will be present in packages with tools version >= 5.2.
                 if let dependencyName = dependency.explicitName, let resolvedPackage = packageMapByName[dependencyName] {
                     return resolvedPackage
                 }
 
                 // Otherwise, look it up by its identity.
-                let url = mirrors.effectiveURL(forURL: dependency.url)
+                let url = mirrors.effectiveURL(forURL: dependency.location)
                 let resolvedPackage = packageMapByIdentity[PackageIdentity(url: url)]
 
                 // We check that the explicit package dependency name matches the package name.
@@ -241,11 +250,13 @@ private func createResolvedPackages(
                         dependencyName: explicitDependencyName,
                         dependencyURL: dependency.url,
                         packageName: resolvedPackage.package.name)
-                    let diagnosticLocation = PackageLocation.Local(name: package.name, packagePath: package.path)
+                    // FIXME: tomer identity changes
+                    let diagnosticLocation = PackageLocation.Local(name: package.identity.description, packagePath: package.path)
                     diagnostics.emit(error, location: diagnosticLocation)
                 }
 
                 return resolvedPackage
+                */
             }
 
         // Create target builders for each target in the package.
@@ -290,7 +301,7 @@ private func createResolvedPackages(
     for productName in duplicateProducts {
         let packages = packageBuilders
             .filter({ $0.products.contains(where: { $0.product.name == productName }) })
-            .map({ $0.package.name })
+            .map{ $0.package.identity }
             .sorted()
 
         diagnostics.emit(PackageGraphError.duplicateProduct(product: productName, packages: packages))
@@ -312,7 +323,8 @@ private func createResolvedPackages(
         let package = packageBuilder.package
 
         // The diagnostics location for this package.
-        let diagnosticLocation = { PackageLocation.Local(name: package.name, packagePath: package.path) }
+        // FIXME: tomer identity changes
+        let diagnosticLocation = { PackageLocation.Local(name: package.identity.description, packagePath: package.path) }
 
         // Get all implicit system library dependencies in this package.
         let implicitSystemTargetDeps = packageBuilder.dependencies
@@ -354,12 +366,14 @@ private func createResolvedPackages(
                 }
 
                 // If package name is mentioned, ensure it is valid.
-                if let packageName = productRef.package {
+                if let packageIdentity = productRef.package.map(PackageIdentity.init(name:)) {
                     // Find the declared package and check that it contains
                     // the product we found above.
-                    guard let dependencyPackage = packageMapByName[packageName], dependencyPackage.products.contains(product) else {
+                    guard let dependencyPackage = packageMapByIdentity[packageIdentity], dependencyPackage.products.contains(product) else {
                         let error = PackageGraphError.productDependencyIncorrectPackage(
-                            name: productRef.name, package: packageName)
+                            name: productRef.name,
+                            package: packageIdentity
+                        )
                         diagnostics.emit(error, location: diagnosticLocation())
                         continue
                     }
@@ -371,19 +385,20 @@ private func createResolvedPackages(
                     let referencedPackageURL = mirrors.effectiveURL(forURL: product.packageBuilder.package.manifest.url)
                     let referencedPackageIdentity = PackageIdentity(url: referencedPackageURL)
                     guard let packageDependency = (packageBuilder.package.manifest.dependencies.first { package in
-                        let packageURL = mirrors.effectiveURL(forURL: package.url)
+                        let packageURL = mirrors.effectiveURL(forURL: package.location)
                         let packageIdentity = PackageIdentity(url: packageURL)
                         return packageIdentity == referencedPackageIdentity
                     }) else {
                         throw InternalError("dependency reference for \(referencedPackageURL) not found")
                     }
 
-                    let packageName = product.packageBuilder.package.name
-                    if productRef.name != packageDependency.name || packageDependency.name != packageName {
+                    let packageIdentity = product.packageBuilder.package.identity
+                    // FIXME: tomer identity changes comparing to description
+                    if productRef.name != packageDependency.identity.description || packageDependency.identity != packageIdentity {
                         let error = PackageGraphError.productDependencyMissingPackage(
                             productName: productRef.name,
                             targetName: targetBuilder.target.name,
-                            packageName: packageName,
+                            package: packageIdentity,
                             packageDependency: packageDependency
                         )
                         diagnostics.emit(error, location: diagnosticLocation())
@@ -399,12 +414,12 @@ private func createResolvedPackages(
     if foundDuplicateTarget {
         for targetName in allTargetNames.sorted() {
             // Find the packages this target is present in.
-            let packageNames = packageBuilders
+            let packages = packageBuilders
                 .filter({ $0.targets.contains(where: { $0.target.name == targetName }) })
-                .map({ $0.package.name })
+                .map{ $0.package.identity }
                 .sorted()
-            if packageNames.count > 1 {
-                diagnostics.emit(ModuleError.duplicateModule(targetName, packageNames))
+            if packages.count > 1 {
+                diagnostics.emit(ModuleError.duplicateModule(targetName, packages))
             }
         }
     }

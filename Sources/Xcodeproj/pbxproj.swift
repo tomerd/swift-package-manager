@@ -73,8 +73,8 @@ public func xcodeProject(
         guard let manifestLoader = options.manifestLoader else { return }
 
         let pdTarget = project.addTarget(
-            objectID: "\(package.name)::SwiftPMPackageDescription",
-            productType: .framework, name: "\(package.name)PackageDescription")
+            objectID: "\(package.identity.mangledToC99ExtendedIdentifier)::SwiftPMPackageDescription",
+            productType: .framework, name: "\(package.identity.mangledToC99ExtendedIdentifier)PackageDescription")
         let compilePhase = pdTarget.addSourcesBuildPhase()
         compilePhase.addBuildFile(fileRef: manifestFileRef)
 
@@ -335,7 +335,7 @@ public func xcodeProject(
                 continue
             }
             // Construct a group name from the package name and optional version.
-            var groupName = package.name
+            var groupName = package.identity.description
             if let version = package.manifest.version {
                 groupName += " " + version.description
             }
@@ -404,7 +404,7 @@ public func xcodeProject(
         // Create a Xcode target for the target.
         let package = packagesByTarget[target]!
         let xcodeTarget = project.addTarget(
-            objectID: "\(package.name)::\(target.name)",
+            objectID: "\(package.identity.mangledToC99ExtendedIdentifier)::\(target.name)",
             productType: productType, name: target.name)
 
         // Set the product name to the C99-mangled form of the target name.
@@ -518,7 +518,7 @@ public func xcodeProject(
         targetSettings.common.FRAMEWORK_SEARCH_PATHS = ["$(inherited)", "$(PLATFORM_DIR)/Developer/Library/Frameworks"]
 
         // Add a file reference for the target's product.
-        let productRef = productsGroup.addFileReference(path: target.productPath.pathString, pathBase: .buildDir, objectID: "\(package.name)::\(target.name)::Product")
+        let productRef = productsGroup.addFileReference(path: target.productPath.pathString, pathBase: .buildDir, objectID: "\(package.identity.mangledToC99ExtendedIdentifier)::\(target.name)::Product")
 
         // Set that file reference as the target's product reference.
         xcodeTarget.productReference = productRef
@@ -687,7 +687,7 @@ public func xcodeProject(
         // Otherwise, create an aggreate target.
         let package = packagesByProduct[product]!
         let aggregateTarget = project.addTarget(
-            objectID: "\(package.name)::\(product.name)::ProductTarget",
+            objectID: "\(package.identity.mangledToC99ExtendedIdentifier)::\(product.name)::ProductTarget",
             productType: nil, name: product.name)
         // Add dependencies on the targets created for each of the dependencies.
         for target in product.targets {

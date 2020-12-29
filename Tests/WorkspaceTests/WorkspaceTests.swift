@@ -2656,7 +2656,7 @@ final class WorkspaceTests: XCTestCase {
             version: manifest.version,
             toolsVersion: manifest.toolsVersion,
             packageKind: .root,
-            dependencies: [PackageDependencyDescription(url: manifest.dependencies[0].url, requirement: .exact("1.5.0"))],
+            dependencies: [PackageDependencyDescription(url: manifest.dependencies[0].location, requirement: .exact("1.5.0"))],
             targets: manifest.targets
         )
 
@@ -3800,8 +3800,9 @@ final class WorkspaceTests: XCTestCase {
             packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics
         )
 
+        // FIXME tomer identity changes
         XCTAssertEqual(manifest.name, "SwiftPM")
-        XCTAssertEqual(loadedPackage.name, "SwiftPM")
+        XCTAssertEqual(loadedPackage.identity.description, "SwiftPM")
         XCTAssert(graph.reachableProducts.contains(where: { $0.name == "SwiftPM" }))
     }
 
@@ -4671,9 +4672,9 @@ final class WorkspaceTests: XCTestCase {
 
 extension PackageGraph {
     /// Finds the package matching the given name.
-    func lookup(_ name: String) -> ResolvedPackage {
+    /*func lookup(_ name: String) -> ResolvedPackage {
         return packages.first { $0.name == name }!
-    }
+    }*/
 }
 
 struct DummyError: LocalizedError, Equatable {

@@ -10,13 +10,15 @@ See http://swift.org/CONTRIBUTORS.txt for Swift project authors
 
 import class Foundation.ProcessInfo
 
+
 import ArgumentParser
 import Basics
-import TSCBasic
-import SPMBuildCore
 import Build
-import TSCUtility
 import PackageGraph
+import PackageModel
+import SPMBuildCore
+import TSCBasic
+import TSCUtility
 import Workspace
 
 import func TSCLibc.exit
@@ -228,7 +230,9 @@ public struct SwiftTestTool: SwiftCommand {
                 workspace.loadRootManifests(packages: root.packages, diagnostics: swiftTool.diagnostics, completion: $0)                
             }[0]
             let buildParameters = try swiftTool.buildParametersForTest()
-            print(codeCovAsJSONPath(buildParameters: buildParameters, packageName: rootManifest.name))
+            // FIXME: tomer identity changes
+            let packageIdentity = PackageIdentity(name: rootManifest.name)
+            print(codeCovAsJSONPath(buildParameters: buildParameters, package: packageIdentity))
 
         case .generateLinuxMain:
             return // warning emitted by validateArguments
@@ -348,7 +352,7 @@ public struct SwiftTestTool: SwiftCommand {
             // Export the codecov data as JSON.
             let jsonPath = codeCovAsJSONPath(
                 buildParameters: buildParameters,
-                packageName: product.packageName)
+                package: product.package)
             try exportCodeCovAsJSON(to: jsonPath, testBinary: product.binaryPath, swiftTool: swiftTool)
         }
     }
@@ -375,8 +379,8 @@ public struct SwiftTestTool: SwiftCommand {
         try Process.checkNonZeroExit(arguments: args)
     }
 
-    private func codeCovAsJSONPath(buildParameters: BuildParameters, packageName: String) -> AbsolutePath {
-        return buildParameters.codeCovPath.appending(component: packageName + ".json")
+    private func codeCovAsJSONPath(buildParameters: BuildParameters, package: PackageIdentity) -> AbsolutePath {
+        return buildParameters.codeCovPath.appending(component: "\(package).json")
     }
 
     /// Exports profdata as a JSON file.

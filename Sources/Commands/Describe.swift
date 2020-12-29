@@ -55,7 +55,8 @@ fileprivate struct DescribedPackage: Encodable {
     let swiftLanguagesVersions: [String]?
 
     init(from package: Package) {
-        self.name = package.name
+        // FIXME tomer identity changes
+        self.name = package.identity.description
         self.path = package.path.pathString
         self.toolsVersion = "\(package.manifest.toolsVersion.major).\(package.manifest.toolsVersion.minor)"
             + (package.manifest.toolsVersion.patch == 0 ? "" : ".\(package.manifest.toolsVersion.patch)")
@@ -104,9 +105,10 @@ fileprivate struct DescribedPackage: Encodable {
         let url: String?
         let requirement: PackageDependencyDescription.Requirement?
 
+        // FIXME: tomer identity changes
         init(from dependency: PackageDependencyDescription) {
-            self.name = dependency.explicitName
-            self.url = dependency.url
+            self.name = dependency.identity.description
+            self.url = dependency.location
             self.requirement = dependency.requirement
         }
     }

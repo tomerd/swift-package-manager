@@ -289,43 +289,50 @@ extension PackageDependencyDescription.Requirement {
         }
     }
 }
-
+/// This is what called when parsing the manifest
 extension PackageDependencyDescription {
     fileprivate init(v4 json: JSON, toolsVersion: ToolsVersion, baseURL: String, fileSystem: FileSystem) throws {
         let isBaseURLRemote = URL.scheme(baseURL) != nil
 
-        func fixURL(_ url: String, requirement: Requirement) throws -> String {
+        func fixLocation(_ location: String, requirement: Requirement) throws -> String {
             // If base URL is remote (http/ssh), we can't do any "fixing".
             if isBaseURLRemote {
-                return url
+                return location
             }
 
             // If the dependency URL starts with '~/', try to expand it.
-            if url.hasPrefix("~/") {
-                return fileSystem.homeDirectory.appending(RelativePath(String(url.dropFirst(2)))).pathString
+            if location.hasPrefix("~/") {
+                return fileSystem.homeDirectory.appending(RelativePath(String(location.dropFirst(2)))).pathString
             }
 
             // If the dependency URL is not remote, try to "fix" it.
-            if URL.scheme(url) == nil {
+            if URL.scheme(location) == nil {
                 // If the URL has no scheme, we treat it as a path (either absolute or relative to the base URL).
-                return AbsolutePath(url, relativeTo: AbsolutePath(baseURL)).pathString
+                return AbsolutePath(location, relativeTo: AbsolutePath(baseURL)).pathString
             }
 
             if case .localPackage = requirement {
                 do {
-                    return try AbsolutePath(validating: url).pathString
+                    return try AbsolutePath(validating: location).pathString
                 } catch PathValidationError.invalidAbsolutePath(let path) {
                     throw ManifestParseError.invalidManifestFormat("'\(path)' is not a valid path for path-based dependencies; use relative or absolute path instead.", diagnosticFile: nil)
                 }
             }
 
-            return url
+            return location
         }
 
         let requirement = try Requirement(v4: json.get("requirement"))
-        let url = try fixURL(json.get("url"), requirement: requirement)
-        let name: String? = json.get("name")
-        self.init(name: name, url: url, requirement: requirement)
+        let location = try fixLocation(json.get("url"), requirement: requirement)
+
+        let identity: PackageIdentity
+        if let name: String = json.get("name") {
+            identity = PackageIdentity(name: name)
+        } else {
+            identity = PackageIdentity(url: location)
+        }
+
+        self.init(identity: identity, location: location, requirement: requirement)
     }
 }
 

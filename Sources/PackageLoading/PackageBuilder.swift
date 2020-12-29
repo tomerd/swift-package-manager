@@ -25,7 +25,7 @@ public enum ModuleError: Swift.Error {
     }
 
     /// Indicates two targets with the same name and their corresponding packages.
-    case duplicateModule(String, [String])
+    case duplicateModule(String, [PackageIdentity])
 
     /// The referenced target could not be found.
     case moduleNotFound(String, TargetDescription.TargetType)
@@ -74,7 +74,7 @@ extension ModuleError: CustomStringConvertible {
     public var description: String {
         switch self {
         case .duplicateModule(let name, let packages):
-            let packages = packages.joined(separator: ", ")
+            let packages = packages.map{ $0.description }.joined(separator: ", ")
             return "multiple targets named '\(name)' in: \(packages)"
         case .moduleNotFound(let target, let type):
             let folderName = type == .test ? "Tests" : "Sources"
@@ -202,14 +202,17 @@ public struct RemoteArtifact {
 /// The 'builder' here refers to the builder pattern and not any build system
 /// related function.
 public final class PackageBuilder {
+    /// The identity of the package.
+    private let packageIdentity: PackageIdentity
+
+    /// The path of the package.
+    private let packagePath: AbsolutePath
+
     /// The manifest for the package being constructed.
     private let manifest: Manifest
 
     /// The product filter to apply to the package.
     private let productFilter: ProductFilter
-
-    /// The path of the package.
-    private let packagePath: AbsolutePath
 
     /// Information concerning the different downloaded binary target artifacts.
     private let remoteArtifacts: [RemoteArtifact]
@@ -240,17 +243,19 @@ public final class PackageBuilder {
     /// Create a builder for the given manifest and package `path`.
     ///
     /// - Parameters:
-    ///   - manifest: The manifest of this package.
+    ///   - identity: The root path of the package.
     ///   - path: The root path of the package.
+    ///   - manifest: The manifest of this package.
     ///   - artifactPaths: Paths to the downloaded binary target artifacts.
     ///   - fileSystem: The file system on which the builder should be run.
     ///   - diagnostics: The diagnostics engine.
     ///   - createMultipleTestProducts: If enabled, create one test product for
     ///     each test target.
     public init(
+        identity: PackageIdentity,
+        path: AbsolutePath,
         manifest: Manifest,
         productFilter: ProductFilter,
-        path: AbsolutePath,
         additionalFileRules: [FileRuleDescription] = [],
         remoteArtifacts: [RemoteArtifact] = [],
         xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion],
@@ -260,9 +265,10 @@ public final class PackageBuilder {
         warnAboutImplicitExecutableTargets: Bool = true,
         createREPLProduct: Bool = false
     ) {
+        self.packageIdentity = identity
+        self.packagePath = path
         self.manifest = manifest
         self.productFilter = productFilter
-        self.packagePath = path
         self.additionalFileRules = additionalFileRules
         self.remoteArtifacts = remoteArtifacts
         self.xcTestMinimumDeploymentTargets = xcTestMinimumDeploymentTargets
@@ -295,13 +301,9 @@ public final class PackageBuilder {
                              completion: $0)
         }
     }
-    /// Loads a package from a package repository using the resources associated with a particular `swiftc` executable.
-    ///
-    /// - Parameters:
-    ///     - packagePath: The absolute path of the package root.
-    ///     - swiftCompiler: The absolute path of a `swiftc` executable.
-    ///         Its associated resources will be used by the loader.
-    ///     - kind: The kind of package.
+
+    // FIXME: deprecated 12/2020, remove once clients migrate
+    @available(*, deprecated, message: "use non-blocking version instead")
     public static func loadPackage(
         packagePath: AbsolutePath,
         swiftCompiler: AbsolutePath,
@@ -313,16 +315,46 @@ public final class PackageBuilder {
         on queue: DispatchQueue,
         completion: @escaping (Result<Package, Error>) -> Void
     ) {
-        ManifestLoader.loadManifest(packagePath: packagePath,
+        let identity = PackageIdentity(name: "")
+        Self.loadPackage(identity: identity,
+                         path: packagePath,
+                         swiftCompiler: swiftCompiler,
+                         swiftCompilerFlags: swiftCompilerFlags,
+                         diagnostics: diagnostics,
+                         on: queue,
+                         completion: completion)
+    }
+
+    /// Loads a package from a package repository using the resources associated with a particular `swiftc` executable.
+    ///
+    /// - Parameters:
+    ///     - packagePath: The absolute path of the package root.
+    ///     - swiftCompiler: The absolute path of a `swiftc` executable.
+    ///         Its associated resources will be used by the loader.
+    ///     - kind: The kind of package.
+    public static func loadPackage(
+        identity: PackageIdentity,
+        path: AbsolutePath,
+        kind: PackageReference.Kind = .root,
+        swiftCompiler: AbsolutePath,
+        swiftCompilerFlags: [String],
+        xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion]
+            = MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
+        diagnostics: DiagnosticsEngine,
+        on queue: DispatchQueue,
+        completion: @escaping (Result<Package, Error>) -> Void
+    ) {
+        ManifestLoader.loadManifest(packagePath: path,
+                                    packageKind: kind,
                                     swiftCompiler: swiftCompiler,
                                     swiftCompilerFlags: swiftCompilerFlags,
-                                    packageKind: kind,
                                     on: queue) { result in
             let result = result.tryMap { manifest -> Package in
                 let builder = PackageBuilder(
+                    identity: identity,
+                    path: path,
                     manifest: manifest,
                     productFilter: .everything,
-                    path: packagePath,
                     xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
                     diagnostics: diagnostics)
                 return try builder.construct()
@@ -333,18 +365,19 @@ public final class PackageBuilder {
 
     /// Build a new package following the conventions.
     public func construct() throws -> Package {
-        let targets = try constructTargets()
-        let products = try constructProducts(targets)
+        let targets = try self.constructTargets()
+        let products = try self.constructProducts(targets)
         // Find the special directory for targets.
-        let targetSpecialDirs = findTargetSpecialDirs(targets)
+        let targetSpecialDirs = self.findTargetSpecialDirs(targets)
 
         return Package(
-            manifest: manifest,
-            path: packagePath,
+            identity: self.packageIdentity,
+            path: self.packagePath,
+            manifest: self.manifest,
             targets: targets,
             products: products,
-            targetSearchPath: packagePath.appending(component: targetSpecialDirs.targetDir),
-            testTargetSearchPath: packagePath.appending(component: targetSpecialDirs.testTargetDir)
+            targetSearchPath: self.packagePath.appending(component: targetSpecialDirs.targetDir),
+            testTargetSearchPath: self.packagePath.appending(component: targetSpecialDirs.testTargetDir)
         )
     }
 

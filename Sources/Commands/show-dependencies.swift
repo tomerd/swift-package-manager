@@ -44,7 +44,7 @@ private final class PlainTextDumper: DependenciesDumper {
 
                 let pkgVersion = package.manifest.version?.description ?? "unspecified"
 
-                stream <<< "\(hanger)\(package.name)<\(package.manifest.url)@\(pkgVersion)>\n"
+                stream <<< "\(hanger)\(package.identity)<\(package.manifest.url)@\(pkgVersion)>\n"
 
                 if !package.dependencies.isEmpty {
                     let replacement = (index == packages.count - 1) ?  "    " : "│   "
@@ -69,7 +69,7 @@ private final class FlatListDumper: DependenciesDumper {
     func dump(dependenciesOf rootpkg: ResolvedPackage, on stream: OutputByteStream) {
         func recursiveWalk(packages: [ResolvedPackage]) {
             for package in packages {
-                stream <<< package.name <<< "\n"
+                stream <<< package.identity <<< "\n"
                 if !package.dependencies.isEmpty {
                     recursiveWalk(packages: package.dependencies)
                 }
@@ -88,7 +88,7 @@ private final class DotDumper: DependenciesDumper {
             let url = package.manifest.url
             if nodesAlreadyPrinted.contains(url) { return }
             let pkgVersion = package.manifest.version?.description ?? "unspecified"
-            stream <<< #""\#(url)" [label="\#(package.name)\n\#(url)\n\#(pkgVersion)"]"# <<< "\n"
+            stream <<< #""\#(url)" [label="\#(package.identity)\n\#(url)\n\#(pkgVersion)"]"# <<< "\n"
             nodesAlreadyPrinted.insert(url)
         }
         
@@ -128,9 +128,10 @@ private final class DotDumper: DependenciesDumper {
 
 private final class JSONDumper: DependenciesDumper {
     func dump(dependenciesOf rootpkg: ResolvedPackage, on stream: OutputByteStream) {
+        // FIXME: tomer identity changes
         func convert(_ package: ResolvedPackage) -> JSON {
             return .orderedDictionary([
-                "name": .string(package.name),
+                "name": .string(package.identity.description),
                 "url": .string(package.manifest.url),
                 "version": .string(package.manifest.version?.description ?? "unspecified"),
                 "path": .string(package.path.pathString),

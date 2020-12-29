@@ -117,11 +117,12 @@ fileprivate extension SourceCodeFragment {
     /// Instantiates a SourceCodeFragment to represent a single package dependency.
     init(from dependency: PackageDependencyDescription) {
         var params: [SourceCodeFragment] = []
-        if let explicitName = dependency.explicitName {
+        // FIXME: tomer identity changes
+        /*if let explicitName = dependency.explicitName {
             params.append(SourceCodeFragment(key: "name", string: explicitName))
-        }
+        }*/
         if dependency.requirement != .localPackage {
-            params.append(SourceCodeFragment(key: "url", string: dependency.url))
+            params.append(SourceCodeFragment(key: "url", string: dependency.location))
         }
         switch dependency.requirement {
         case .exact(let version):
@@ -133,7 +134,7 @@ fileprivate extension SourceCodeFragment {
         case .branch(let branch):
             params.append(SourceCodeFragment(enum: "branch", string: branch))
         case .localPackage:
-            params.append(SourceCodeFragment(key: "path", string: dependency.url))
+            params.append(SourceCodeFragment(key: "path", string: dependency.location))
         }
         self.init(enum: "package", subnodes: params)
     }

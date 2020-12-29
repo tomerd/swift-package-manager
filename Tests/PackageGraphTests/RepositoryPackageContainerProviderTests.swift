@@ -389,7 +389,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             PackageContainerConstraint(
                 package: $0.createPackageRef(mirrors: mirrors),
                 requirement: $0.requirement.toConstraintRequirement(),
-                products: v5ProductMapping[$0.name]!
+                products: v5ProductMapping[$0.identity.description]!
             )
         }
         let v5_2ProductMapping: [String: ProductFilter] = [
@@ -401,7 +401,7 @@ class RepositoryPackageContainerProviderTests: XCTestCase {
             PackageContainerConstraint(
                 package: $0.createPackageRef(mirrors: mirrors),
                 requirement: $0.requirement.toConstraintRequirement(),
-                products: v5_2ProductMapping[$0.name]!
+                products: v5_2ProductMapping[$0.identity.description]!
             )
         }
 

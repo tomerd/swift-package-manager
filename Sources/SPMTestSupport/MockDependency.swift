@@ -33,10 +33,13 @@ public struct MockDependency {
         self.products = products
     }
 
+    // FIXME: tomer identity changes
     public func convert(baseURL: AbsolutePath) -> PackageDependencyDescription {
+        let location = baseURL.appending(RelativePath(self.path)).pathString
+        let identity = self.name.map(PackageIdentity.init(name:)) ?? PackageIdentity(url: location)
         return PackageDependencyDescription(
-            name: self.name,
-            url: baseURL.appending(RelativePath(self.path)).pathString,
+            identity: identity,
+            location: location,
             requirement: self.requirement,
             productFilter: self.products
         )

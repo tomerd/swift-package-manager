@@ -39,7 +39,7 @@ public final class XcodeBuildSystem: BuildSystem {
             for product in package.products where product.type == .test {
                 let binaryPath = buildParameters.binaryPath(for: product)
                 builtProducts.append(BuiltTestProduct(
-                    packageName: package.name,
+                    package: package.identity,
                     productName: product.name,
                     binaryPath: binaryPath
                 ))
