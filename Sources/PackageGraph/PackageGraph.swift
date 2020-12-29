@@ -36,7 +36,7 @@ enum PackageGraphError: Swift.Error {
     )
 
     /// A product was found in multiple packages.
-    case duplicateProduct(product: String, packages: [String])
+    case duplicateProduct(product: String, packages: [PackageIdentity])
 }
 
 /// A collection of packages.
@@ -219,7 +219,7 @@ extension PackageGraphError: CustomStringConvertible {
             return "dependency '\(productName)' in target '\(targetName)' requires explicit declaration; \(solution)"
 
         case .duplicateProduct(let product, let packages):
-            return "multiple products named '\(product)' in: \(packages.joined(separator: ", "))"
+            return "multiple products named '\(product)' in: '\(packages.map{ $0.description }.joined(separator: "', '"))'"
         }
     }
 }

@@ -43,16 +43,20 @@ import TSCUtility
 /// loaded. There is not currently a data structure for this, but it is the
 /// result after `PackageLoading.transmute()`.
 public final class Package: ObjectIdentifierProtocol, Codable {
-    /// The manifest describing the package.
-    public let manifest: Manifest
+    /// The identity of the package.
+    public let identity: PackageIdentity
 
     /// The local path of the package.
     public let path: AbsolutePath
 
     /// The name of the package.
+    @available(*, deprecated)
     public var name: String {
-        return manifest.name
+        return self.manifest.name
     }
+
+    /// The manifest describing the package.
+    public let manifest: Manifest
 
     /// The targets contained in the package.
     @PolymorphicCodableArray
@@ -72,15 +76,17 @@ public final class Package: ObjectIdentifierProtocol, Codable {
     public let testTargetSearchPath: AbsolutePath
 
     public init(
-        manifest: Manifest,
+        identity: PackageIdentity,
         path: AbsolutePath,
+        manifest: Manifest,
         targets: [Target],
         products: [Product],
         targetSearchPath: AbsolutePath,
         testTargetSearchPath: AbsolutePath
     ) {
-        self.manifest = manifest
+        self.identity = identity
         self.path = path
+        self.manifest = manifest
         self._targets = .init(wrappedValue: targets)
         self.products = products
         self.targetSearchPath = targetSearchPath
@@ -94,7 +100,7 @@ public final class Package: ObjectIdentifierProtocol, Codable {
 
 extension Package: CustomStringConvertible {
     public var description: String {
-        return name
+        return self.identity.description
     }
 }
 

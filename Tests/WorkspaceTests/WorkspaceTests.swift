@@ -461,7 +461,8 @@ final class WorkspaceTests: XCTestCase {
             ]
         )
 
-        workspace.checkPackageGraph(roots: ["foo-package", "bar-package"], dependencies: [PackageDependencyDescription(url: "/tmp/ws/pkgs/bar-package", requirement: .upToNextMajor(from: "1.0.0"), productFilter: .everything)]) { graph, diagnostics in
+        workspace.checkPackageGraph(roots: ["foo-package", "bar-package"],
+                                    dependencies: [PackageDependencyDescription(url: "/tmp/ws/pkgs/bar-package", requirement: .upToNextMajor(from: "1.0.0"), productFilter: .everything)]) { graph, diagnostics in
             PackageGraphTester(graph) { result in
                 result.check(roots: "FooPackage", "BarPackage")
                 result.check(packages: "FooPackage", "BarPackage")
@@ -3780,7 +3781,7 @@ final class WorkspaceTests: XCTestCase {
         // This verifies that the simplest possible loading APIs are available for package clients.
 
         // This checkout of the SwiftPM package.
-        let package = AbsolutePath(#file).parentDirectory.parentDirectory.parentDirectory
+        let packagePath = AbsolutePath(#file).parentDirectory.parentDirectory.parentDirectory
 
         // Clients must locate the corresponding “swiftc” exectuable themselves for now.
         // (This just uses the same one used by all the other tests.)
@@ -3789,19 +3790,30 @@ final class WorkspaceTests: XCTestCase {
         // From here the API should be simple and straightforward:
         let diagnostics = DiagnosticsEngine()
         let manifest = try tsc_await {
-            ManifestLoader.loadManifest(packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], packageKind: .local, on: .global(), completion: $0)
+            ManifestLoader.loadManifest(at: packagePath,
+                                        kind: .local,
+                                        swiftCompiler: swiftCompiler,
+                                        swiftCompilerFlags: [],
+                                        on: .global(),
+                                        completion: $0)
         }
 
         let loadedPackage = try tsc_await {
-            PackageBuilder.loadPackage(packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], xcTestMinimumDeploymentTargets: [:], diagnostics: diagnostics, on: .global(), completion: $0)
+            PackageBuilder.loadPackage(at: packagePath,
+                                       swiftCompiler: swiftCompiler,
+                                       swiftCompilerFlags: [],
+                                       xcTestMinimumDeploymentTargets: [:],
+                                       diagnostics: diagnostics,
+                                       on: .global(),
+                                       completion: $0)
         }
 
         let graph = try Workspace.loadGraph(
-            packagePath: package, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics
+            packagePath: packagePath, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics
         )
 
         XCTAssertEqual(manifest.name, "SwiftPM")
-        XCTAssertEqual(loadedPackage.name, "SwiftPM")
+        XCTAssertEqual(loadedPackage.identity, PackageIdentity(name: "SwiftPM"))
         XCTAssert(graph.reachableProducts.contains(where: { $0.name == "SwiftPM" }))
     }
 
@@ -4666,13 +4678,6 @@ final class WorkspaceTests: XCTestCase {
             // Needed when cross‐compiling for Android. 2020‐03‐01
             "-sdk", sdk.pathString,
         ])
-    }
-}
-
-extension PackageGraph {
-    /// Finds the package matching the given name.
-    func lookup(_ name: String) -> ResolvedPackage {
-        return packages.first { $0.name == name }!
     }
 }
 

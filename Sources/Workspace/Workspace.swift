@@ -1456,11 +1456,13 @@ extension Workspace {
                 try toolsVersion.validateToolsVersion(currentToolsVersion, packagePath: packagePath.pathString)
 
                 // Load the manifest.
-                manifestLoader.load(package: packagePath,
+                manifestLoader.load(at: packagePath,
+                                    kind: packageKind,
                                     baseURL: url,
                                     version: version,
+                                    revision: nil,
                                     toolsVersion: toolsVersion,
-                                    packageKind: packageKind,
+                                    fileSystem: localFileSystem,
                                     diagnostics: diagnostics,
                                     on: self.queue) { result in
 

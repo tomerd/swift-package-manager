@@ -97,15 +97,18 @@ extension PackageGraph {
             //
             // FIXME: Lift this out of the manifest.
             let packagePath = manifest.path.parentDirectory
+            // FIXME: tomer identity changes
+            let packageIdentity = PackageIdentity(name: manifest.name)
 
             let packageLocation = PackageLocation.Local(name: manifest.name, packagePath: packagePath)
             diagnostics.with(location: packageLocation) { diagnostics in
                 diagnostics.wrap {
                     // Create a package from the manifest and sources.
                     let builder = PackageBuilder(
+                        identity: packageIdentity,
+                        path: packagePath,
                         manifest: manifest,
                         productFilter: node.productFilter,
-                        path: packagePath,
                         additionalFileRules: additionalFileRules,
                         remoteArtifacts: remoteArtifacts,
                         xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
@@ -179,7 +182,7 @@ private func checkAllDependenciesAreUsed(_ rootPackages: [ResolvedPackage], _ di
 
             let dependencyIsUsed = dependency.products.contains(where: productDependencies.contains)
             if !dependencyIsUsed {
-                diagnostics.emit(.unusedDependency(dependency.name))
+                diagnostics.emit(.unusedDependency(dependency.identity))
             }
         }
     }
@@ -211,8 +214,7 @@ private func createResolvedPackages(
 
     // Create a map of package builders keyed by the package identity.
     let packageMapByIdentity: [PackageIdentity: ResolvedPackageBuilder] = packageBuilders.spm_createDictionary{
-        let identity = PackageIdentity(url: $0.package.manifest.url)
-        return (identity, $0)
+        return ($0.package.identity, $0)
     }
     let packageMapByName: [String: ResolvedPackageBuilder] = packageBuilders.spm_createDictionary{ ($0.package.name, $0) }
 
@@ -290,7 +292,7 @@ private func createResolvedPackages(
     for productName in duplicateProducts {
         let packages = packageBuilders
             .filter({ $0.products.contains(where: { $0.product.name == productName }) })
-            .map({ $0.package.name })
+            .map{ $0.package.identity }
             .sorted()
 
         diagnostics.emit(PackageGraphError.duplicateProduct(product: productName, packages: packages))
@@ -399,12 +401,12 @@ private func createResolvedPackages(
     if foundDuplicateTarget {
         for targetName in allTargetNames.sorted() {
             // Find the packages this target is present in.
-            let packageNames = packageBuilders
+            let packages = packageBuilders
                 .filter({ $0.targets.contains(where: { $0.target.name == targetName }) })
-                .map({ $0.package.name })
+                .map{ $0.package.identity }
                 .sorted()
-            if packageNames.count > 1 {
-                diagnostics.emit(ModuleError.duplicateModule(targetName, packageNames))
+            if packages.count > 1 {
+                diagnostics.emit(ModuleError.duplicateModule(targetName, packages))
             }
         }
     }

@@ -288,7 +288,7 @@ class PackageGraphTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(diagnostics.diagnostics[0].description, "multiple targets named 'Bar' in: Bar, Foo")
+        XCTAssertEqual(diagnostics.diagnostics[0].description, "multiple targets named 'Bar' in: 'bar', 'foo'")
     }
 
     func testMultipleDuplicateModules() throws {
@@ -352,7 +352,7 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "multiple targets named 'First' in: First, Fourth, Second, Third", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'First' in: 'first', 'fourth', 'second', 'third'", behavior: .error)
         }
     }
 
@@ -417,8 +417,8 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "multiple targets named 'Bar' in: Fourth, Third", behavior: .error)
-            result.check(diagnostic: "multiple targets named 'Foo' in: First, Second", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'Bar' in: 'fourth', 'third'", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'Foo' in: 'first', 'second'", behavior: .error)
         }
     }
 
@@ -490,7 +490,7 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "multiple targets named 'First' in: First, Fourth", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'First' in: 'first', 'fourth'", behavior: .error)
         }
     }
 
@@ -738,9 +738,9 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "dependency 'Baz' is not used by any target", behavior: .warning)
+            result.check(diagnostic: "dependency 'baz' is not used by any target", behavior: .warning)
             #if ENABLE_TARGET_BASED_DEPENDENCY_RESOLUTION
-            result.check(diagnostic: "dependency 'Biz' is not used by any target", behavior: .warning)
+            result.check(diagnostic: "dependency 'biz' is not used by any target", behavior: .warning)
             #endif
         }
     }
@@ -832,7 +832,7 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "multiple targets named 'Foo' in: Dep2, Start", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'Foo' in: 'dep2', 'start'", behavior: .error)
         }
     }
 
@@ -883,7 +883,7 @@ class PackageGraphTests: XCTestCase {
             ]
         )
 
-        XCTAssertTrue(diagnostics.diagnostics.contains(where: { $0.description.contains("multiple products named 'Bar' in: Bar, Baz") }), "\(diagnostics.diagnostics)")
+        XCTAssertTrue(diagnostics.diagnostics.contains(where: { $0.description.contains("multiple products named 'Bar' in: 'bar', 'baz'") }), "\(diagnostics.diagnostics)")
     }
 
     func testUnsafeFlags() throws {

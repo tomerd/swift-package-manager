@@ -2197,11 +2197,14 @@ final class PackageBuilderTester {
     ) {
         let diagnostics = DiagnosticsEngine()
         do {
+            // FIXME: tomer identity changes
+            let identity = PackageIdentity(name: manifest.name)
             // FIXME: We should allow customizing root package boolean.
             let builder = PackageBuilder(
+                identity: identity,
+                path: path,
                 manifest: manifest,
                 productFilter: .everything,
-                path: path,
                 remoteArtifacts: remoteArtifacts,
                 xcTestMinimumDeploymentTargets: Self.xcTestMinimumDeploymentTargets,
                 fileSystem: fs,

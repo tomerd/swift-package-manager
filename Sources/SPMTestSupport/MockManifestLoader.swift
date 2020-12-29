@@ -49,13 +49,13 @@ public final class MockManifestLoader: ManifestLoaderProtocol {
     }
 
     public func load(
-        packagePath path: TSCBasic.AbsolutePath,
+        at path: AbsolutePath,
+        kind: PackageReference.Kind,
         baseURL: String,
         version: Version?,
         revision: String?,
         toolsVersion: ToolsVersion,
-        packageKind: PackageReference.Kind,
-        fileSystem: FileSystem?,
+        fileSystem: FileSystem,
         diagnostics: DiagnosticsEngine?,
         on queue: DispatchQueue,
         completion: @escaping (Result<Manifest, Error>) -> Void
@@ -69,16 +69,30 @@ public final class MockManifestLoader: ManifestLoaderProtocol {
             }
         }
     }
+
+    public func resetCache() throws {}
 }
 
 extension ManifestLoader {
-    public func load(package path: TSCBasic.AbsolutePath,
-              baseURL: String,
-              toolsVersion: PackageModel.ToolsVersion,
-              packageKind: PackageModel.PackageReference.Kind,
-              fileSystem: PackageLoading.FileSystem? = nil,
-              diagnostics: TSCBasic.DiagnosticsEngine? = nil
+    public func load(
+        at path: TSCBasic.AbsolutePath,
+        kind: PackageModel.PackageReference.Kind,
+        baseURL: String,
+        toolsVersion: PackageModel.ToolsVersion,
+        fileSystem: PackageLoading.FileSystem = localFileSystem,
+        diagnostics: TSCBasic.DiagnosticsEngine? = nil
     ) throws -> Manifest{
-        try tsc_await { self.load(package: path, baseURL: baseURL, toolsVersion: toolsVersion, packageKind: packageKind, fileSystem: fileSystem, diagnostics: diagnostics, on: .global(), completion: $0) }
+        try tsc_await {
+            self.load(at: path,
+                      kind: kind,
+                      baseURL: baseURL,
+                      version: nil,
+                      revision: nil,
+                      toolsVersion: toolsVersion,
+                      fileSystem: fileSystem,
+                      diagnostics: diagnostics,
+                      on: .global(),
+                      completion: $0)
+        }
     }
 }

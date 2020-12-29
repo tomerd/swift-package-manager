@@ -55,7 +55,7 @@ fileprivate struct DescribedPackage: Encodable {
     let swiftLanguagesVersions: [String]?
 
     init(from package: Package) {
-        self.name = package.name
+        self.name = package.identity.description
         self.path = package.path.pathString
         self.toolsVersion = "\(package.manifest.toolsVersion.major).\(package.manifest.toolsVersion.minor)"
             + (package.manifest.toolsVersion.patch == 0 ? "" : ".\(package.manifest.toolsVersion.patch)")
