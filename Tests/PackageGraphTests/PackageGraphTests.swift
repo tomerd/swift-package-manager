@@ -624,16 +624,16 @@ class PackageGraphTests: XCTestCase {
         DiagnosticsEngineTester(diagnostics) { result in
             result.checkUnordered(diagnostic: """
                 dependency 'BarLib' in target 'Foo' requires explicit declaration; reference the package in the target \
-                dependency with '.product(name: "BarLib", package: "Bar")'
+                dependency with '.product(name: "BarLib", package: "bar")'
                 """, behavior: .error, location: "'foo' /Foo")
             result.checkUnordered(diagnostic: """
                 dependency 'Biz' in target 'Foo' requires explicit declaration; provide the name of the package \
-                dependency with '.package(name: "Biz", url: "/BizPath", .exact("1.2.3"))'
+                dependency with '.package(name: "biz", url: "/BizPath", .exact("1.2.3"))'
                 """, behavior: .error, location: "'foo' /Foo")
             result.checkUnordered(diagnostic: """
                 dependency 'FizLib' in target 'Foo' requires explicit declaration; reference the package in the target \
-                dependency with '.product(name: "FizLib", package: "Fiz")' and provide the name of the package \
-                dependency with '.package(name: "Fiz", url: "/FizPath", from: "1.1.2")'
+                dependency with '.product(name: "FizLib", package: "fiz")' and provide the name of the package \
+                dependency with '.package(name: "fiz", url: "/FizPath", from: "1.1.2")'
                 """, behavior: .error, location: "'foo' /Foo")
         }
     }

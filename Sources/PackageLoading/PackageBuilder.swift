@@ -269,9 +269,9 @@ public final class PackageBuilder {
 
         // 👀 identity changes, this is probably the most interesting change
         // we compute the identity the following way:
-        // * if this is a root package we base the identity on the manifest name
-        // * if this is a non-root package we base the identity on the manifest package location
-        // ideally we would just base the identity on the location but this is currently necessary for backwards compatibility
+        // * if this is a root package we base the identity on the manifest's name
+        // * if this is a non-root package we base the identity on the manifest's package location
+        // ideally we would just base the identity on the location but this is currently necessary for backwards compatibility (at least to satisfy the tests)
         // we then compute the alternate identity (if necessary and also for backwards compatibility) using the reverse logic
         // TODO: instead of computing this here, we should consider extracting this logic higher up the load sequence and pass it as parameters to PackageBuilder
         let locationBasedIdentity = PackageIdentity(url: manifest.packageLocation)

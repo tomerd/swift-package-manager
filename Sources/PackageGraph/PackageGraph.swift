@@ -31,7 +31,7 @@ enum PackageGraphError: Swift.Error {
     case productDependencyMissingPackage(
         productName: String,
         targetName: String,
-        packageName: String,
+        package: Package,
         packageDependency: PackageDependencyDescription
     )
 
@@ -190,26 +190,28 @@ extension PackageGraphError: CustomStringConvertible {
         case .productDependencyMissingPackage(
                 let productName,
                 let targetName,
-                let packageName,
+                let package,
                 let packageDependency
             ):
 
             var solutionSteps: [String] = []
 
+            let packageIdentity = package.alternateIdentity ?? package.identity
+
             // If the package dependency name is the same as the package name, or if the product name and package name
             // don't correspond, we need to rewrite the target dependency to explicit specify the package name.
-            if packageDependency.name == packageName || productName != packageName {
+            if PackageIdentity(name: packageDependency.name) == packageIdentity || PackageIdentity(name: productName) != packageIdentity {
                 solutionSteps.append("""
                     reference the package in the target dependency with '.product(name: "\(productName)", package: \
-                    "\(packageName)")'
+                    "\(packageIdentity)")'
                     """)
             }
 
             // If the name of the product and the package are the same, or if the package dependency implicit name
             // deduced from the URL is not correct, we need to rewrite the package dependency declaration to specify the
             // package name.
-            if productName == packageName || packageDependency.name != packageName {
-                let dependencySwiftRepresentation = packageDependency.swiftRepresentation(overridingName: packageName)
+            if PackageIdentity(name: productName) == packageIdentity || PackageIdentity(name: packageDependency.name) != packageIdentity {
+                let dependencySwiftRepresentation = packageDependency.swiftRepresentation(overridingName: packageIdentity.description)
                 solutionSteps.append("""
                     provide the name of the package dependency with '\(dependencySwiftRepresentation)'
                     """)

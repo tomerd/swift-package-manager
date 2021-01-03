@@ -382,12 +382,14 @@ private func createResolvedPackages(
 
                     // 👀 identity changes: using the name fro the manifest for backwards compatibility
                     // FIXME: there are bugs reported on this validation and using the manifest name could lead to that need to use the identity instead
-                    let packageName = product.packageBuilder.package.manifest.name
-                    if productRef.name != packageDependency.name || packageDependency.name != packageName {
+                    //let packageName = product.packageBuilder.package.manifest.name
+                    let packageDependencyIdentity = PackageIdentity(name: packageDependency.name)
+                    let identityMatch = packageDependencyIdentity == product.packageBuilder.package.identity || packageDependencyIdentity == product.packageBuilder.package.alternateIdentity
+                    if productRef.name != packageDependency.name || !identityMatch {
                         let error = PackageGraphError.productDependencyMissingPackage(
                             productName: productRef.name,
                             targetName: targetBuilder.target.name,
-                            packageName: packageName,
+                            package: product.packageBuilder.package,
                             packageDependency: packageDependency
                         )
                         diagnostics.emit(error, location: diagnosticLocation())
