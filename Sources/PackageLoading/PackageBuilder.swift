@@ -25,7 +25,7 @@ public enum ModuleError: Swift.Error {
     }
 
     /// Indicates two targets with the same name and their corresponding packages.
-    case duplicateModule(String, [String])
+    case duplicateModule(String, [PackageIdentity])
 
     /// The referenced target could not be found.
     case moduleNotFound(String, TargetDescription.TargetType)
@@ -74,8 +74,8 @@ extension ModuleError: CustomStringConvertible {
     public var description: String {
         switch self {
         case .duplicateModule(let name, let packages):
-            let packages = packages.joined(separator: ", ")
-            return "multiple targets named '\(name)' in: \(packages)"
+            let packages = packages.map{ $0.description }.joined(separator: "', '")
+            return "multiple targets named '\(name)' in: '\(packages)'"
         case .moduleNotFound(let target, let type):
             let folderName = type == .test ? "Tests" : "Sources"
             return "Source files for target \(target) should be located under '\(folderName)/\(target)', or a custom sources path can be set with the 'path' property in Package.swift"
@@ -202,14 +202,20 @@ public struct RemoteArtifact {
 /// The 'builder' here refers to the builder pattern and not any build system
 /// related function.
 public final class PackageBuilder {
+    /// The identity of the package.
+    private let identity: PackageIdentity
+
+    /// The alternate identity of the package.
+    private let alternateIdentity: PackageIdentity?
+
+    /// The path of the package.
+    private let path: AbsolutePath
+
     /// The manifest for the package being constructed.
     private let manifest: Manifest
 
     /// The product filter to apply to the package.
     private let productFilter: ProductFilter
-
-    /// The path of the package.
-    private let packagePath: AbsolutePath
 
     /// Information concerning the different downloaded binary target artifacts.
     private let remoteArtifacts: [RemoteArtifact]
@@ -240,17 +246,17 @@ public final class PackageBuilder {
     /// Create a builder for the given manifest and package `path`.
     ///
     /// - Parameters:
-    ///   - manifest: The manifest of this package.
     ///   - path: The root path of the package.
+    ///   - manifest: The manifest of this package.
     ///   - artifactPaths: Paths to the downloaded binary target artifacts.
     ///   - fileSystem: The file system on which the builder should be run.
     ///   - diagnostics: The diagnostics engine.
     ///   - createMultipleTestProducts: If enabled, create one test product for
     ///     each test target.
     public init(
+        path: AbsolutePath,
         manifest: Manifest,
         productFilter: ProductFilter,
-        path: AbsolutePath,
         additionalFileRules: [FileRuleDescription] = [],
         remoteArtifacts: [RemoteArtifact] = [],
         xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion],
@@ -260,9 +266,21 @@ public final class PackageBuilder {
         warnAboutImplicitExecutableTargets: Bool = true,
         createREPLProduct: Bool = false
     ) {
+
+        // 👀 identity changes, this is probably the most interesting change
+        // we compute the identity the following way:
+        // * if this is a root package we base the identity on the manifest name
+        // * if this is a non-root package we base the identity on the manifest package location
+        // ideally we would just base the identity on the location but this is currently necessary for backwards compatibility
+        // we then compute the alternate identity (if necessary and also for backwards compatibility) using the reverse logic
+        // TODO: instead of computing this here, we should consider extracting this logic higher up the load sequence and pass it as parameters to PackageBuilder
+        let locationBasedIdentity = PackageIdentity(url: manifest.packageLocation)
+        let nameBasedIdentity = PackageIdentity(name: manifest.name)
+        self.identity = manifest.packageKind == .root ? nameBasedIdentity : locationBasedIdentity
+        self.alternateIdentity = locationBasedIdentity == nameBasedIdentity ? nil : manifest.packageKind == .root ? locationBasedIdentity : nameBasedIdentity
+        self.path = path
         self.manifest = manifest
         self.productFilter = productFilter
-        self.packagePath = path
         self.additionalFileRules = additionalFileRules
         self.remoteArtifacts = remoteArtifacts
         self.xcTestMinimumDeploymentTargets = xcTestMinimumDeploymentTargets
@@ -328,7 +346,7 @@ public final class PackageBuilder {
     ///         Its associated resources will be used by the loader.
     public static func loadPackage(
         at path: AbsolutePath,
-        kind: PackageReference.Kind = .root,
+        kind: PackageReference.Kind,
         swiftCompiler: AbsolutePath,
         swiftCompilerFlags: [String],
         xcTestMinimumDeploymentTargets: [PackageModel.Platform:PlatformVersion]
@@ -344,9 +362,9 @@ public final class PackageBuilder {
                                     on: queue) { result in
             let result = result.tryMap { manifest -> Package in
                 let builder = PackageBuilder(
+                    path: path,
                     manifest: manifest,
                     productFilter: .everything,
-                    path: path,
                     xcTestMinimumDeploymentTargets: xcTestMinimumDeploymentTargets,
                     diagnostics: diagnostics)
                 return try builder.construct()
@@ -360,20 +378,22 @@ public final class PackageBuilder {
         let targets = try constructTargets()
         let products = try constructProducts(targets)
         // Find the special directory for targets.
-        let targetSpecialDirs = findTargetSpecialDirs(targets)
+        let targetSpecialDirs = self.findTargetSpecialDirs(targets)
 
         return Package(
-            manifest: manifest,
-            path: packagePath,
+            identity: self.identity,
+            alternateIdentity: self.alternateIdentity,
+            path: self.path,
+            manifest: self.manifest,
             targets: targets,
             products: products,
-            targetSearchPath: packagePath.appending(component: targetSpecialDirs.targetDir),
-            testTargetSearchPath: packagePath.appending(component: targetSpecialDirs.testTargetDir)
+            targetSearchPath: self.path.appending(component: targetSpecialDirs.targetDir),
+            testTargetSearchPath: self.path.appending(component: targetSpecialDirs.testTargetDir)
         )
     }
 
     private func diagnosticLocation() -> DiagnosticLocation {
-        return PackageLocation.Local(name: manifest.name, packagePath: packagePath)
+        return PackageLocation.Local(name: self.identity.description, packagePath: self.path)
     }
 
     /// Computes the special directory where targets are present or should be placed in future.
@@ -386,7 +406,7 @@ public final class PackageBuilder {
         // If found predefined test directory is not same as preferred test directory,
         // check if any of the test target is actually inside the predefined test directory.
         if predefinedDirs.testTargetDir != testTargetDir {
-            let expectedTestsDir = packagePath.appending(component: predefinedDirs.testTargetDir)
+            let expectedTestsDir = self.path.appending(component: predefinedDirs.testTargetDir)
             for target in targets where target.type == .test {
                 // If yes, use the predefined test directory as preferred test directory.
                 if expectedTestsDir == target.sources.root.parentDirectory {
@@ -427,7 +447,7 @@ public final class PackageBuilder {
         }
 
         // Ignore manifest files.
-        if path.parentDirectory == packagePath {
+        if path.parentDirectory == self.path {
             if basename == Manifest.filename { return false }
 
             // Ignore version-specific manifest files.
@@ -453,20 +473,20 @@ public final class PackageBuilder {
     }
 
     private var packagesDirectory: AbsolutePath {
-        return packagePath.appending(component: "Packages")
+        return self.path.appending(component: "Packages")
     }
 
     /// Returns path to all the items in a directory.
     // FIXME: This is generic functionality, and should move to FileSystem.
     func directoryContents(_ path: AbsolutePath) throws -> [AbsolutePath] {
-        return try fileSystem.getDirectoryContents(path).map({ path.appending(component: $0) })
+        return try fileSystem.getDirectoryContents(path).map{ path.appending(component: $0) }
     }
 
     /// Private function that creates and returns a list of targets defined by a package.
     private func constructTargets() throws -> [Target] {
 
         // Check for a modulemap file, which indicates a system target.
-        let moduleMapPath = packagePath.appending(component: moduleMapFilename)
+        let moduleMapPath = self.path.appending(component: moduleMapFilename)
         if fileSystem.isFile(moduleMapPath) {
 
             // Warn about any declared targets.
@@ -488,7 +508,8 @@ public final class PackageBuilder {
                 SystemLibraryTarget(
                     name: manifest.name,
                     platforms: self.platforms(),
-                    path: packagePath, isImplicit: true,
+                    path: self.path,
+                    isImplicit: true,
                     pkgConfig: manifest.pkgConfig,
                     providers: manifest.providers)
             ]
@@ -518,11 +539,11 @@ public final class PackageBuilder {
     /// Finds the predefined directories for regular and test targets.
     private func findPredefinedTargetDirectory() -> (targetDir: String, testTargetDir: String) {
         let targetDir = PackageBuilder.predefinedSourceDirectories.first(where: {
-            fileSystem.isDirectory(packagePath.appending(component: $0))
+            fileSystem.isDirectory(self.path.appending(component: $0))
         }) ?? PackageBuilder.predefinedSourceDirectories[0]
 
         let testTargetDir = PackageBuilder.predefinedTestDirectories.first(where: {
-            fileSystem.isDirectory(packagePath.appending(component: $0))
+            fileSystem.isDirectory(self.path.appending(component: $0))
         }) ?? PackageBuilder.predefinedTestDirectories[0]
 
         return (targetDir, testTargetDir)
@@ -543,15 +564,15 @@ public final class PackageBuilder {
         // Select the correct predefined directory list.
         let predefinedDirs = findPredefinedTargetDirectory()
 
-        let predefinedTargetDirectory = PredefinedTargetDirectory(fs: fileSystem, path: packagePath.appending(component: predefinedDirs.targetDir))
-        let predefinedTestTargetDirectory = PredefinedTargetDirectory(fs: fileSystem, path: packagePath.appending(component: predefinedDirs.testTargetDir))
+        let predefinedTargetDirectory = PredefinedTargetDirectory(fs: fileSystem, path: self.path.appending(component: predefinedDirs.targetDir))
+        let predefinedTestTargetDirectory = PredefinedTargetDirectory(fs: fileSystem, path: self.path.appending(component: predefinedDirs.testTargetDir))
 
         /// Returns the path of the given target.
         func findPath(for target: TargetDescription) throws -> AbsolutePath {
             // If there is a custom path defined, use that.
             if let subpath = target.path {
                 if subpath == "" || subpath == "." {
-                    return packagePath
+                    return self.path
                 }
 
                 // Make sure target is not refenced by absolute path
@@ -559,9 +580,9 @@ public final class PackageBuilder {
                     throw ModuleError.unsupportedTargetPath(subpath)
                 }
 
-                let path = packagePath.appending(relativeSubPath)
+                let path = self.path.appending(relativeSubPath)
                 // Make sure the target is inside the package root.
-                guard path.contains(packagePath) else {
+                guard path.contains(self.path) else {
                     throw ModuleError.targetOutsidePackage(package: manifest.name, target: target.name)
                 }
                 if fileSystem.isDirectory(path) {
@@ -707,7 +728,7 @@ public final class PackageBuilder {
     private func validateModuleName(_ path: AbsolutePath, _ name: String, isTest: Bool) throws {
         if name.isEmpty {
             throw Target.Error.invalidName(
-                path: path.relative(to: packagePath),
+                path: path.relative(to: self.path),
                 problem: .emptyName)
         }
     }
@@ -762,15 +783,15 @@ public final class PackageBuilder {
         }
 
         let sourcesBuilder = TargetSourcesBuilder(
-            packageName: manifest.name,
-            packagePath: packagePath,
+            packageName: self.manifest.name,
+            packagePath: self.path,
             target: manifestTarget,
             path: potentialModule.path,
-            defaultLocalization: manifest.defaultLocalization,
+            defaultLocalization: self.manifest.defaultLocalization,
             additionalFileRules: additionalFileRules,
-            toolsVersion: manifest.toolsVersion,
-            fs: fileSystem,
-            diags: diagnostics
+            toolsVersion: self.manifest.toolsVersion,
+            fs: self.fileSystem,
+            diags: self.diagnostics
         )
         let (sources, resources, headers) = try sourcesBuilder.run()
 
@@ -871,7 +892,7 @@ public final class PackageBuilder {
 
                 // Ensure that the search path is contained within the package.
                 let subpath = try RelativePath(validating: setting.value[0])
-                guard targetRoot.appending(subpath).contains(packagePath) else {
+                guard targetRoot.appending(subpath).contains(self.path) else {
                     throw ModuleError.invalidHeaderSearchPath(subpath.pathString)
                 }
 
@@ -1058,24 +1079,24 @@ public final class PackageBuilder {
             // If the target root's parent directory is inside the package, start
             // search there. Otherwise, we start search from the target root.
             var searchPath = target.sources.root.parentDirectory
-            if !searchPath.contains(packagePath) {
+            if !searchPath.contains(self.path) {
                 searchPath = target.sources.root
             }
 
             while true {
-                assert(searchPath.contains(packagePath), "search path \(searchPath) is outside the package \(packagePath)")
+                assert(searchPath.contains(self.path), "search path \(searchPath) is outside the package \(self.path)")
                 // If we have already searched this path, skip.
                 if !pathsSearched.contains(searchPath) {
                     SwiftTarget.testManifestNames.forEach { name in
                         let path = searchPath.appending(component: name)
-                        if fileSystem.isFile(path) {
+                        if self.fileSystem.isFile(path) {
                             testManifestFiles.insert(path)
                         }
                     }
                     pathsSearched.insert(searchPath)
                 }
                 // Break if we reached all the way to package root.
-                if searchPath == packagePath { break }
+                if searchPath == self.path { break }
                 // Go one level up.
                 searchPath = searchPath.parentDirectory
             }

@@ -94,8 +94,8 @@ class PackageGraphTests: XCTestCase {
                 "Sources/Sea/Sea.c",
                 "Sources/Sea/include/Sea.h",
                 "Tests/BarTests/barTests.swift",
-                "Dependencies/Foo/Package.swift",
-                "Dependencies/Foo/Foo/foo.swift",
+                "Dependencies/foo/Package.swift",
+                "Dependencies/foo/Foo/foo.swift",
                 "Products/Foo.framework",
                 "Products/Sea3.framework",
                 "Products/Sea2.framework",
@@ -386,8 +386,8 @@ class PackageGraphTests: XCTestCase {
         XCTAssertEqual(schemes["c"]?.testTargets.map({ $0.name }).sorted(), ["aTests", "bcTests"])
         XCTAssertEqual(schemes["d"]?.testTargets.map({ $0.name }).sorted(), ["aTests", "bcTests", "dTests"])
 
-        XCTAssertEqual(schemes["Foo-Package"]?.testTargets.map({ $0.name }).sorted(), ["aTests", "bcTests", "dTests", "libdTests"])
-        XCTAssertEqual(schemes["Foo-Package"]?.regularTargets.map({ $0.name }).sorted(), ["a", "b", "c", "d", "libd"])
+        XCTAssertEqual(schemes["foo-Package"]?.testTargets.map({ $0.name }).sorted(), ["aTests", "bcTests", "dTests", "libdTests"])
+        XCTAssertEqual(schemes["foo-Package"]?.regularTargets.map({ $0.name }).sorted(), ["a", "b", "c", "d", "libd"])
     }
 
     func testSwiftVersion() throws {

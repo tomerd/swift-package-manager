@@ -12,8 +12,8 @@ import PackageModel
 
 public struct MockPackage {
     public let name: String
-    public let platforms: [PlatformDescription]
     public let path: String?
+    public let platforms: [PlatformDescription]
     public let targets: [MockTarget]
     public let products: [MockProduct]
     public let dependencies: [MockDependency]
@@ -23,8 +23,8 @@ public struct MockPackage {
 
     public init(
         name: String,
-        platforms: [PlatformDescription] = [],
         path: String? = nil,
+        platforms: [PlatformDescription] = [],
         targets: [MockTarget],
         products: [MockProduct],
         dependencies: [MockDependency] = [],
@@ -32,8 +32,8 @@ public struct MockPackage {
         toolsVersion: ToolsVersion? = nil
     ) {
         self.name = name
-        self.platforms = platforms
         self.path = path
+        self.platforms = platforms
         self.targets = targets
         self.products = products
         self.dependencies = dependencies

@@ -33,7 +33,7 @@ let packagePath = localFileSystem.currentWorkingDirectory!
 // Each takes longer to load than the level above it, but provides more detail.
 let diagnostics = DiagnosticsEngine()
 let manifest = try tsc_await { ManifestLoader.loadManifest(at: packagePath, kind: .local, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], on: .global(), completion: $0) }
-let loadedPackage = try tsc_await { PackageBuilder.loadPackage(at: packagePath, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics, on: .global(), completion: $0) }
+let loadedPackage = try tsc_await { PackageBuilder.loadPackage(at: packagePath, kind: .local, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics, on: .global(), completion: $0) }
 let graph = try Workspace.loadGraph(packagePath: packagePath, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], diagnostics: diagnostics)
 
 // EXAMPLES

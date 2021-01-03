@@ -25,7 +25,7 @@ enum PackageGraphError: Swift.Error {
     case productDependencyIncorrectPackage(name: String, package: String)
 
     /// The package dependency name does not match the package name.w
-    case incorrectPackageDependencyName(dependencyName: String, dependencyURL: String, packageName: String)
+    case incorrectPackageDependencyName(dependencyName: String, dependencyURL: String, package: PackageIdentity)
 
     /// The product dependency was found but the package name was not referenced correctly (tools version > 5.2).
     case productDependencyMissingPackage(
@@ -36,7 +36,7 @@ enum PackageGraphError: Swift.Error {
     )
 
     /// A product was found in multiple packages.
-    case duplicateProduct(product: String, packages: [String])
+    case duplicateProduct(product: String, packages: [PackageIdentity])
 }
 
 /// A collection of packages.
@@ -181,10 +181,10 @@ extension PackageGraphError: CustomStringConvertible {
         case .productDependencyIncorrectPackage(let name, let package):
             return "product dependency '\(name)' in package '\(package)' not found"
 
-        case .incorrectPackageDependencyName(let dependencyName, let dependencyURL, let packageName):
+        case .incorrectPackageDependencyName(let dependencyName, let dependencyURL, let package):
             return """
                 declared name '\(dependencyName)' for package dependency '\(dependencyURL)' does not match the actual \
-                package name '\(packageName)'
+                package name '\(package)'
                 """
 
         case .productDependencyMissingPackage(
@@ -219,7 +219,7 @@ extension PackageGraphError: CustomStringConvertible {
             return "dependency '\(productName)' in target '\(targetName)' requires explicit declaration; \(solution)"
 
         case .duplicateProduct(let product, let packages):
-            return "multiple products named '\(product)' in: \(packages.joined(separator: ", "))"
+            return "multiple products named '\(product)' in: '\(packages.map{ $0.description }.joined(separator: "', '"))'"
         }
     }
 }

@@ -171,11 +171,10 @@ extension SwiftPackageTool {
                 workspace.loadRootManifests(packages: root.packages, diagnostics: swiftTool.diagnostics, completion: $0)
             }
             guard let manifest = manifests.first else { return }
-
             let builder = PackageBuilder(
+                path: try swiftTool.getPackageRoot(),
                 manifest: manifest,
                 productFilter: .everything,
-                path: try swiftTool.getPackageRoot(),
                 xcTestMinimumDeploymentTargets: MinimumDeploymentTarget.default.xcTestMinimumDeploymentTargets,
                 diagnostics: swiftTool.diagnostics
             )
@@ -239,9 +238,9 @@ extension SwiftPackageTool {
             }[0]
 
             let builder = PackageBuilder(
+                path: try swiftTool.getPackageRoot(),
                 manifest: manifest,
                 productFilter: .everything,
-                path: try swiftTool.getPackageRoot(),
                 xcTestMinimumDeploymentTargets: [:], // Minimum deployment target does not matter for this operation.
                 diagnostics: swiftTool.diagnostics
             )
@@ -613,10 +612,14 @@ extension SwiftPackageTool {
                 dstdir = outpath.parentDirectory
             case let outpath?:
                 dstdir = outpath
-                projectName = graph.rootPackages[0].name
+                print("11111111")
+                print(graph.rootPackages[0])
+                projectName = graph.rootPackages[0].identity.description
             case _:
+                print("2222222222")
+                print(graph.rootPackages[0])
                 dstdir = try swiftTool.getPackageRoot()
-                projectName = graph.rootPackages[0].name
+                projectName = graph.rootPackages[0].identity.description
             }
             let xcodeprojPath = Xcodeproj.buildXcodeprojPath(outputDir: dstdir, projectName: projectName)
 

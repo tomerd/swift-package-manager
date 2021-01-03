@@ -12,11 +12,12 @@ import class Foundation.ProcessInfo
 
 import ArgumentParser
 import Basics
-import TSCBasic
-import SPMBuildCore
 import Build
-import TSCUtility
 import PackageGraph
+import PackageModel
+import SPMBuildCore
+import TSCBasic
+import TSCUtility
 import Workspace
 
 import func TSCLibc.exit
@@ -228,7 +229,9 @@ public struct SwiftTestTool: SwiftCommand {
                 workspace.loadRootManifests(packages: root.packages, diagnostics: swiftTool.diagnostics, completion: $0)                
             }[0]
             let buildParameters = try swiftTool.buildParametersForTest()
-            print(codeCovAsJSONPath(buildParameters: buildParameters, packageName: rootManifest.name))
+            // 👀 identity changes: this should be fine for now imo
+            let packageIdentity = PackageIdentity(name: rootManifest.name)
+            print(self.codeCovAsJSONPath(buildParameters: buildParameters, packageIdentity: packageIdentity))
 
         case .generateLinuxMain:
             return // warning emitted by validateArguments
@@ -346,9 +349,9 @@ public struct SwiftTestTool: SwiftCommand {
         let buildParameters = try swiftTool.buildParametersForTest()
         for product in testProducts {
             // Export the codecov data as JSON.
-            let jsonPath = codeCovAsJSONPath(
+            let jsonPath = self.codeCovAsJSONPath(
                 buildParameters: buildParameters,
-                packageName: product.packageName)
+                packageIdentity: product.packageIdentity)
             try exportCodeCovAsJSON(to: jsonPath, testBinary: product.binaryPath, swiftTool: swiftTool)
         }
     }
@@ -375,8 +378,8 @@ public struct SwiftTestTool: SwiftCommand {
         try Process.checkNonZeroExit(arguments: args)
     }
 
-    private func codeCovAsJSONPath(buildParameters: BuildParameters, packageName: String) -> AbsolutePath {
-        return buildParameters.codeCovPath.appending(component: packageName + ".json")
+    private func codeCovAsJSONPath(buildParameters: BuildParameters, packageIdentity: PackageIdentity) -> AbsolutePath {
+        return buildParameters.codeCovPath.appending(component: "\(packageIdentity).json")
     }
 
     /// Exports profdata as a JSON file.

@@ -157,8 +157,8 @@ func XCTAssertXcodeBuild(project: AbsolutePath, file: StaticString = #file, line
 
         try localFileSystem.writeFileContents(xcconfig, bytes: stream.bytes)
 
-        let packageName = project.basenameWithoutExt
-        let scheme = packageName + "-Package"
+        let packageIdentity = PackageIdentity(name: project.basenameWithoutExt)
+        let scheme = packageIdentity.c99Identifier + "-Package"
 
         let buildDir = project.parentDirectory.appending(component: "build")
         try Process.checkNonZeroExit(

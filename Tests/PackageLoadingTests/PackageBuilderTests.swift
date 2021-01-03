@@ -1486,7 +1486,7 @@ class PackageBuilderTests: XCTestCase {
             diagnostics.check(
                 diagnostic: "ignoring declared target(s) 'foo, bar' in the system package",
                 behavior: .warning,
-                location: "'SystemModulePackage' /")
+                location: "'systemmodulepackage' /")
         }
     }
 
@@ -1544,7 +1544,7 @@ class PackageBuilderTests: XCTestCase {
             diagnostics.check(
                 diagnostic: "system library product foo shouldn't have a type and contain only one target",
                 behavior: .error,
-                location: "'SystemModulePackage' /")
+                location: "'systemmodulepackage' /")
         }
 
         manifest = Manifest.createV4Manifest(
@@ -1563,7 +1563,7 @@ class PackageBuilderTests: XCTestCase {
             diagnostics.check(
                 diagnostic: "system library product foo shouldn't have a type and contain only one target",
                 behavior: .error,
-                location: "'SystemModulePackage' /")
+                location: "'systemmodulepackage' /")
         }
         
         manifest = Manifest.createV4Manifest(
@@ -1616,18 +1616,18 @@ class PackageBuilderTests: XCTestCase {
                     a 'main.swift' file
                     """,
                 behavior: .error,
-                location: "'MyPackage' /")
+                location: "'mypackage' /")
             diagnostics.check(
                 diagnostic: """
                     executable product 'foo2' should have one executable target; an executable target requires a \
                     'main.swift' file
                     """,
                 behavior: .error,
-                location: "'MyPackage' /")
+                location: "'mypackage' /")
             diagnostics.check(
                 diagnostic: "executable product 'foo3' should not have more than one executable target",
                 behavior: .error,
-                location: "'MyPackage' /")
+                location: "'mypackage' /")
         }
     }
 
@@ -1649,7 +1649,7 @@ class PackageBuilderTests: XCTestCase {
             diagnostics.check(
                 diagnostic: "unable to synthesize a REPL product as there are no library targets in the package",
                 behavior: .error,
-                location: "'Pkg' /")
+                location: "'pkg' /")
         }
     }
 
@@ -2199,9 +2199,9 @@ final class PackageBuilderTester {
         do {
             // FIXME: We should allow customizing root package boolean.
             let builder = PackageBuilder(
+                path: path,
                 manifest: manifest,
                 productFilter: .everything,
-                path: path,
                 remoteArtifacts: remoteArtifacts,
                 xcTestMinimumDeploymentTargets: Self.xcTestMinimumDeploymentTargets,
                 fileSystem: fs,

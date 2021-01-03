@@ -288,7 +288,7 @@ class PackageGraphTests: XCTestCase {
             ]
         )
 
-        XCTAssertEqual(diagnostics.diagnostics[0].description, "multiple targets named 'Bar' in: Bar, Foo")
+        XCTAssertEqual(diagnostics.diagnostics[0].description, "multiple targets named 'Bar' in: 'bar', 'foo'")
     }
 
     func testMultipleDuplicateModules() throws {
@@ -352,7 +352,7 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "multiple targets named 'First' in: First, Fourth, Second, Third", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'First' in: 'first', 'fourth', 'second', 'third'", behavior: .error)
         }
     }
 
@@ -417,8 +417,8 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "multiple targets named 'Bar' in: Fourth, Third", behavior: .error)
-            result.check(diagnostic: "multiple targets named 'Foo' in: First, Second", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'Bar' in: 'fourth', 'third'", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'Foo' in: 'first', 'second'", behavior: .error)
         }
     }
 
@@ -490,7 +490,7 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "multiple targets named 'First' in: First, Fourth", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'First' in: 'first', 'fourth'", behavior: .error)
         }
     }
 
@@ -554,7 +554,7 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "product 'Barx' not found. It is required by target 'Foo'.", behavior: .error, location: "'Foo' /Foo")
+            result.check(diagnostic: "product 'Barx' not found. It is required by target 'Foo'.", behavior: .error, location: "'foo' /Foo")
         }
     }
 
@@ -625,16 +625,16 @@ class PackageGraphTests: XCTestCase {
             result.checkUnordered(diagnostic: """
                 dependency 'BarLib' in target 'Foo' requires explicit declaration; reference the package in the target \
                 dependency with '.product(name: "BarLib", package: "Bar")'
-                """, behavior: .error, location: "'Foo' /Foo")
+                """, behavior: .error, location: "'foo' /Foo")
             result.checkUnordered(diagnostic: """
                 dependency 'Biz' in target 'Foo' requires explicit declaration; provide the name of the package \
                 dependency with '.package(name: "Biz", url: "/BizPath", .exact("1.2.3"))'
-                """, behavior: .error, location: "'Foo' /Foo")
+                """, behavior: .error, location: "'foo' /Foo")
             result.checkUnordered(diagnostic: """
                 dependency 'FizLib' in target 'Foo' requires explicit declaration; reference the package in the target \
                 dependency with '.product(name: "FizLib", package: "Fiz")' and provide the name of the package \
                 dependency with '.package(name: "Fiz", url: "/FizPath", from: "1.1.2")'
-                """, behavior: .error, location: "'Foo' /Foo")
+                """, behavior: .error, location: "'foo' /Foo")
         }
     }
 
@@ -738,9 +738,9 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "dependency 'Baz' is not used by any target", behavior: .warning)
+            result.check(diagnostic: "dependency 'baz' is not used by any target", behavior: .warning)
             #if ENABLE_TARGET_BASED_DEPENDENCY_RESOLUTION
-            result.check(diagnostic: "dependency 'Biz' is not used by any target", behavior: .warning)
+            result.check(diagnostic: "dependency 'biz' is not used by any target", behavior: .warning)
             #endif
         }
     }
@@ -833,7 +833,7 @@ class PackageGraphTests: XCTestCase {
         )
 
         DiagnosticsEngineTester(diagnostics) { result in
-            result.check(diagnostic: "multiple targets named 'Foo' in: Dep2, Start", behavior: .error)
+            result.check(diagnostic: "multiple targets named 'Foo' in: 'dep2', 'start'", behavior: .error)
         }
     }
 
@@ -884,7 +884,7 @@ class PackageGraphTests: XCTestCase {
             ]
         )
 
-        XCTAssertTrue(diagnostics.diagnostics.contains(where: { $0.description.contains("multiple products named 'Bar' in: Bar, Baz") }), "\(diagnostics.diagnostics)")
+        XCTAssertTrue(diagnostics.diagnostics.contains(where: { $0.description.contains("multiple products named 'Bar' in: 'bar', 'baz'") }), "\(diagnostics.diagnostics)")
     }
 
     func testUnsafeFlags() throws {
@@ -993,10 +993,10 @@ class PackageGraphTests: XCTestCase {
         DiagnosticsEngineTester(diagnostics, ignoreNotes: true) { result in
             result.check(
                 diagnostic: """
-                    declared name 'Baar' for package dependency '/Bar' does not match the actual package name 'Bar'
+                    declared name 'Baar' for package dependency '/Bar' does not match the actual package name 'bar'
                     """,
                 behavior: .error,
-                location: "'Foo' /Foo"
+                location: "'foo' /Foo"
             )
         }
     }

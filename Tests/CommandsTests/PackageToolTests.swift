@@ -201,7 +201,7 @@ final class PackageToolTests: XCTestCase {
             let json = try JSON(bytes: ByteString(encodingAsUTF8: jsonOutput))
 
             // Check that tests don't appear in the product memberships.
-            XCTAssertEqual(json["name"]?.string, "ExeTest")
+            XCTAssertEqual(json["name"]?.string, "exetest")
             let jsonTarget0 = try XCTUnwrap(json["targets"]?.array?[0])
             XCTAssertNil(jsonTarget0["product_memberships"])
             let jsonTarget1 = try XCTUnwrap(json["targets"]?.array?[1])
@@ -215,7 +215,7 @@ final class PackageToolTests: XCTestCase {
             let json = try JSON(bytes: ByteString(encodingAsUTF8: jsonOutput))
             
             // Check that the JSON description contains what we expect it to.
-            XCTAssertEqual(json["name"]?.string, "SwiftCMixed")
+            XCTAssertEqual(json["name"]?.string, "swiftcmixed")
             XCTAssertEqual(json["path"]?.string?.hasPrefix("/"), true)
             XCTAssertEqual(json["path"]?.string?.hasSuffix("/" + prefix.basename), true)
             XCTAssertEqual(json["targets"]?.array?.count, 3)
@@ -253,7 +253,7 @@ final class PackageToolTests: XCTestCase {
             // Check that the text description contains what we expect it to.
             // FIXME: This is a bit inelegant, but any errors are easy to reason about.
             let textChunk0 = try XCTUnwrap(textChunks[0])
-            XCTAssert(textChunk0.contains("Name: SwiftCMixed"), textChunk0)
+            XCTAssert(textChunk0.contains("Name: swiftcmixed"), textChunk0)
             XCTAssert(textChunk0.contains("Path: /"), textChunk0)
             XCTAssert(textChunk0.contains("/" + prefix.basename + "\n"), textChunk0)
             XCTAssert(textChunk0.contains("Tools version: 4.2"), textChunk0)
@@ -336,7 +336,7 @@ final class PackageToolTests: XCTestCase {
             let json = try JSON(bytes: ByteString(encodingAsUTF8: jsonOutput))
             guard case let .dictionary(contents) = json else { XCTFail("unexpected result"); return }
             guard case let .string(name)? = contents["name"] else { XCTFail("unexpected result"); return }
-            XCTAssertEqual(name, "Dealer")
+            XCTAssertEqual(name, "dealer")
             guard case let .string(path)? = contents["path"] else { XCTFail("unexpected result"); return }
             XCTAssertEqual(resolveSymlinks(AbsolutePath(path)), resolveSymlinks(packageRoot))
         }
@@ -439,10 +439,10 @@ final class PackageToolTests: XCTestCase {
         }
         
         let expectedLines: [Substring] = [
-            #""/PackageA" [label="PackageA\n/PackageA\nunspecified"]"#,
-            #""/PackageB" [label="PackageB\n/PackageB\nunspecified"]"#,
-            #""/PackageC" [label="PackageC\n/PackageC\nunspecified"]"#,
-            #""/PackageD" [label="PackageD\n/PackageD\nunspecified"]"#,
+            #""/PackageA" [label="packagea\n/PackageA\nunspecified"]"#,
+            #""/PackageB" [label="packageb\n/PackageB\nunspecified"]"#,
+            #""/PackageC" [label="packagec\n/PackageC\nunspecified"]"#,
+            #""/PackageD" [label="packaged\n/PackageD\nunspecified"]"#,
             #""/PackageA" -> "/PackageB""#,
             #""/PackageA" -> "/PackageC""#,
             #""/PackageB" -> "/PackageC""#,

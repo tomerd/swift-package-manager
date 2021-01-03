@@ -61,13 +61,13 @@ public struct PackageIdentity: Hashable, CustomStringConvertible {
 }
 
 extension PackageIdentity {
-    public var mangledToC99ExtendedIdentifier: String {
+    public var c99Identifier: String {
         get {
             self.description.spm_mangledToC99ExtendedIdentifier()
         }
     }
 
-    public var mangledToBundleIdentifier: String {
+    public var bundleIdentifier: String {
         get {
             self.description.spm_mangledToBundleIdentifier()
         }

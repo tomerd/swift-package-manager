@@ -80,7 +80,7 @@ class PIFBuilderTests: XCTestCase {
             XCTAssertNoDiagnostics(diagnostics)
 
             let projectNames = pif.workspace.projects.map({ $0.name })
-            XCTAssertEqual(projectNames, ["A", "B", "Aggregate"])
+            XCTAssertEqual(projectNames, ["a", "b", "Aggregate"])
             let projectATargetNames = pif.workspace.projects[0].targets.map({ $0.name })
             XCTAssertEqual(projectATargetNames, ["aexe", "alib", "A2", "A3"])
             let targetAExeDependencies = pif.workspace.projects[0].targets[0].dependencies
@@ -1732,13 +1732,13 @@ class PIFBuilderTests: XCTestCase {
 
                     target.checkBuildConfiguration("Debug") { configuration in
                         configuration.checkBuildSettings { settings in
-                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "Foo_foo")
+                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "foo_foo")
                         }
                     }
 
                     target.checkBuildConfiguration("Debug") { configuration in
                         configuration.checkBuildSettings { settings in
-                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "Foo_foo")
+                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "foo_foo")
                         }
                     }
 
@@ -1748,9 +1748,9 @@ class PIFBuilderTests: XCTestCase {
                 }
 
                 project.checkTarget("PACKAGE-RESOURCE:foo") { target in
-                    XCTAssertEqual(target.name, "Foo_foo")
+                    XCTAssertEqual(target.name, "foo_foo")
                     XCTAssertEqual(target.productType, .bundle)
-                    XCTAssertEqual(target.productName, "Foo_foo")
+                    XCTAssertEqual(target.productName, "foo_foo")
                     XCTAssertEqual(target.dependencies, [])
                     XCTAssertEqual(target.sources, [])
                     XCTAssertEqual(target.frameworks, [])
@@ -1763,10 +1763,10 @@ class PIFBuilderTests: XCTestCase {
                         XCTAssertEqual(configuration.guid, "PACKAGE-RESOURCE:foo::BUILDCONFIG_Debug")
                         XCTAssertEqual(configuration.name, "Debug")
                         configuration.checkAllBuildSettings { settings in
-                            XCTAssertEqual(settings[.TARGET_NAME], "Foo_foo")
-                            XCTAssertEqual(settings[.PRODUCT_NAME], "Foo_foo")
-                            XCTAssertEqual(settings[.PRODUCT_MODULE_NAME], "Foo_foo")
-                            XCTAssertEqual(settings[.PRODUCT_BUNDLE_IDENTIFIER], "Foo.foo.resources")
+                            XCTAssertEqual(settings[.TARGET_NAME], "foo_foo")
+                            XCTAssertEqual(settings[.PRODUCT_NAME], "foo_foo")
+                            XCTAssertEqual(settings[.PRODUCT_MODULE_NAME], "foo_foo")
+                            XCTAssertEqual(settings[.PRODUCT_BUNDLE_IDENTIFIER], "foo.foo.resources")
                             XCTAssertEqual(settings[.GENERATE_INFOPLIST_FILE], "YES")
                             XCTAssertEqual(settings[.PACKAGE_RESOURCE_TARGET_KIND], "resource")
                         }
@@ -1776,10 +1776,10 @@ class PIFBuilderTests: XCTestCase {
                         XCTAssertEqual(configuration.guid, "PACKAGE-RESOURCE:foo::BUILDCONFIG_Release")
                         XCTAssertEqual(configuration.name, "Release")
                         configuration.checkAllBuildSettings { settings in
-                            XCTAssertEqual(settings[.TARGET_NAME], "Foo_foo")
-                            XCTAssertEqual(settings[.PRODUCT_NAME], "Foo_foo")
-                            XCTAssertEqual(settings[.PRODUCT_MODULE_NAME], "Foo_foo")
-                            XCTAssertEqual(settings[.PRODUCT_BUNDLE_IDENTIFIER], "Foo.foo.resources")
+                            XCTAssertEqual(settings[.TARGET_NAME], "foo_foo")
+                            XCTAssertEqual(settings[.PRODUCT_NAME], "foo_foo")
+                            XCTAssertEqual(settings[.PRODUCT_MODULE_NAME], "foo_foo")
+                            XCTAssertEqual(settings[.PRODUCT_BUNDLE_IDENTIFIER], "foo.foo.resources")
                             XCTAssertEqual(settings[.GENERATE_INFOPLIST_FILE], "YES")
                             XCTAssertEqual(settings[.PACKAGE_RESOURCE_TARGET_KIND], "resource")
                         }
@@ -1813,18 +1813,18 @@ class PIFBuilderTests: XCTestCase {
 
                     target.checkBuildConfiguration("Debug") { configuration in
                         configuration.checkBuildSettings { settings in
-                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "Foo_FooLib")
+                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "foo_FooLib")
                         }
                     }
 
                     target.checkBuildConfiguration("Debug") { configuration in
                         configuration.checkBuildSettings { settings in
-                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "Foo_FooLib")
+                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "foo_FooLib")
                         }
                     }
 
                     target.checkImpartedBuildSettings { settings in
-                        XCTAssertEqual(settings[.EMBED_PACKAGE_RESOURCE_BUNDLE_NAMES], ["$(inherited)", "Foo_FooLib"])
+                        XCTAssertEqual(settings[.EMBED_PACKAGE_RESOURCE_BUNDLE_NAMES], ["$(inherited)", "foo_FooLib"])
                     }
                 }
 
@@ -1834,13 +1834,13 @@ class PIFBuilderTests: XCTestCase {
 
                     target.checkBuildConfiguration("Debug") { configuration in
                         configuration.checkBuildSettings { settings in
-                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "Foo_FooTests")
+                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "foo_FooTests")
                         }
                     }
 
                     target.checkBuildConfiguration("Debug") { configuration in
                         configuration.checkBuildSettings { settings in
-                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "Foo_FooTests")
+                            XCTAssertEqual(settings[.PACKAGE_RESOURCE_BUNDLE_NAME], "foo_FooTests")
                         }
                     }
 
@@ -1850,9 +1850,9 @@ class PIFBuilderTests: XCTestCase {
                 }
 
                 project.checkTarget("PACKAGE-RESOURCE:FooTests") { target in
-                    XCTAssertEqual(target.name, "Foo_FooTests")
+                    XCTAssertEqual(target.name, "foo_FooTests")
                     XCTAssertEqual(target.productType, .bundle)
-                    XCTAssertEqual(target.productName, "Foo_FooTests")
+                    XCTAssertEqual(target.productName, "foo_FooTests")
                     XCTAssertEqual(target.dependencies, [])
                     XCTAssertEqual(target.sources, [])
                     XCTAssertEqual(target.frameworks, [])
@@ -1865,10 +1865,10 @@ class PIFBuilderTests: XCTestCase {
                         XCTAssertEqual(configuration.guid, "PACKAGE-RESOURCE:FooTests::BUILDCONFIG_Debug")
                         XCTAssertEqual(configuration.name, "Debug")
                         configuration.checkAllBuildSettings { settings in
-                            XCTAssertEqual(settings[.TARGET_NAME], "Foo_FooTests")
-                            XCTAssertEqual(settings[.PRODUCT_NAME], "Foo_FooTests")
-                            XCTAssertEqual(settings[.PRODUCT_MODULE_NAME], "Foo_FooTests")
-                            XCTAssertEqual(settings[.PRODUCT_BUNDLE_IDENTIFIER], "Foo.FooTests.resources")
+                            XCTAssertEqual(settings[.TARGET_NAME], "foo_FooTests")
+                            XCTAssertEqual(settings[.PRODUCT_NAME], "foo_FooTests")
+                            XCTAssertEqual(settings[.PRODUCT_MODULE_NAME], "foo_FooTests")
+                            XCTAssertEqual(settings[.PRODUCT_BUNDLE_IDENTIFIER], "foo.FooTests.resources")
                             XCTAssertEqual(settings[.GENERATE_INFOPLIST_FILE], "YES")
                             XCTAssertEqual(settings[.PACKAGE_RESOURCE_TARGET_KIND], "resource")
                         }
@@ -1878,10 +1878,10 @@ class PIFBuilderTests: XCTestCase {
                         XCTAssertEqual(configuration.guid, "PACKAGE-RESOURCE:FooTests::BUILDCONFIG_Release")
                         XCTAssertEqual(configuration.name, "Release")
                         configuration.checkAllBuildSettings { settings in
-                            XCTAssertEqual(settings[.TARGET_NAME], "Foo_FooTests")
-                            XCTAssertEqual(settings[.PRODUCT_NAME], "Foo_FooTests")
-                            XCTAssertEqual(settings[.PRODUCT_MODULE_NAME], "Foo_FooTests")
-                            XCTAssertEqual(settings[.PRODUCT_BUNDLE_IDENTIFIER], "Foo.FooTests.resources")
+                            XCTAssertEqual(settings[.TARGET_NAME], "foo_FooTests")
+                            XCTAssertEqual(settings[.PRODUCT_NAME], "foo_FooTests")
+                            XCTAssertEqual(settings[.PRODUCT_MODULE_NAME], "foo_FooTests")
+                            XCTAssertEqual(settings[.PRODUCT_BUNDLE_IDENTIFIER], "foo.FooTests.resources")
                             XCTAssertEqual(settings[.GENERATE_INFOPLIST_FILE], "YES")
                             XCTAssertEqual(settings[.PACKAGE_RESOURCE_TARGET_KIND], "resource")
                         }

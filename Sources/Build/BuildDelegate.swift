@@ -215,7 +215,7 @@ public struct BuildDescription: Codable {
                 throw InternalError("package with product \(desc.product) not found")
             }
             return BuiltTestProduct(
-                packageName: package.name,
+                packageIdentity: package.identity,
                 productName: desc.product.name,
                 binaryPath: desc.binary
             )

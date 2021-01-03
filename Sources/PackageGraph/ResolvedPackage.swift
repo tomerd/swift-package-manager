@@ -13,23 +13,35 @@ import PackageModel
 
 /// A fully resolved package. Contains resolved targets, products and dependencies of the package.
 public final class ResolvedPackage: ObjectIdentifierProtocol {
-
     /// The underlying package reference.
     public let underlyingPackage: Package
 
-    /// The manifest describing the package.
-    public var manifest: Manifest {
-        return underlyingPackage.manifest
+    /// The identity of the package.
+    public var identity: PackageIdentity {
+        return self.underlyingPackage.identity
     }
 
-    /// The name of the package.
-    public var name: String {
-        return underlyingPackage.name
+    // FIXME: the purpose of this is to allow identity override based on the identity in the manifest which is hacky
+    // this should be removed when we remove name from manifest
+    /// The alternate identity of the package.
+    public var alternateIdentity: PackageIdentity? {
+        return self.underlyingPackage.alternateIdentity
     }
 
     /// The local path of the package.
     public var path: AbsolutePath {
-        return underlyingPackage.path
+        return self.underlyingPackage.path
+    }
+
+    /// The manifest describing the package.
+    public var manifest: Manifest {
+        return self.underlyingPackage.manifest
+    }
+
+    /// The name of the package.
+    @available(*, deprecated)
+    public var name: String {
+        return self.underlyingPackage.name
     }
 
     /// The targets contained in the package.
@@ -56,6 +68,6 @@ public final class ResolvedPackage: ObjectIdentifierProtocol {
 
 extension ResolvedPackage: CustomStringConvertible {
     public var description: String {
-        return "<ResolvedPackage: \(name)>"
+        return "<ResolvedPackage: \(self.identity)>"
     }
 }

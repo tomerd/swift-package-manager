@@ -43,15 +43,24 @@ import TSCUtility
 /// loaded. There is not currently a data structure for this, but it is the
 /// result after `PackageLoading.transmute()`.
 public final class Package: ObjectIdentifierProtocol, Encodable {
-    /// The manifest describing the package.
-    public let manifest: Manifest
+    /// The identity of the package.
+    public let identity: PackageIdentity
+
+    // FIXME: the purpose of this is to allow identity override based on the identity in the manifest which is hacky
+    // this should be removed when we remove name from manifest
+    /// The alternate identity of the package.
+    public let alternateIdentity: PackageIdentity?
 
     /// The local path of the package.
     public let path: AbsolutePath
 
+    /// The manifest describing the package.
+    public let manifest: Manifest
+
     /// The name of the package.
+    @available(*, deprecated)
     public var name: String {
-        return manifest.name
+        return self.manifest.name
     }
 
     /// The targets contained in the package.
@@ -72,15 +81,19 @@ public final class Package: ObjectIdentifierProtocol, Encodable {
     public let testTargetSearchPath: AbsolutePath
 
     public init(
-        manifest: Manifest,
+        identity: PackageIdentity,
+        alternateIdentity: PackageIdentity?,
         path: AbsolutePath,
+        manifest: Manifest,
         targets: [Target],
         products: [Product],
         targetSearchPath: AbsolutePath,
         testTargetSearchPath: AbsolutePath
     ) {
-        self.manifest = manifest
+        self.identity = identity
+        self.alternateIdentity = alternateIdentity
         self.path = path
+        self.manifest = manifest
         self._targets = .init(wrappedValue: targets)
         self.products = products
         self.targetSearchPath = targetSearchPath
@@ -94,7 +107,7 @@ public final class Package: ObjectIdentifierProtocol, Encodable {
 
 extension Package: CustomStringConvertible {
     public var description: String {
-        return name
+        return self.identity.description
     }
 }
 

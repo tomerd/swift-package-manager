@@ -193,7 +193,7 @@ public final class MockWorkspace {
         path: AbsolutePath? = nil,
         revision: Revision? = nil,
         checkoutBranch: String? = nil,
-        _ result: (DiagnosticsEngine) -> Void
+        handler: (DiagnosticsEngine) -> Void
     ) {
         let ws = self.createWorkspace()
         let diagnostics = DiagnosticsEngine()
@@ -204,14 +204,14 @@ public final class MockWorkspace {
             checkoutBranch: checkoutBranch,
             diagnostics: diagnostics
         )
-        result(diagnostics)
+        handler(diagnostics)
     }
 
     public func checkUnedit(
         packageName: String,
         roots: [String],
         forceRemove: Bool = false,
-        _ result: (DiagnosticsEngine) -> Void
+        handler: (DiagnosticsEngine) -> Void
     ) {
         let ws = self.createWorkspace()
         let diagnostics = DiagnosticsEngine()
@@ -219,38 +219,38 @@ public final class MockWorkspace {
         diagnostics.wrap {
             try ws.unedit(packageName: packageName, forceRemove: forceRemove, root: rootInput, diagnostics: diagnostics)
         }
-        result(diagnostics)
+        handler(diagnostics)
     }
 
-    public func checkResolve(pkg: String, roots: [String], version: TSCUtility.Version, _ result: (DiagnosticsEngine) -> Void) {
+    public func checkResolve(pkg: String, roots: [String], version: TSCUtility.Version, handler: (DiagnosticsEngine) -> Void) {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
         let rootInput = PackageGraphRootInput(packages: rootPaths(for: roots))
         diagnostics.wrap {
             try workspace.resolve(packageName: pkg, root: rootInput, version: version, branch: nil, revision: nil, diagnostics: diagnostics)
-            result(diagnostics)
+            handler(diagnostics)
         }
     }
 
-    public func checkClean(_ result: (DiagnosticsEngine) -> Void) {
+    public func checkClean(handler: (DiagnosticsEngine) -> Void) {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
         workspace.clean(with: diagnostics)
-        result(diagnostics)
+        handler(diagnostics)
     }
 
-    public func checkReset(_ result: (DiagnosticsEngine) -> Void) {
+    public func checkReset(handler: (DiagnosticsEngine) -> Void) {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
         workspace.reset(with: diagnostics)
-        result(diagnostics)
+        handler(diagnostics)
     }
 
     public func checkUpdate(
-        roots: [String] = [],
+        at roots: String...,
         deps: [MockDependency] = [],
         packages: [String] = [],
-        _ result: (DiagnosticsEngine) -> Void
+        handler: (DiagnosticsEngine) -> Void
     ) {
         let dependencies = deps.map { $0.convert(baseURL: packagesDir) }
         let diagnostics = DiagnosticsEngine()
@@ -260,14 +260,14 @@ public final class MockWorkspace {
         )
         diagnostics.wrap {
             try workspace.updateDependencies(root: rootInput, packages: packages, diagnostics: diagnostics)
-            result(diagnostics)
+            handler(diagnostics)
         }
     }
 
     public func checkUpdateDryRun(
-        roots: [String] = [],
+        at roots: String...,
         deps: [MockDependency] = [],
-        _ result: ([(PackageReference, Workspace.PackageStateChange)]?, DiagnosticsEngine) -> Void
+        handler: ([(PackageReference, Workspace.PackageStateChange)]?, DiagnosticsEngine) -> Void
     ) {
         let dependencies = deps.map { $0.convert(baseURL: packagesDir) }
         let diagnostics = DiagnosticsEngine()
@@ -277,24 +277,33 @@ public final class MockWorkspace {
         )
         diagnostics.wrap {
             let changes = try workspace.updateDependencies(root: rootInput, diagnostics: diagnostics, dryRun: true)
-            result(changes, diagnostics)
+            handler(changes, diagnostics)
         }
     }
 
-    public func checkPackageGraph(
-        roots: [String] = [],
+    public func loadPackageGraph(
+        at roots: String...,
         deps: [MockDependency],
-        _ result: (PackageGraph, DiagnosticsEngine) -> Void
+        handler: (PackageGraph, DiagnosticsEngine) -> Void
     ) {
         let dependencies = deps.map { $0.convert(baseURL: packagesDir) }
-        self.checkPackageGraph(roots: roots, dependencies: dependencies, result)
+        self.loadPackageGraph(at: roots, dependencies: dependencies, handler: handler)
     }
 
-    public func checkPackageGraph(
-        roots: [String] = [],
+    public func loadPackageGraph(
+        at roots: String...,
         dependencies: [PackageDependencyDescription] = [],
         forceResolvedVersions: Bool = false,
-        _ result: (PackageGraph, DiagnosticsEngine) -> Void
+        handler: (PackageGraph, DiagnosticsEngine) -> Void
+    ) {
+        self.loadPackageGraph(at: roots, dependencies: dependencies, forceResolvedVersions: forceResolvedVersions, handler: handler)
+    }
+
+    public func loadPackageGraph(
+        at roots: [String],
+        dependencies: [PackageDependencyDescription] = [],
+        forceResolvedVersions: Bool = false,
+        handler: (PackageGraph, DiagnosticsEngine) -> Void
     ) {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
@@ -305,7 +314,7 @@ public final class MockWorkspace {
             let graph = try workspace.loadPackageGraph(
                 rootInput: rootInput, forceResolvedVersions: forceResolvedVersions, diagnostics: diagnostics
             )
-            result(graph, diagnostics)
+            handler(graph, diagnostics)
         }
     }
 
@@ -314,7 +323,7 @@ public final class MockWorkspace {
         public let diagnostics: DiagnosticsEngine
     }
 
-    public func checkPrecomputeResolution(_ check: (ResolutionPrecomputationResult) -> Void) throws {
+    public func checkPrecomputeResolution(handler: (ResolutionPrecomputationResult) -> Void) throws {
         let diagnostics = DiagnosticsEngine()
         let workspace = self.createWorkspace()
         let pinsStore = try workspace.pinsStore.load()
@@ -332,7 +341,7 @@ public final class MockWorkspace {
             extraConstraints: []
         )
 
-        check(ResolutionPrecomputationResult(result: result, diagnostics: diagnostics))
+        handler(ResolutionPrecomputationResult(result: result, diagnostics: diagnostics))
     }
 
     public func set(
