@@ -126,9 +126,10 @@ public final class ManifestLoader: ManifestLoaderProtocol {
     private let isManifestSandboxEnabled: Bool
     private let delegate: ManifestLoaderDelegate?
     private let extraManifestFlags: [String]
+    private var mirrors: [String: String]
 
     private let databaseCacheDir: AbsolutePath?
-
+    
     private let sdkRootCache = ThreadSafeBox<AbsolutePath>()
 
     private let operationQueue: OperationQueue
@@ -139,60 +140,21 @@ public final class ManifestLoader: ManifestLoaderProtocol {
         isManifestSandboxEnabled: Bool = true,
         cacheDir: AbsolutePath? = nil,
         delegate: ManifestLoaderDelegate? = nil,
-        extraManifestFlags: [String] = []
+        extraManifestFlags: [String] = [],
+        mirrors: [String: String]
     ) {
         self.resources = manifestResources
         self.serializedDiagnostics = serializedDiagnostics
         self.isManifestSandboxEnabled = isManifestSandboxEnabled
         self.delegate = delegate
         self.extraManifestFlags = extraManifestFlags
+        self.mirrors = mirrors
 
         self.databaseCacheDir = cacheDir.map(resolveSymlinks)
 
         self.operationQueue = OperationQueue()
         self.operationQueue.name = "org.swift.swiftpm.manifest-loader"
         self.operationQueue.maxConcurrentOperationCount = Concurrency.maxOperations
-    }
-
-    // FIXME: deprecated before 12/2020, remove once clients migrate
-    @available(*, deprecated)
-    public convenience init(resources: ManifestResourceProvider, isManifestSandboxEnabled: Bool = true) {
-        self.init(manifestResources: resources, isManifestSandboxEnabled: isManifestSandboxEnabled)
-    }
-
-    // FIXME: deprecated 12/2020, remove once clients migrate
-    @available(*, deprecated, message: "use non-blocking version instead")
-    public static func loadManifest(
-        packagePath: AbsolutePath,
-        swiftCompiler: AbsolutePath,
-        swiftCompilerFlags: [String],
-        packageKind: PackageReference.Kind
-    ) throws -> Manifest {
-        try temp_await{
-            Self.loadManifest(packagePath: packagePath,
-                              swiftCompiler: swiftCompiler,
-                              swiftCompilerFlags: swiftCompilerFlags,
-                              packageKind: packageKind,
-                              on: .global(),
-                              completion: $0)
-        }
-    }
-
-    @available(*, deprecated, message: "use at:kind: version instead")
-    public static func loadManifest(
-        packagePath: AbsolutePath,
-        swiftCompiler: AbsolutePath,
-        swiftCompilerFlags: [String],
-        packageKind: PackageReference.Kind,
-        on queue: DispatchQueue,
-        completion: @escaping (Result<Manifest, Error>) -> Void
-     ) {
-        Self.loadManifest(at: packagePath,
-                          kind: packageKind,
-                          swiftCompiler: swiftCompiler,
-                          swiftCompilerFlags: swiftCompilerFlags,
-                          on: queue,
-                          completion: completion)
     }
 
     /// Loads a manifest from a package repository using the resources associated with a particular `swiftc` executable.
@@ -207,13 +169,14 @@ public final class ManifestLoader: ManifestLoaderProtocol {
         kind: PackageReference.Kind,
         swiftCompiler: AbsolutePath,
         swiftCompilerFlags: [String],
+        mirrors: [String: String],
         on queue: DispatchQueue,
         completion: @escaping (Result<Manifest, Error>) -> Void
     ) {
         do {
             let fileSystem = localFileSystem
             let resources = try UserManifestResources(swiftCompiler: swiftCompiler, swiftCompilerFlags: swiftCompilerFlags)
-            let loader = ManifestLoader(manifestResources: resources)
+            let loader = ManifestLoader(manifestResources: resources, mirrors: mirrors)
             let toolsVersion = try ToolsVersionLoader().load(at: path, fileSystem: fileSystem)
             loader.load(
                 at: path,
@@ -229,32 +192,6 @@ public final class ManifestLoader: ManifestLoaderProtocol {
             )
         } catch {
             return completion(.failure(error))
-        }
-    }
-
-    // FIXME: deprecated 12/2020, remove once clients migrate
-    @available(*, deprecated, message: "use non-blocking version instead")
-    public func load(
-        packagePath path: AbsolutePath,
-        baseURL: String,
-        version: Version?,
-        revision: String?,
-        toolsVersion: ToolsVersion,
-        packageKind: PackageReference.Kind,
-        fileSystem: FileSystem? = nil,
-        diagnostics: DiagnosticsEngine? = nil
-    ) throws -> Manifest {
-        try temp_await{
-            self.load(at: path,
-                      packageKind: packageKind,
-                      packageLocation: baseURL,
-                      version: version,
-                      revision: revision,
-                      toolsVersion: toolsVersion,
-                      fileSystem: fileSystem ?? localFileSystem,
-                      diagnostics: diagnostics,
-                      on: .global(),
-                      completion: $0)
         }
     }
 
@@ -339,7 +276,8 @@ public final class ManifestLoader: ManifestLoaderProtocol {
                 // Load the manifest from JSON.
                 let parsedManifest = try ManifestJSONParser.parse(v4: jsonString,
                                                                   toolsVersion: toolsVersion,
-                                                                  packageLocation: packageLocation,
+                                                                  packageRoot: path.parentDirectory,
+                                                                  mirrors: self.mirrors,
                                                                   fileSystem: fileSystem)
                 // Throw if we encountered any runtime errors.
                 guard parsedManifest.errors.isEmpty else {
@@ -451,7 +389,7 @@ public final class ManifestLoader: ManifestLoaderProtocol {
         diagnostics: DiagnosticsEngine?
     ) throws {
         let dependenciesByIdentity = Dictionary(grouping: manifest.dependencies, by: { dependency in
-            PackageIdentity(url: dependency.url)
+            PackageIdentity(url: dependency.location)
         })
 
         let duplicateDependencyIdentities = dependenciesByIdentity
@@ -472,8 +410,8 @@ public final class ManifestLoader: ManifestLoaderProtocol {
             }
             let duplicateDependencyNames = manifest.dependencies
                 .lazy
-                .filter({ !duplicateDependencies.contains($0) })
-                .map({ $0.name })
+                .filter{ !duplicateDependencies.contains($0) }
+                .map{ $0.nameForTargetResolutionOnly }
                 .spm_findDuplicates()
 
             for name in duplicateDependencyNames {
@@ -522,7 +460,7 @@ public final class ManifestLoader: ManifestLoaderProtocol {
                         try diagnostics.emit(.unknownTargetPackageDependency(
                             packageName: packageName ?? "unknown package name",
                             targetName: target.name,
-                            validPackages: manifest.dependencies.map { $0.name }
+                            validPackages: manifest.dependencies.map { $0.nameForTargetResolutionOnly }
                         ))
                     }
                 case .byName(let name, _):
@@ -534,7 +472,7 @@ public final class ManifestLoader: ManifestLoaderProtocol {
                         try diagnostics.emit(.unknownTargetDependency(
                             dependency: name,
                             targetName: target.name,
-                            validDependencies: manifest.dependencies.map { $0.name }
+                            validDependencies: manifest.dependencies.map { $0.nameForTargetResolutionOnly }
                         ))
                     }
                 }

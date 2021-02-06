@@ -784,12 +784,16 @@ public class SwiftTool {
             case (false, .shared):
                 cachePath = try self.getCachePath().map{ $0.appending(component: "manifests") }
             }
+            // FIXME
+            let workspace = try self.getActiveWorkspace()
+            fatalError("mirrors")
             return try ManifestLoader(
                 // Always use the host toolchain's resources for parsing manifest.
                 manifestResources: self._hostToolchain.get().manifestResources,
                 isManifestSandboxEnabled: !self.options.shouldDisableSandbox,
                 cacheDir: cachePath,
-                extraManifestFlags: self.options.manifestFlags
+                extraManifestFlags: self.options.manifestFlags,
+                mirrors: [:]
             )
         })
     }()

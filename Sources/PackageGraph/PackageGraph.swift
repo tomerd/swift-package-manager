@@ -25,13 +25,13 @@ enum PackageGraphError: Swift.Error {
     case productDependencyIncorrectPackage(name: String, package: String)
 
     /// The package dependency name does not match the package name.
-    case incorrectPackageDependencyName(dependencyPackageName: String, dependencyName: String, dependencyURL: String, resolvedPackageName: String, resolvedPackageURL: String)
+    case incorrectPackageDependencyName(dependencyPackageName: String, dependencyName: String, dependencyLocation: String, resolvedPackageName: String, resolvedPackageURL: String)
 
     /// The package dependency already satisfied by a different dependency package
-    case dependencyAlreadySatisfiedByIdentifier(dependencyPackageName: String, dependencyURL: String, otherDependencyURL: String, identity: PackageIdentity)
+    case dependencyAlreadySatisfiedByIdentifier(dependencyPackageName: String, dependencyLocation: String, otherDependencyURL: String, identity: PackageIdentity)
 
     /// The package dependency already satisfied by a different dependency package
-    case dependencyAlreadySatisfiedByName(dependencyPackageName: String, dependencyURL: String, otherDependencyURL: String, name: String)
+    case dependencyAlreadySatisfiedByName(dependencyPackageName: String, dependencyLocation: String, otherDependencyURL: String, name: String)
 
     /// The product dependency was found but the package name was not referenced correctly (tools version > 5.2).
     case productDependencyMissingPackage(
@@ -210,7 +210,7 @@ extension PackageGraphError: CustomStringConvertible {
 
             // If the package dependency name is the same as the package name, or if the product name and package name
             // don't correspond, we need to rewrite the target dependency to explicit specify the package name.
-            if packageDependency.name == packageName || productName != packageName {
+            if packageDependency.nameForTargetResolutionOnly == packageName || productName != packageName {
                 solutionSteps.append("""
                     reference the package in the target dependency with '.product(name: "\(productName)", package: \
                     "\(packageName)")'
@@ -220,7 +220,7 @@ extension PackageGraphError: CustomStringConvertible {
             // If the name of the product and the package are the same, or if the package dependency implicit name
             // deduced from the URL is not correct, we need to rewrite the package dependency declaration to specify the
             // package name.
-            if productName == packageName || packageDependency.name != packageName {
+            if productName == packageName || packageDependency.nameForTargetResolutionOnly != packageName {
                 let dependencySwiftRepresentation = packageDependency.swiftRepresentation(overridingName: packageName)
                 solutionSteps.append("""
                     provide the name of the package dependency with '\(dependencySwiftRepresentation)'
@@ -240,14 +240,14 @@ fileprivate extension PackageDependencyDescription {
     func swiftRepresentation(overridingName: String? = nil) -> String {
         var parameters: [String] = []
 
-        if let name = overridingName ?? explicitName {
+        if let name = overridingName ?? self.explicitNameForTargetResolutionOnly {
             parameters.append("name: \"\(name)\"")
         }
 
         if requirement == .localPackage {
-            parameters.append("path: \"\(url)\"")
+            parameters.append("path: \"\(self.location)\"")
         } else {
-            parameters.append("url: \"\(url)\"")
+            parameters.append("url: \"\(self.location)\"")
 
             switch requirement {
             case .branch(let branch):

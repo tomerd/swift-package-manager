@@ -48,7 +48,7 @@ class PackageDescription5_2LoadingTests: PackageDescriptionLoadingTests {
         }
     }
 
-    func testPackageName() throws {
+    func testPackageNameForTargetResolutionOnly() throws {
         let stream = BufferedOutputByteStream()
         stream <<< """
             import PackageDescription
@@ -76,15 +76,15 @@ class PackageDescription5_2LoadingTests: PackageDescriptionLoadingTests {
 
         loadManifest(stream.bytes) { manifest in
             XCTAssertEqual(manifest.name, "Trivial")
-            XCTAssertEqual(manifest.dependencies[0].name, "Foo")
-            XCTAssertEqual(manifest.dependencies[1].name, "Foo2")
-            XCTAssertEqual(manifest.dependencies[2].name, "Foo3")
-            XCTAssertEqual(manifest.dependencies[3].name, "Foo4")
-            XCTAssertEqual(manifest.dependencies[4].name, "Foo5")
-            XCTAssertEqual(manifest.dependencies[5].name, "bar")
-            XCTAssertEqual(manifest.dependencies[6].name, "Bar2")
-            XCTAssertEqual(manifest.dependencies[7].name, "Baz")
-            XCTAssertEqual(manifest.dependencies[8].name, "swift")
+            XCTAssertEqual(manifest.dependencies[0].nameForTargetResolutionOnly, "Foo")
+            XCTAssertEqual(manifest.dependencies[1].nameForTargetResolutionOnly, "Foo2")
+            XCTAssertEqual(manifest.dependencies[2].nameForTargetResolutionOnly, "Foo3")
+            XCTAssertEqual(manifest.dependencies[3].nameForTargetResolutionOnly, "Foo4")
+            XCTAssertEqual(manifest.dependencies[4].nameForTargetResolutionOnly, "Foo5")
+            XCTAssertEqual(manifest.dependencies[5].nameForTargetResolutionOnly, "bar")
+            XCTAssertEqual(manifest.dependencies[6].nameForTargetResolutionOnly, "Bar2")
+            XCTAssertEqual(manifest.dependencies[7].nameForTargetResolutionOnly, "Baz")
+            XCTAssertEqual(manifest.dependencies[8].nameForTargetResolutionOnly, "swift")
         }
     }
 
@@ -193,7 +193,7 @@ class PackageDescription5_2LoadingTests: PackageDescriptionLoadingTests {
             """
 
         loadManifest(stream.bytes) { manifest in
-            let dependencies = Dictionary(uniqueKeysWithValues: manifest.dependencies.map({ ($0.name, $0) }))
+            let dependencies = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.nameForTargetResolutionOnly, $0) })
             let dependencyFoobar = dependencies["Foobar"]!
             let dependencyBarfoo = dependencies["Barfoo"]!
             let targetFoo = manifest.targetMap["foo"]!

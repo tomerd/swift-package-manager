@@ -30,7 +30,13 @@ enum ManifestJSONParser {
          var errors: [String] = []
      }
 
-    static func parse(v4 jsonString: String, toolsVersion: ToolsVersion, packageLocation: String, fileSystem: FileSystem) throws -> ManifestJSONParser.Result {
+    static func parse(
+        v4 jsonString: String,
+        toolsVersion: ToolsVersion,
+        packageRoot: AbsolutePath,
+        mirrors: [String: String],
+        fileSystem: FileSystem
+    ) throws -> ManifestJSONParser.Result {
         let json = try JSON(string: jsonString)
         let package = try json.getJSON("package")
         var result = Self.Result(name: try package.get(String.self, forKey: "name"))
@@ -41,14 +47,15 @@ enum ManifestJSONParser {
         result.products = try package.getArray("products").map(ProductDescription.init(v4:))
         result.providers = try? package.getArray("providers").map(SystemPackageProviderDescription.init(v4:))
         result.targets = try package.getArray("targets").map(Self.parseTarget(json:))
-        result.dependencies = try package.getArray("dependencies").map({
+        result.dependencies = try package.getArray("dependencies").map{
             try PackageDependencyDescription(
                 v4: $0,
                 toolsVersion: toolsVersion,
-                packageLocation: packageLocation,
+                packageRoot: packageRoot,
+                mirrors: mirrors,
                 fileSystem: fileSystem
             )
-        })
+        }
 
         result.cxxLanguageStandard = package.get("cxxLanguageStandard")
         result.cLanguageStandard = package.get("cLanguageStandard")
@@ -308,12 +315,19 @@ extension PackageDependencyDescription.Requirement {
 }
 
 extension PackageDependencyDescription {
-    fileprivate init(v4 json: JSON, toolsVersion: ToolsVersion, packageLocation: String, fileSystem: FileSystem) throws {
-        let isBaseURLRemote = URL.scheme(packageLocation) != nil
+    fileprivate init(v4 json: JSON, toolsVersion: ToolsVersion, packageRoot: AbsolutePath, mirrors: [String: String], fileSystem: FileSystem) throws {
+        let filePrefix = "file://"
 
-        func fixLocation(_ location: String, requirement: Requirement) throws -> String {
+        func fixLocation(_ location: String) throws -> String {
+            var location = location
+            // FIXME: SwiftPM can't handle file URLs with file:// scheme so we need to
+            // strip that. We need to design a URL data structure for SwiftPM.
+            if location.hasPrefix(filePrefix) {
+                location = AbsolutePath(String(location.dropFirst(filePrefix.count))).pathString
+            }
+
             // If base URL is remote (http/ssh), we can't do any "fixing".
-            if isBaseURLRemote {
+            if URL.scheme(location) != nil {
                 return location
             }
 
@@ -323,26 +337,28 @@ extension PackageDependencyDescription {
             }
 
             // If the dependency URL is not remote, try to "fix" it.
-            if URL.scheme(location) == nil {
-                // If the URL has no scheme, we treat it as a path (either absolute or relative to the base URL).
-                return AbsolutePath(location, relativeTo: AbsolutePath(packageLocation)).pathString
-            }
-
-            if case .localPackage = requirement {
-                do {
-                    return try AbsolutePath(validating: location).pathString
-                } catch PathValidationError.invalidAbsolutePath(let path) {
-                    throw ManifestParseError.invalidManifestFormat("'\(path)' is not a valid path for path-based dependencies; use relative or absolute path instead.", diagnosticFile: nil)
-                }
-            }
-
-            return location
+            // If the URL has no scheme, we treat it as a path (either absolute or relative to the base URL).
+            return AbsolutePath(location, relativeTo: packageRoot).pathString
         }
 
+        var location = try fixLocation(json.get("url"))
+        let identity = PackageIdentity(url: location)
+        let nameForTargetResolution: String? = json.get("name")
         let requirement = try Requirement(v4: json.get("requirement"))
-        let location = try fixLocation(json.get("url"), requirement: requirement)
-        let name: String? = json.get("name")
-        self.init(name: name, url: location, requirement: requirement)
+
+        if case .localPackage = requirement {
+            do {
+                location = try AbsolutePath(validating: location).pathString
+            } catch PathValidationError.invalidAbsolutePath(let path) {
+                throw ManifestParseError.invalidManifestFormat("'\(path)' is not a valid path for path-based dependencies; use relative or absolute path instead.", diagnosticFile: nil)
+            }
+        }
+
+        self.init(identity: identity,
+                  explicitNameForTargetResolutionOnly: nameForTargetResolution,
+                  location: location,
+                  requirement: requirement,
+                  productFilter: .everything)
     }
 }
 

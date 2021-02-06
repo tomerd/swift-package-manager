@@ -133,7 +133,7 @@ final class WorkspaceTests: XCTestCase {
                     manifest($0)
                 }
 
-                let manifestLoader = ManifestLoader(manifestResources: Resources.default)
+                let manifestLoader = ManifestLoader(manifestResources: Resources.default, mirrors: [:])
 
                 let sandbox = path.appending(component: "ws")
                 return Workspace(
@@ -2656,7 +2656,7 @@ final class WorkspaceTests: XCTestCase {
             platforms: [],
             version: manifest.version,
             toolsVersion: manifest.toolsVersion,
-            dependencies: [PackageDependencyDescription(url: manifest.dependencies[0].url, requirement: .exact("1.5.0"))],
+            dependencies: [PackageDependencyDescription(url: manifest.dependencies[0].location, requirement: .exact("1.5.0"))],
             targets: manifest.targets
         )
 
@@ -3785,11 +3785,11 @@ final class WorkspaceTests: XCTestCase {
         // From here the API should be simple and straightforward:
         let diagnostics = DiagnosticsEngine()
         let manifest = try tsc_await {
-            ManifestLoader.loadManifest(at: packagePath, kind: .local, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], on: .global(), completion: $0)
+            ManifestLoader.loadManifest(at: packagePath, kind: .local, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], mirrors: [:], on: .global(), completion: $0)
         }
 
         let loadedPackage = try tsc_await {
-            PackageBuilder.loadPackage(at: packagePath, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], xcTestMinimumDeploymentTargets: [:], diagnostics: diagnostics, on: .global(), completion: $0)
+            PackageBuilder.loadPackage(at: packagePath, swiftCompiler: swiftCompiler, swiftCompilerFlags: [], xcTestMinimumDeploymentTargets: [:], mirrors: [:], diagnostics: diagnostics, on: .global(), completion: $0)
         }
 
         let graph = try Workspace.loadGraph(

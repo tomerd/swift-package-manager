@@ -34,9 +34,11 @@ public struct MockDependency {
     }
 
     public func convert(baseURL: AbsolutePath) -> PackageDependencyDescription {
+        let path = baseURL.appending(RelativePath(self.path))
         return PackageDependencyDescription(
-            name: self.name,
-            url: baseURL.appending(RelativePath(self.path)).pathString,
+            identity: PackageIdentity(path: path),
+            explicitNameForTargetResolutionOnly: self.name,
+            location: path.pathString,
             requirement: self.requirement,
             productFilter: self.products
         )

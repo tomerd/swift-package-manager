@@ -62,7 +62,7 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             XCTAssertEqual(bar.dependencies, ["foo"])
 
             // Check dependencies.
-            let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.url, $0) })
+            let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.location, $0) })
             XCTAssertEqual(deps["/foo1"], PackageDependencyDescription(url: "/foo1", requirement: .upToNextMajor(from: "1.0.0")))
 
             // Check products.
@@ -252,14 +252,14 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             )
             """
        loadManifest(stream.bytes) { manifest in
-            let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.url, $0) })
+            let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.location, $0) })
             XCTAssertEqual(deps["/foo1"], PackageDependencyDescription(url: "/foo1", requirement: .upToNextMajor(from: "1.0.0")))
             XCTAssertEqual(deps["/foo2"], PackageDependencyDescription(url: "/foo2", requirement: .revision("58e9de4e7b79e67c72a46e164158e3542e570ab6")))
 
-            XCTAssertEqual(deps["/foo3"]?.url, "/foo3")
+            XCTAssertEqual(deps["/foo3"]?.location, "/foo3")
             XCTAssertEqual(deps["/foo3"]?.requirement, .localPackage)
 
-            XCTAssertEqual(deps["/path/to/foo4"]?.url, "/path/to/foo4")
+            XCTAssertEqual(deps["/path/to/foo4"]?.location, "/path/to/foo4")
             XCTAssertEqual(deps["/path/to/foo4"]?.requirement, .localPackage)
 
             XCTAssertEqual(deps["/foo5"], PackageDependencyDescription(url: "/foo5", requirement: .exact("1.2.3")))
@@ -269,16 +269,16 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             XCTAssertEqual(deps["/foo9"], PackageDependencyDescription(url: "/foo9", requirement: .upToNextMajor(from: "1.3.4")))
 
             let homeDir = "/home/user"
-            XCTAssertEqual(deps["\(homeDir)/path/to/foo10"]?.url, "\(homeDir)/path/to/foo10")
+            XCTAssertEqual(deps["\(homeDir)/path/to/foo10"]?.location, "\(homeDir)/path/to/foo10")
             XCTAssertEqual(deps["\(homeDir)/path/to/foo10"]?.requirement, .localPackage)
 
-            XCTAssertEqual(deps["/foo/~foo11"]?.url, "/foo/~foo11")
+            XCTAssertEqual(deps["/foo/~foo11"]?.location, "/foo/~foo11")
             XCTAssertEqual(deps["/foo/~foo11"]?.requirement, .localPackage)
 
-            XCTAssertEqual(deps["\(homeDir)/path/to/~/foo12"]?.url, "\(homeDir)/path/to/~/foo12")
+            XCTAssertEqual(deps["\(homeDir)/path/to/~/foo12"]?.location, "\(homeDir)/path/to/~/foo12")
             XCTAssertEqual(deps["\(homeDir)/path/to/~/foo12"]?.requirement, .localPackage)
 
-            XCTAssertEqual(deps["/foo/~"]?.url, "/foo/~")
+            XCTAssertEqual(deps["/foo/~"]?.location, "/foo/~")
             XCTAssertEqual(deps["/foo/~"]?.requirement, .localPackage)
         }
     }
@@ -495,7 +495,7 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             let delegate = ManifestTestDelegate()
 
             let manifestLoader = ManifestLoader(
-                manifestResources: Resources.default, cacheDir: path, delegate: delegate)
+                manifestResources: Resources.default, cacheDir: path, delegate: delegate, mirrors: [:])
 
             func check(loader: ManifestLoader, expectCached: Bool) {
                 delegate.clear()
@@ -552,7 +552,7 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             let delegate = ManifestTestDelegate()
 
             let manifestLoader = ManifestLoader(
-                manifestResources: Resources.default, cacheDir: path, delegate: delegate)
+                manifestResources: Resources.default, cacheDir: path, delegate: delegate, mirrors: [:])
 
             func check(loader: ManifestLoader, expectCached: Bool) {
                 delegate.clear()
@@ -598,7 +598,7 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             }
 
             let noCacheLoader = ManifestLoader(
-                manifestResources: Resources.default, delegate: delegate)
+                manifestResources: Resources.default, delegate: delegate, mirrors: [:])
             for _ in 0..<2 {
                 check(loader: noCacheLoader, expectCached: false)
             }
@@ -626,7 +626,7 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
             let delegate = ManifestTestDelegate()
 
             let manifestLoader = ManifestLoader(
-                manifestResources: Resources.default, cacheDir: path, delegate: delegate)
+                manifestResources: Resources.default, cacheDir: path, delegate: delegate, mirrors: [:])
 
             func check(loader: ManifestLoader) throws {
                 let fs = InMemoryFileSystem()
@@ -733,7 +733,7 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
 
             let diagnostics = DiagnosticsEngine()
             let delegate = ManifestTestDelegate()
-            let manifestLoader = ManifestLoader(manifestResources: Resources.default, cacheDir: path, delegate: delegate)
+            let manifestLoader = ManifestLoader(manifestResources: Resources.default, cacheDir: path, delegate: delegate, mirrors: [:])
 
             // warm up caches
             let manifest = try tsc_await { manifestLoader.load(at: manifestPath.parentDirectory,
@@ -790,7 +790,7 @@ class PackageDescription4_2LoadingTests: PackageDescriptionLoadingTests {
 
             let diagnostics = DiagnosticsEngine()
             let delegate = ManifestTestDelegate()
-            let manifestLoader = ManifestLoader(manifestResources: Resources.default, cacheDir: path, delegate: delegate)
+            let manifestLoader = ManifestLoader(manifestResources: Resources.default, cacheDir: path, delegate: delegate, mirrors: [:])
 
             let sync = DispatchGroup()
             for _ in 0 ..< total {

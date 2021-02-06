@@ -141,7 +141,7 @@ class PackageDescription4LoadingTests: PackageDescriptionLoadingTests {
             )
             """
        loadManifest(stream.bytes) { manifest in
-            let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.url, $0) })
+            let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.location, $0) })
             XCTAssertEqual(deps["/foo1"], PackageDependencyDescription(url: "/foo1", requirement: .upToNextMajor(from: "1.0.0")))
             XCTAssertEqual(deps["/foo2"], PackageDependencyDescription(url: "/foo2", requirement: .upToNextMajor(from: "1.0.0")))
             XCTAssertEqual(deps["/foo3"], PackageDependencyDescription(url: "/foo3", requirement: .upToNextMinor(from: "1.0.0")))

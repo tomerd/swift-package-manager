@@ -15,7 +15,7 @@ import SPMTestSupport
 import PackageLoading
 
 class ManifestLoadingPerfTests: XCTestCasePerf {
-    let manifestLoader = ManifestLoader(manifestResources: Resources.default)
+    let manifestLoader = ManifestLoader(manifestResources: Resources.default, mirrors: [:])
 
     func write(_ bytes: ByteString, body: (AbsolutePath) -> ()) throws {
         try testWithTemporaryDirectory { tmpdir in

@@ -14,21 +14,10 @@ import SourceControl
 extension PackageDependencyDescription {
     /// Create the package reference object for the dependency.
     public func createPackageRef(mirrors: DependencyMirrors) -> PackageReference {
-        let effectiveURL = mirrors.effectiveURL(forURL: url)
-
-        // FIXME: The identity of a package dependency is currently based on
-        //        on a name computed from the package's effective URL.  This
-        //        is because the name of the package that's in the manifest
-        //        is not known until the manifest has been parsed.
-        //        We should instead use the declared URL of a package dependency
-        //        as its identity, as it will be needed for supporting package
-        //        registries.
-        let identity = PackageIdentity(url: effectiveURL)
-        
         return PackageReference(
-            identity: identity,
+            identity: self.identity,
             kind: requirement == .localPackage ? .local : .remote,
-            location: effectiveURL
+            location: self.location
         )
     }
 }

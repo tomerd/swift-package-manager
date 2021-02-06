@@ -30,19 +30,17 @@ public struct PackageDependencyDescription: Equatable, Codable, Hashable {
         }
     }
 
-    /// The name of the package dependency explicitly defined in the manifest, if any.
-    public let explicitName: String?
+    /// The identity of the package dependency.
+    public let identity: PackageIdentity
 
-    /// The name of the packagedependency,
-    /// either explicitly defined in the manifest,
-    /// or derived from the URL.
-    ///
-    /// - SeeAlso: `explicitName`
-    /// - SeeAlso: `url`
-    public let name: String
+    /// The location of the package dependency.
+    public let location: String
 
-    /// The url of the package dependency.
-    public let url: String
+    // FIXME: we should simplify target based resolution so that
+    // this is no longer required and can be removed
+    // it is named verbosity so its not used for anything else
+    // but target based dependency resolution
+    public let explicitNameForTargetResolutionOnly: String?
 
     /// The dependency requirement.
     public let requirement: Requirement
@@ -52,31 +50,55 @@ public struct PackageDependencyDescription: Equatable, Codable, Hashable {
 
     /// Create a package dependency.
     public init(
-        name: String? = nil,
-        url: String,
+        identity: PackageIdentity,
+        explicitNameForTargetResolutionOnly: String?,
+        location: String,
         requirement: Requirement,
-        productFilter: ProductFilter = .everything
+        productFilter: ProductFilter
     ) {
-        // FIXME: SwiftPM can't handle file URLs with file:// scheme so we need to
-        // strip that. We need to design a URL data structure for SwiftPM.
-        let filePrefix = "file://"
-        let normalizedURL: String
-        if url.hasPrefix(filePrefix) {
-            normalizedURL = AbsolutePath(String(url.dropFirst(filePrefix.count))).pathString
-        } else {
-            normalizedURL = url
-        }
-
-        self.explicitName = name
-        self.name = name ?? LegacyPackageIdentity.computeDefaultName(fromURL: normalizedURL)
-        self.url = normalizedURL
+        self.identity = identity
+        self.explicitNameForTargetResolutionOnly = explicitNameForTargetResolutionOnly
+        self.location = location
         self.requirement = requirement
         self.productFilter = productFilter
     }
 
     /// Returns a new package dependency with the specified products.
     public func filtered(by productFilter: ProductFilter) -> PackageDependencyDescription {
-        PackageDependencyDescription(name: explicitName, url: url, requirement: requirement, productFilter: productFilter)
+        PackageDependencyDescription(identity: self.identity,
+                                     explicitNameForTargetResolutionOnly: self.explicitNameForTargetResolutionOnly,
+                                     location: self.location,
+                                     requirement: self.requirement,
+                                     productFilter: productFilter)
+    }
+
+
+    @available(*, deprecated, message: "move to tests")
+    public init(
+        name: String? = nil,
+        url: String,
+        requirement: Requirement,
+        productFilter: ProductFilter = .everything
+    ) {
+        self.identity = PackageIdentity(url: url)
+        self.explicitNameForTargetResolutionOnly = name
+        self.location = url
+        self.requirement = requirement
+        self.productFilter = productFilter
+    }
+}
+
+// FIXME: we should simplify target based resolution so that
+// this is no longer required and can be removed
+// it is named verbosity so its not used for anything else
+// but target based dependency resolution
+extension PackageDependencyDescription {
+    public var nameForTargetResolutionOnly: String {
+        if let explicitName = self.explicitNameForTargetResolutionOnly {
+            return explicitName
+        } else {
+            return LegacyPackageIdentity.computeDefaultName(fromURL: self.location)
+        }
     }
 }
 

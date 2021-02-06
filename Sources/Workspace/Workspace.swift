@@ -354,6 +354,7 @@ public class Workspace {
         forRootPackage packagePath: AbsolutePath,
         manifestLoader: ManifestLoaderProtocol,
         repositoryManager: RepositoryManager? = nil,
+        config: Workspace.Configuration = .init(),
         delegate: WorkspaceDelegate? = nil
     ) -> Workspace {
         return Workspace(
@@ -362,7 +363,8 @@ public class Workspace {
             pinsFile: packagePath.appending(component: "Package.resolved"),
             manifestLoader: manifestLoader,
             repositoryManager: repositoryManager,
-            delegate: delegate
+            delegate: delegate,
+            config: config
         )
     }
 }
@@ -645,9 +647,12 @@ extension Workspace {
         swiftCompilerFlags: [String],
         diagnostics: DiagnosticsEngine
     ) throws -> PackageGraph {
+        let configuration = Workspace.Configuration()
         let resources = try UserManifestResources(swiftCompiler: swiftCompiler, swiftCompilerFlags: swiftCompilerFlags)
-        let loader = ManifestLoader(manifestResources: resources)
-        let workspace = Workspace.create(forRootPackage: packagePath, manifestLoader: loader)
+        // FIXME
+        fatalError("mirrors")
+        let loader = ManifestLoader(manifestResources: resources, mirrors: [:])
+        let workspace = Workspace.create(forRootPackage: packagePath, manifestLoader: loader, config: configuration)
         return try workspace.loadPackageGraph(rootPath: packagePath, diagnostics: diagnostics)
     }
 
@@ -719,8 +724,7 @@ extension Workspace {
 
         // Load the graph.
         return try PackageGraph.load(
-            root: manifests.root,
-            mirrors: config.mirrors,
+            root: manifests.root,            
             additionalFileRules: additionalFileRules,
             externalManifests: manifests.allDependencyManifests(),
             requiredDependencies: manifests.computePackageURLs().required,
@@ -1148,11 +1152,9 @@ extension Workspace {
                 let node = GraphLoadingNode(manifest: manifest, productFilter: .everything)
                 return node
             } + self.root.dependencies.compactMap{ dependency in
-                let url = workspace.config.mirrors.effectiveURL(forURL: dependency.url)
-                let identity = PackageIdentity(url: url)
-                let package = PackageReference.remote(identity: identity, location: url)
+                let package = PackageReference.remote(identity: dependency.identity, location: dependency.location)
                 inputIdentities.insert(package)
-                return manifestsMap[identity].map { manifest in
+                return manifestsMap[dependency.identity].map { manifest in
                     GraphLoadingNode(manifest: manifest, productFilter: dependency.productFilter)
                 }
             }
@@ -1161,11 +1163,9 @@ extension Workspace {
             var requiredIdentities: Set<PackageReference> = []
             _ = transitiveClosure(inputNodes) { node in
                 return node.manifest.dependenciesRequired(for: node.productFilter).compactMap{ dependency in
-                    let url = workspace.config.mirrors.effectiveURL(forURL: dependency.url)
-                    let identity = PackageIdentity(url: url)
-                    let package = PackageReference.remote(identity: identity, location: url)
+                    let package = PackageReference.remote(identity: dependency.identity, location: dependency.location)
                     requiredIdentities.insert(package)
-                    return manifestsMap[identity].map { manifest in
+                    return manifestsMap[dependency.identity].map { manifest in
                         GraphLoadingNode(manifest: manifest, productFilter: dependency.productFilter)
                     }
                 }
@@ -1332,7 +1332,7 @@ extension Workspace {
         }
 
         // optimization: preload in parallel
-        let rootDependencyManifestsURLs = root.dependencies.map{ config.mirrors.effectiveURL(forURL: $0.url) }
+        let rootDependencyManifestsURLs = root.dependencies.map{ $0.location }
         let rootDependencyManifests = try temp_await { self.loadManifests(forURLs: rootDependencyManifestsURLs, diagnostics: diagnostics, completion: $0) }
 
         let inputManifests = root.manifests + rootDependencyManifests
@@ -1346,18 +1346,17 @@ extension Workspace {
         }
 
         // optimization: preload manifest we know about in parallel
-        let inputDependenciesURLs = inputManifests.map { $0.dependencies.map{ config.mirrors.effectiveURL(forURL: $0.url) } }.flatMap { $0 }
+        let inputDependenciesURLs = inputManifests.map { $0.dependencies.map{ $0.location } }.flatMap { $0 }
         // FIXME: this should not block
         var loadedManifests = try temp_await { self.loadManifests(forURLs: inputDependenciesURLs, diagnostics: diagnostics, completion: $0) }.spm_createDictionary{ ($0.packageLocation, $0) }
 
         // continue to load the rest of the manifest for this graph
         let allManifestsWithPossibleDuplicates = try topologicalSort(inputManifests.map{ KeyedPair($0, key: URLAndFilter(url: $0.packageLocation, productFilter: .everything)) }) { node in
             return node.item.dependenciesRequired(for: node.key.productFilter).compactMap{ dependency in
-                let url = config.mirrors.effectiveURL(forURL: dependency.url)
                 // FIXME: this should not block
                 // note: loadManifest emits diagnostics in case it fails
-                let manifest = loadedManifests[url] ?? temp_await { self.loadManifest(forURL: url, diagnostics: diagnostics, completion: $0) }
-                loadedManifests[url] = manifest
+                let manifest = loadedManifests[dependency.location] ?? temp_await { self.loadManifest(forURL: dependency.location, diagnostics: diagnostics, completion: $0) }
+                loadedManifests[dependency.location] = manifest
                 return manifest.flatMap { KeyedPair($0, key: URLAndFilter(url: $0.packageLocation, productFilter: dependency.productFilter)) }
             }
         }

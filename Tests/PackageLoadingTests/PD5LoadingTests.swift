@@ -62,7 +62,7 @@ class PackageDescription5LoadingTests: PackageDescriptionLoadingTests {
             XCTAssertEqual(bar.dependencies, ["foo"])
 
             // Check dependencies.
-            let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.url, $0) })
+            let deps = Dictionary(uniqueKeysWithValues: manifest.dependencies.map{ ($0.location, $0) })
             XCTAssertEqual(deps["/foo1"], PackageDependencyDescription(url: "/foo1", requirement: .upToNextMajor(from: "1.0.0")))
 
             // Check products.
@@ -343,7 +343,7 @@ class PackageDescription5LoadingTests: PackageDescriptionLoadingTests {
 
             let loader = ManifestLoader(
                 manifestResources: Resources.default,
-                serializedDiagnostics: true, cacheDir: path)
+                serializedDiagnostics: true, cacheDir: path, mirrors: [:])
 
             do {
                 _ = try loader.load(

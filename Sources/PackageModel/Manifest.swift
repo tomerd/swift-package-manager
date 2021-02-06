@@ -179,17 +179,17 @@ public final class Manifest: ObjectIdentifierProtocol {
             return dependencies
         }
         
-        var requiredDependencyURLs: Set<String> = []
+        var requiredDependency: Set<PackageIdentity> = []
         
         for target in targetsRequired(for: products) {
             for targetDependency in target.dependencies {
                 if let dependency = packageDependency(referencedBy: targetDependency) {
-                    requiredDependencyURLs.insert(dependency.url)
+                    requiredDependency.insert(dependency.identity)
                 }
             }
         }
         
-        return dependencies.filter { requiredDependencyURLs.contains($0.url) }
+        return dependencies.filter { requiredDependency.contains($0.identity) }
         #endif
     }
 
@@ -224,7 +224,7 @@ public final class Manifest: ObjectIdentifierProtocol {
     ) -> [PackageDependencyDescription] {
 
         var registry: (known: [String: ProductFilter], unknown: Set<String>) = ([:], [])
-        let availablePackages = Set(dependencies.lazy.map({ $0.name }))
+        let availablePackages = Set(self.dependencies.lazy.map{ $0.nameForTargetResolutionOnly })
 
         for target in targets {
             for targetDependency in target.dependencies {
@@ -243,7 +243,7 @@ public final class Manifest: ObjectIdentifierProtocol {
         }
 
         return dependencies.compactMap { dependency in
-            if let filter = associations[dependency.name] {
+            if let filter = associations[dependency.nameForTargetResolutionOnly] {
                 return dependency.filtered(by: filter)
             } else if keepUnused {
                 // Register that while the dependency was kept, no products are needed.
@@ -271,7 +271,7 @@ public final class Manifest: ObjectIdentifierProtocol {
             return nil
         }
 
-        return dependencies.first(where: { $0.name == packageName })
+        return dependencies.first(where: { $0.nameForTargetResolutionOnly == packageName })
     }
 
     /// Registers a required product with a particular dependency if possible, or registers it as unknown.
