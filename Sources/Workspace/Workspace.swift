@@ -950,10 +950,10 @@ extension Workspace {
         }
 
         if let checkoutState = dependency.basedOn?.checkoutState {
-                // Restore the original checkout.
-                //
-                // The clone method will automatically update the managed dependency state.
-                _ = try clone(package: dependency.packageRef, at: checkoutState)
+            // Restore the original checkout.
+            //
+            // The clone method will automatically update the managed dependency state.
+            _ = try tsc_await { self.clone(package: dependency.packageRef, at: checkoutState, callback: $0) }
         } else {
             // The original dependency was removed, update the managed dependency state.
             state.dependencies.remove(forURL: dependency.packageRef.location)
@@ -1276,13 +1276,15 @@ extension Workspace {
 
         // continue to load the rest of the manifest for this graph
         let allManifestsWithPossibleDuplicates = try topologicalSort(inputManifests.map{ KeyedPair($0, key: URLAndFilter(url: $0.packageLocation, productFilter: .everything)) }) { node in
-            return node.item.dependenciesRequired(for: node.key.productFilter).compactMap{ dependency in
-                let location = dependency.location
-                // FIXME: this should not block
-                // note: loadManifest emits diagnostics in case it fails
-                let manifest = loadedManifests[location] ?? temp_await { self.loadManifest(forURL: location, diagnostics: diagnostics, completion: $0) }
-                loadedManifests[location] = manifest
-                return manifest.flatMap { KeyedPair($0, key: URLAndFilter(url: $0.packageLocation, productFilter: dependency.productFilter)) }
+            let dependenciesRequired = node.item.dependenciesRequired(for: node.key.productFilter)
+            // optimization: preload manifest we know about in parallel
+            let dependenciesRequiredURLs = dependenciesRequired.map { $0.location }.filter{ !loadedManifests.keys.contains($0) }
+            let dependenciesRequiredManifests = try temp_await { self.loadManifests(forURLs: dependenciesRequiredURLs, diagnostics: diagnostics, completion: $0) }
+            for manifest in dependenciesRequiredManifests {
+                loadedManifests[manifest.packageLocation] = manifest
+            }
+            return dependenciesRequired.compactMap{ dependency in
+                loadedManifests[dependency.location].flatMap { KeyedPair($0, key: URLAndFilter(url: $0.packageLocation, productFilter: dependency.productFilter)) }
             }
         }
 
@@ -1767,18 +1769,23 @@ extension Workspace {
         // We just request the packages here, repository manager will
         // automatically manage the parallelism.
         // FIXME: this should not block
-        let pins = pinsStore.pins.map({ $0 })
-        DispatchQueue.concurrentPerform(iterations: pins.count) { idx in
-            _ = try? temp_await {
-                containerProvider.getContainer(for: pins[idx].packageRef, skipUpdate: true, on: self.queue, completion: $0)
+        let group = DispatchGroup()
+        for pin in pinsStore.pins {
+            group.enter()
+            containerProvider.getContainer(for: pin.packageRef, skipUpdate: true, on: self.queue) { result in
+                defer { group.leave() }
+                if case .failure(let error) = result {
+                    diagnostics.emit(error)
+                }
             }
         }
+        group.wait()
 
         // Compute the pins that we need to actually clone.
         //
         // We require cloning if there is no checkout or if the checkout doesn't
         // match with the pin.
-        let requiredPins = pins.filter({ pin in
+        let requiredPins = pinsStore.pins.filter { pin in
             guard let dependency = state.dependencies[forURL: pin.packageRef.location] else {
                 return true
             }
@@ -1788,14 +1795,20 @@ extension Workspace {
             case .edited, .local:
                 return true
             }
-        })
+        }
 
         // Clone the required pins.
+        // FIXME: this should not block
         for pin in requiredPins {
-            diagnostics.wrap {
-                _ = try self.clone(package: pin.packageRef, at: pin.state)
+            group.enter()
+            self.clone(package: pin.packageRef, at: pin.state) { result in
+                defer { group.leave() }
+                if case .failure(let error) = result {
+                    diagnostics.emit(error)
+                }
             }
         }
+        group.wait()
 
         // Save state for local packages, if any.
         //
@@ -2299,7 +2312,7 @@ extension Workspace {
     }
 
     /// Validates that all the edited dependencies are still present in the file system.
-    /// If some checkout dependency is reomved form the file system, clone it again.
+    /// If some checkout dependency is removed form the file system, clone it again.
     /// If some edited dependency is removed from the file system, mark it as unedited and
     /// fallback on the original checkout.
     fileprivate func fixManagedDependencies(with diagnostics: DiagnosticsEngine) {
@@ -2321,7 +2334,7 @@ extension Workspace {
                 switch dependency.state {
                 case .checkout(let checkoutState):
                     // If some checkout dependency has been removed, clone it again.
-                    _ = try clone(package: dependency.packageRef, at: checkoutState)
+                    _ = try tsc_await { self.clone(package: dependency.packageRef, at: checkoutState, callback: $0) }
                     diagnostics.emit(.checkedOutDependencyMissing(packageName: dependency.packageRef.name))
 
                 case .edited:
@@ -2381,17 +2394,25 @@ extension Workspace {
         }
 
         // Update or clone new packages.
+        let group = DispatchGroup()
         for (packageRef, state) in packageStateChanges {
+            group.enter()
             diagnostics.wrap {
                 switch state {
                 case .added(let state):
-                    _ = try clone(package: packageRef, requirement: state.requirement, productFilter: state.products)
+                    self.clone(package: packageRef, requirement: state.requirement, productFilter: state.products) { _ in
+                        group.leave()
+                    }
                 case .updated(let state):
-                    _ = try clone(package: packageRef, requirement: state.requirement, productFilter: state.products)
-                case .removed, .unchanged: break
+                    self.clone(package: packageRef, requirement: state.requirement, productFilter: state.products) { _ in
+                        group.leave()
+                    }
+                case .removed, .unchanged:
+                    group.leave()
                 }
             }
         }
+        group.wait()
 
         // Inform the delegate if nothing was updated.
         if packageStateChanges.filter({ $0.1 == .unchanged }).count == packageStateChanges.count {
@@ -2408,52 +2429,65 @@ extension Workspace {
     ///
     /// - Returns: The path of the local repository.
     /// - Throws: If the operation could not be satisfied.
-    private func fetch(package: PackageReference) throws -> AbsolutePath {
+    private func fetch(
+        package: PackageReference,
+        callback: @escaping (Result<AbsolutePath, Error>) -> Void
+    ) {
         // If we already have it, fetch to update the repo from its remote.
-        if let dependency = state.dependencies[forURL: package.location] {
-            let path = checkoutsPath.appending(dependency.subpath)
+        do {
+            if let dependency = state.dependencies[forURL: package.location] {
+                let path = checkoutsPath.appending(dependency.subpath)
 
-            // Make sure the directory is not missing (we will have to clone again
-            // if not).
-            fetch: if fileSystem.isDirectory(path) {
-                // Fetch the checkout in case there are updates available.
-                let workingRepo = try repositoryManager.provider.openCheckout(at: path)
+                // Make sure the directory is not missing (we will have to clone again
+                // if not).
+                fetch: if fileSystem.isDirectory(path) {
+                    // Fetch the checkout in case there are updates available.
+                    let workingRepo = try repositoryManager.provider.openCheckout(at: path)
 
-                // Ensure that the alternative object store is still valid.
-                //
-                // This can become invalid if the build directory is moved.
-                guard workingRepo.isAlternateObjectStoreValid() else {
-                    break fetch
+                    // Ensure that the alternative object store is still valid.
+                    //
+                    // This can become invalid if the build directory is moved.
+                    guard workingRepo.isAlternateObjectStoreValid() else {
+                        break fetch
+                    }
+
+                    // The fetch operation may update contents of the checkout, so
+                    // we need do mutable-immutable dance.
+                    try fileSystem.chmod(.userWritable, path: path, options: [.recursive, .onlyFiles])
+                    try workingRepo.fetch()
+                    try? fileSystem.chmod(.userUnWritable, path: path, options: [.recursive, .onlyFiles])
+
+                    return callback(.success(path))
                 }
-
-                // The fetch operation may update contents of the checkout, so
-                // we need do mutable-immutable dance.
-                try fileSystem.chmod(.userWritable, path: path, options: [.recursive, .onlyFiles])
-                try workingRepo.fetch()
-                try? fileSystem.chmod(.userUnWritable, path: path, options: [.recursive, .onlyFiles])
-
-                return path
             }
+        } catch {
+            callback(.failure(error))
         }
 
         // If not, we need to get the repository from the checkouts.
-        // FIXME: this should not block
-        let handle = try temp_await {
-            repositoryManager.lookup(repository: package.repository, skipUpdate: true, on: self.queue, completion: $0)
+        repositoryManager.lookup(repository: package.repository, skipUpdate: true, on: self.queue) { result in
+            switch result {
+            case .failure(let error):
+                callback(.failure(error))
+            case .success(let handle):
+                do {
+                    // Clone the repository into the checkouts.
+                    let path = self.checkoutsPath.appending(component: package.repository.basename)
+
+                    try self.fileSystem.chmod(.userWritable, path: path, options: [.recursive, .onlyFiles])
+                    try self.fileSystem.removeFileTree(path)
+
+                    // Inform the delegate that we're starting cloning.
+                    self.delegate?.willClone(repository: handle.repository.url, to: path)
+                    try handle.cloneCheckout(to: path, editable: false)
+                    self.delegate?.didClone(repository: handle.repository.url, to: path, error: nil)
+
+                    callback(.success(path))
+                } catch {
+                    callback(.failure(error))
+                }
+            }
         }
-
-        // Clone the repository into the checkouts.
-        let path = checkoutsPath.appending(component: package.repository.basename)
-
-        try fileSystem.chmod(.userWritable, path: path, options: [.recursive, .onlyFiles])
-        try fileSystem.removeFileTree(path)
-
-        // Inform the delegate that we're starting cloning.
-        delegate?.willClone(repository: handle.repository.url, to: path)
-        try handle.cloneCheckout(to: path, editable: false)
-        delegate?.didClone(repository: handle.repository.url, to: path, error: nil)
-
-        return path
     }
 
     /// Create a local clone of the given `repository` checked out to `version`.
@@ -2468,69 +2502,93 @@ extension Workspace {
     /// - Throws: If the operation could not be satisfied.
     func clone(
         package: PackageReference,
-        at checkoutState: CheckoutState
-    ) throws -> AbsolutePath {
+        at checkoutState: CheckoutState,
+        callback: @escaping (Result<AbsolutePath, Error>) -> Void
+    ) {
         // Get the repository.
-        let path = try fetch(package: package)
+        self.fetch(package: package) { result in
+            switch result {
+            case .failure(let error):
+                callback(.failure(error))
+            case .success(let path):
+                do {
+                    // Check out the given revision.
+                    let workingRepo = try self.repositoryManager.provider.openCheckout(at: path)
 
-        // Check out the given revision.
-        let workingRepo = try repositoryManager.provider.openCheckout(at: path)
+                    // Inform the delegate.
+                    self.delegate?.willCheckOut(repository: package.repository.url, revision: checkoutState.description, at: path)
 
-        // Inform the delegate.
-        delegate?.willCheckOut(repository: package.repository.url, revision: checkoutState.description, at: path)
+                    // Do mutable-immutable dance because checkout operation modifies the disk state.
+                    try self.fileSystem.chmod(.userWritable, path: path, options: [.recursive, .onlyFiles])
+                    try workingRepo.checkout(revision: checkoutState.revision)
+                    try? self.fileSystem.chmod(.userUnWritable, path: path, options: [.recursive, .onlyFiles])
 
-        // Do mutable-immutable dance because checkout operation modifies the disk state.
-        try fileSystem.chmod(.userWritable, path: path, options: [.recursive, .onlyFiles])
-        try workingRepo.checkout(revision: checkoutState.revision)
-        try? fileSystem.chmod(.userUnWritable, path: path, options: [.recursive, .onlyFiles])
+                    // Write the state record.
+                    self.state.dependencies.add(
+                        ManagedDependency(
+                            packageRef: package,
+                            subpath: path.relative(to: self.checkoutsPath),
+                            checkoutState: checkoutState
+                        )
+                    )
+                    try self.state.saveState()
 
-        // Write the state record.
-        state.dependencies.add(ManagedDependency(
-            packageRef: package,
-            subpath: path.relative(to: checkoutsPath),
-            checkoutState: checkoutState))
-        try state.saveState()
+                    self.delegate?.didCheckOut(repository: package.repository.url, revision: checkoutState.description, at: path, error: nil)
 
-        delegate?.didCheckOut(repository: package.repository.url, revision: checkoutState.description, at: path, error: nil)
-
-        return path
+                    callback(.success(path))
+                } catch {
+                    callback(.failure(error))
+                }
+            }
+        }
     }
 
     private func clone(
         package: PackageReference,
         requirement: PackageStateChange.Requirement,
-        productFilter: ProductFilter
-    ) throws -> AbsolutePath {
-        let checkoutState: CheckoutState
-
+        productFilter: ProductFilter,
+        callback: @escaping (Result<AbsolutePath, Error>) -> Void
+    ) {
         switch requirement {
         case .version(let version):
             // FIXME: We need to get the revision here, and we don't have a
             // way to get it back out of the resolver which is very
             // annoying. Maybe we should make an SPI on the provider for
             // this?
-            // FIXME: this should not block
-            guard let container = (try temp_await {
-                containerProvider.getContainer(for: package, skipUpdate: true, on: self.queue, completion: $0)
-            }) as? RepositoryPackageContainer else {
-                throw InternalError("invalid container for \(package) expected a RepositoryPackageContainer")
+            containerProvider.getContainer(for: package, skipUpdate: true, on: self.queue) { result in
+                switch result {
+                case .failure(let error):
+                    callback(.failure(error))
+                case .success(let container):
+                    do {
+                        guard let container = container as? RepositoryPackageContainer else {
+                            throw InternalError("invalid container for \(package) expected a RepositoryPackageContainer")
+                        }
+                        guard let tag = container.getTag(for: version) else {
+                            throw InternalError("unable to get tag for \(package) \(version); available versions \(try container.versionsDescending())")
+                        }
+                        let revision = try container.getRevision(forTag: tag)
+                        let checkoutState = CheckoutState(revision: revision, version: version)
+                        self.clone(package: package, at: checkoutState, callback: callback)
+                    } catch {
+                        return callback(.failure(error))
+                    }
+                }
             }
-            guard let tag = container.getTag(for: version) else {
-                throw InternalError("unable to get tag for \(package) \(version); available versions \(try container.versionsDescending())")
-            }
-            let revision = try container.getRevision(forTag: tag)
-            checkoutState = CheckoutState(revision: revision, version: version)
 
         case .revision(let revision, let branch):
-            checkoutState = CheckoutState(revision: revision, branch: branch)
+            let checkoutState = CheckoutState(revision: revision, branch: branch)
+            self.clone(package: package, at: checkoutState, callback: callback)
 
         case .unversioned:
-            state.dependencies.add(ManagedDependency.local(packageRef: package))
-            try state.saveState()
-            return AbsolutePath(package.location)
+            do {
+                state.dependencies.add(ManagedDependency.local(packageRef: package))
+                try state.saveState()
+                return callback(.success(AbsolutePath(package.location)))
+            } catch {
+                return callback(.failure(error))
+            }
         }
-
-        return try self.clone(package: package, at: checkoutState)
     }
 
     /// Removes the clone and checkout of the provided specifier.
