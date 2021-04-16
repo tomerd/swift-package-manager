@@ -28,6 +28,7 @@ private struct GitShellHelper {
     /// failure message is used only in case of error.  This function waits for the invocation to finish and returns the
     /// output as a string.
     func run(_ args: [String], environment: [String: String] = Git.environment) throws -> String {
+        print(args) // FIXME
         let process = Process(arguments: [Git.tool] + args, environment: environment, outputRedirection: .collect)
         let result: ProcessResult
         do {
@@ -83,7 +84,7 @@ public struct GitRepositoryProvider: RepositoryProvider {
         precondition(!localFileSystem.exists(path))
 
         // FIXME: Ideally we should pass `--progress` here and report status regularly.  We currently don't have callbacks for that.
-        try self.callGit("clone", "--mirror", repository.url, path.pathString,
+        try self.callGit("clone", "--filter", "blob:none", "--mirror", repository.url, path.pathString,
                          repository: repository,
                          failureMessage: "Failed to clone repository \(repository.url)")
     }
@@ -138,7 +139,7 @@ public struct GitRepositoryProvider: RepositoryProvider {
             // re-resolve such that the objects in this repository changed, we would
             // only ever expect to get back a revision that remains present in the
             // object storage.
-            try self.callGit("clone", "--shared", "--no-checkout", sourcePath.pathString, destinationPath.pathString,
+            try self.callGit("clone", "--filter", "blob:none", "--shared", "--no-checkout", sourcePath.pathString, destinationPath.pathString,
                              repository: repository,
                              failureMessage: "Failed to clone repository \(repository.url)")
         }
