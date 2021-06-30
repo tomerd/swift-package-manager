@@ -315,7 +315,24 @@ let package = Package(
             name: "package-info",
             dependencies: ["PackageModel", "PackageLoading", "PackageGraph", "Workspace"],
             path: "Examples/package-info/Sources/package-info"
-        )
+        ),
+
+
+        //****************************
+
+        .target(
+            name: "PackageManifest",
+            swiftSettings: [
+                .unsafeFlags(["-package-description-version", "999.0"]),
+                .unsafeFlags(["-enable-library-evolution"], .when(platforms: [.macOS]))
+            ]),
+
+        .testTarget(
+                name: "PackageManifestTests",
+                dependencies: ["PackageManifest"]),
+
+        //****************************
+
     ],
     swiftLanguageVersions: [.v5]
 )
