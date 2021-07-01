@@ -1,10 +1,11 @@
-extension Package {
-    public struct DeploymentTarget {
-        let platform: Platform
-        let version: String?
-    }
+public struct DeploymentTarget: Codable {
+    public let platform: Platform
+    public let version: String?
 
-    public struct Platform {
-        let name: String
+    public init(platform: Platform, version: String?) {
+        self.platform = platform
+        self.version = version
     }
 }
+
+

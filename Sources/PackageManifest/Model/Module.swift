@@ -1,150 +1,100 @@
-public protocol PackageModule {
-    //associatedtype Settings
+// type-erasor
 
-    var name: String { get }
-    //var kind: Package.Module<Settings>.Kind<Settings> { get }
-    var path: String? { get }
-}
+public struct Module: Codable {
+    public let name: String
+    public internal (set) var kind: Kind
+    public var path: String?
 
-
-extension Package {
-    public struct Module<Settings>: PackageModule {
-        public let name: String
-        public internal (set) var kind: Kind<Settings>
-        public var path: String?
-
-        public init(name: String, kind: Kind<Settings>, path: String? = nil) {
-            self.name = name
-            self.kind = kind
-            self.path = path
-        }
+    public init(name: String, kind: Kind) {
+        self.name = name
+        self.kind = kind
+        self.path = nil
     }
 }
 
-extension Package.Module {
-    public enum Kind<Settings> {
-        case regular(Settings)
-        case executable(Settings)
-        case test(Settings)
-        case system(Settings)
-        case binary(Settings)
-        case plugin(Settings)
-
-        internal var settings: Settings {
-            switch self {
-            case .regular(let settings):
-                return settings
-            case .executable(let settings):
-                return settings
-            case .test(let settings):
-                return settings
-            case .system(let settings):
-                return settings
-            case .binary(let settings):
-                return settings
-            case .plugin(let settings):
-                return settings
-            }
-        }
-
-        internal mutating func updateSettings(_ newValue: Settings) {
-            switch self {
-            case .regular:
-                self = .regular(newValue)
-            case .executable:
-                self = .executable(newValue)
-            case .test:
-                self = .test(newValue)
-            case .system:
-                self = .system(newValue)
-            case .binary:
-                self = .binary(newValue)
-            case .plugin:
-                self = .plugin(newValue)
-            }
-        }
-    }
-}
-
-extension Package {
-    // FIXME
-    public struct RegularModule {
-        var sources: String
-        var resources: String
-        var cSettings: String
-        var cxxSettings: String
-        var swiftSettings: String
-        var linkerSettings: String
-
-        internal init() {
-            self.sources = ""
-            self.resources = ""
-            self.cSettings = ""
-            self.cxxSettings = ""
-            self.swiftSettings = ""
-            self.linkerSettings = ""
-        }
+extension Module {
+    public enum Kind: Codable {
+        case library(LibrarySettings)
+        case executable(ExecutableSettings)
+        case test(TestSettings)
+        case system(SystemSettings)
+        case binary(BinarySettings)
+        case plugin(PluginSettings)
     }
 
-    // FIXME
-    public struct ExecutableModule {
-        var sources: String
-        var resources: String
-        var cSettings: String
-        var cxxSettings: String
-        var swiftSettings: String
-        var linkerSettings: String
+    public struct LibrarySettings: SourceModuleSettings, Codable {
+        public var sources: [String]?
+        public var resources: [String]?
+        public var exclude: [String]?
+        public var cSettings: [String]?
+        public var cxxSettings: [String]?
+        public var swiftSettings: [String]?
+        public var linkerSettings: [String]?
 
-        internal init() {
-            self.sources = ""
-            self.resources = ""
-            self.cSettings = ""
-            self.cxxSettings = ""
-            self.swiftSettings = ""
-            self.linkerSettings = ""
-        }
+        public init() {}
     }
 
-    // FIXME
-    public struct TestModule {
-        var sources: String
-        var resources: String
-        var cSettings: String
-        var cxxSettings: String
-        var swiftSettings: String
-        var linkerSettings: String
+    public struct ExecutableSettings: SourceModuleSettings, Codable {
+        public var sources: [String]?
+        public var resources: [String]?
+        public var exclude: [String]?
+        public var cSettings: [String]?
+        public var cxxSettings: [String]?
+        public var swiftSettings: [String]?
+        public var linkerSettings: [String]?
 
-        internal init() {
-            self.sources = ""
-            self.resources = ""
-            self.cSettings = ""
-            self.cxxSettings = ""
-            self.swiftSettings = ""
-            self.linkerSettings = ""
-        }
+        public init() {}
     }
 
-    public struct SystemModule {
+    public struct TestSettings: SourceModuleSettings, Codable {
+        public var sources: [String]?
+        public var resources: [String]?
+        public var exclude: [String]?
+        public var cSettings: [String]?
+        public var cxxSettings: [String]?
+        public var swiftSettings: [String]?
+        public var linkerSettings: [String]?
+
+        public init() {}
+    }
+
+    public struct SystemSettings: Codable {
         var providers: [String]
 
-        internal init() {
+        public init() {
             self.providers = []
         }
     }
 
-    public struct BinaryModule {
+    public struct BinarySettings: Codable {
         var checksum: String
 
-        internal init(checksum: String) {
+        public init(checksum: String) {
             self.checksum = checksum
         }
     }
 
-    public struct PluginModule {
-        var capability: [String]
+    public struct PluginSettings: Codable {
+        var capability: Capability
 
-        internal init() {
-            self.capability = []
+        init(capability: Capability) {
+            self.capability = capability
+        }
+
+        public enum Capability: Codable {
+            case buildTool
         }
     }
 }
+
+public protocol SourceModuleSettings {
+    var sources: [String]? { get set }
+    var resources: [String]? { get set }
+    var exclude: [String]? { get set }
+    var cSettings: [String]? { get set }
+    var cxxSettings: [String]? { get set }
+    var swiftSettings: [String]? { get set }
+    var linkerSettings: [String]? { get set }
+}
+
+

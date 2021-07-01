@@ -3,21 +3,27 @@ import XCTest
 
 final class PackageManifestTests: XCTestCase {
 
-    func testMe() {
-
+    func test1() {
         let package = Package()
             .minimumDeploymentTarget {
                 MacOS("10.15")
                 iOS("12.0")
             }
             .modules {
-                Module("module-standard")
-                    .cxxSettings("cxxSettings")
-                Test("module-test")
-                    .cxxSettings("cxxSettings")
-                Plugin("module-plugin")
+                Library("module-standard")
                     .path("custom/path")
+                    .cxxSettings(["cxxSettings"])
+                if ProcessInfo.processInfo.environment["condition"] == "true" {
+                    Test("module-test")
+                        .sources(["sources-1"])
+                        .exclude(["exclude-1", "exclude-2"])
+                        .cxxSettings(["cxxSettings"])
+                }
+                Plugin("module-plugin", capability: .buildTool)
+                    .path("custom/path")
+                #if os(macOS)
                 Binary("module-binary", checksum: "checksum")
+                #endif
             }
             .dependencies {
                 Local("local", at: "foo")
@@ -34,15 +40,30 @@ final class PackageManifestTests: XCTestCase {
 
         print(package)
 
-        for module in package.modules {
-            print("\(module.name) \(module.kind)")
-        }
+    }
 
-        for dependency in package.dependencies {
-            print("\(dependency.identity) \(dependency.kind)")
-        }
+    func test2() {
+var package = Package()
 
+var librarySettings = Module.LibrarySettings()
+librarySettings.swiftSettings = ["swiftSettings"]
+var library = Module(name: "my-lib", kind: .library(librarySettings))
+library.path = "/some-path"
+package.modules.append(library)
 
+var executableSettings = Module.ExecutableSettings()
+executableSettings.sources = ["file1.swift"]
+let executable = Module(name: "my-exec", kind: .executable(executableSettings))
+package.modules.append(executable)
 
+let dependencySettings = Dependency.RemoteSettings(requirement: .range("1.0.0" ..< "2.0.0"))
+let dependency = Dependency(identity: "apple/swift-nio", kind: .remote(dependencySettings))
+package.dependencies.append(dependency)
+
+package.minimumDeploymentTargets.append(DeploymentTarget(platform: .macOS, version: "12.0"))
+
+        // *******
+
+        print(package)
     }
 }
