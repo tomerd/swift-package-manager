@@ -13,6 +13,7 @@ final class PackageManifestTests: XCTestCase {
                 Library("module-standard")
                     .path("custom/path")
                     .cxxSettings(["cxxSettings"])
+                    .public()
                 if ProcessInfo.processInfo.environment["condition"] == "true" {
                     Test("module-test")
                         .sources(["sources-1"])
@@ -22,7 +23,9 @@ final class PackageManifestTests: XCTestCase {
                 Plugin("module-plugin", capability: .buildTool)
                     .path("custom/path")
                 #if os(macOS)
-                Binary("module-binary", checksum: "checksum")
+                Binary("module-binary", url: "url", checksum: "checksum")
+                    .public()
+                    .explicitDependencies(["foo", "bar"])
                 #endif
             }
             .dependencies {

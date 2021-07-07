@@ -8,6 +8,12 @@ extension AnyModule {
         module.underlying.path = path
         return module
     }
+
+    public func explicitDependencies(_ dependencies: [String]) -> Self {
+        var module = self
+        module.underlying.dependencies = dependencies
+        return module
+    }
 }
 
 // MARK: - Sources Module (base abstraction)
@@ -69,6 +75,14 @@ public struct Library: SourcesModule {
             self.underlying.kind = .library(newValue)
         }
     }
+
+    public func `public`(linkage: Module.LibrarySettings.Linkage = .auto) -> Self {
+        var module = self
+        module.settings.isPublic = true
+        module.settings.linkage = linkage
+        return module
+    }
+
 }
 
 // MARK: - Executable Module
@@ -120,13 +134,40 @@ public struct Test: SourcesModule {
 public struct Binary: AnyModule {
     public var underlying: Module
 
-    public init(_ name: String, checksum: String) {
+    public init(_ name: String, path: String) {
         self.underlying = Module(
             name: name,
             kind: .binary(
-                .init(checksum: checksum)
+                .init(path: path)
             )
         )
+    }
+
+    public init(_ name: String, url: String, checksum: String) {
+        self.underlying = Module(
+            name: name,
+            kind: .binary(
+                .init(url: url, checksum: checksum)
+            )
+        )
+    }
+
+    var settings: Module.BinarySettings {
+        get {
+            guard case .binary(let settings) = self.underlying.kind else {
+                preconditionFailure()
+            }
+            return settings
+        }
+        set {
+            self.underlying.kind = .binary(newValue)
+        }
+    }
+
+    public func `public`() -> Self {
+        var module = self
+        module.settings.isPublic = true
+        return module
     }
 }
 

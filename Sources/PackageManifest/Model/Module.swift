@@ -1,14 +1,31 @@
-// type-erasor
-
 public struct Module: Codable {
     public let name: String
     public internal (set) var kind: Kind
     public var path: String?
+    public var dependencies: [String]?
 
     public init(name: String, kind: Kind) {
         self.name = name
         self.kind = kind
         self.path = nil
+        self.dependencies = nil
+    }
+
+    public var isPublic: Bool {
+        switch self.kind {
+        case .library(let settings):
+            return settings.isPublic
+        case .executable:
+            return false // TBD
+        case .test:
+            return false // TBD
+        case .system:
+            return false // TBD
+        case .binary(let settings):
+            return settings.isPublic
+        case .plugin:
+            return true // TBD
+        }
     }
 }
 
@@ -30,8 +47,16 @@ extension Module {
         public var cxxSettings: [String]?
         public var swiftSettings: [String]?
         public var linkerSettings: [String]?
+        public var isPublic: Bool = false
+        public var linkage: Linkage = .auto // TBD if needed, or we want to change the model
 
         public init() {}
+
+        public enum Linkage: Codable {
+            case auto
+            case dynamic
+            case `static`
+        }
     }
 
     public struct ExecutableSettings: SourceModuleSettings, Codable {
@@ -67,15 +92,23 @@ extension Module {
     }
 
     public struct BinarySettings: Codable {
-        var checksum: String
+        public var location: String
+        public var checksum: String?
+        public var isPublic: Bool = false
 
-        public init(checksum: String) {
+        public init(path: String) {
+            self.location = path
+            self.checksum = nil
+        }
+
+        public init(url: String, checksum: String) {
+            self.location = url
             self.checksum = checksum
         }
     }
 
     public struct PluginSettings: Codable {
-        var capability: Capability
+        public var capability: Capability
 
         init(capability: Capability) {
             self.capability = capability
@@ -96,5 +129,3 @@ public protocol SourceModuleSettings {
     var swiftSettings: [String]? { get set }
     var linkerSettings: [String]? { get set }
 }
-
-
